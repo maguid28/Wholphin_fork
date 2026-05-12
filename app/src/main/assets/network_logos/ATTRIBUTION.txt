@@ -1,0 +1,4 @@
+Network logo assets bundled for Library TV.
+Source artwork is fetched from The Movie Database image CDN, Simple Icons, and Wikimedia Commons, then lightly normalized for dark guide backgrounds.
+Generated transparent wordmark fallbacks are app-local assets for movie genre channels or networks where no reliable source was available.
+Sources: https://image.tmdb.org/, https://simpleicons.org/, https://commons.wikimedia.org/

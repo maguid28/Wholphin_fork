@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img" aria-label="Anime">
+  <path d="M52 83 H268" stroke="#FF4FD8" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M79 94 H241" stroke="#7CFFB2" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <text x="160" y="69" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="45" font-weight="900" letter-spacing="2" fill="#FFFFFF">ANIME</text>
+</svg>

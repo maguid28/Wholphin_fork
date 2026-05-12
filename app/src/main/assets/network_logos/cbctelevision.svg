@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 160" role="img" aria-label="CBC Television">
+  <rect x="28" y="28" width="364" height="104" rx="24" fill="#FFFFFF" opacity=".08"/>
+  <g transform="translate(63 44)">
+    <circle cx="37" cy="36" r="14" fill="#E31937"/>
+    <path d="M37 0a18 18 0 0 1 18 18v5H19v-5A18 18 0 0 1 37 0z" fill="#E31937"/>
+    <path d="M37 72a18 18 0 0 1-18-18v-5h36v5a18 18 0 0 1-18 18z" fill="#E31937"/>
+    <path d="M0 36a18 18 0 0 1 18-18h5v36h-5A18 18 0 0 1 0 36z" fill="#E31937"/>
+    <path d="M74 36a18 18 0 0 1-18 18h-5V18h5a18 18 0 0 1 18 18z" fill="#E31937"/>
+    <path d="M10 10a18 18 0 0 1 25 0l4 4-25 25-4-4a18 18 0 0 1 0-25z" fill="#E31937"/>
+    <path d="M64 10a18 18 0 0 1 0 25l-4 4-25-25 4-4a18 18 0 0 1 25 0z" fill="#E31937"/>
+    <path d="M10 62a18 18 0 0 1 0-25l4-4 25 25-4 4a18 18 0 0 1-25 0z" fill="#E31937"/>
+    <path d="M64 62a18 18 0 0 1-25 0l-4-4 25-25 4 4a18 18 0 0 1 0 25z" fill="#E31937"/>
+  </g>
+  <text x="225" y="78" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" letter-spacing="3" fill="#FFFFFF">CBC</text>
+  <text x="227" y="108" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="800" letter-spacing="5" fill="#FF7A8D">TELEVISION</text>
+</svg>

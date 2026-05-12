@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 120" role="img" aria-label="Toonami">
+  <path d="M52 84 H328" stroke="#65E4FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M78 34 H302" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  <text x="190" y="70" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="45" font-weight="900" letter-spacing="2" fill="#FFFFFF">TOONAMI</text>
+</svg>

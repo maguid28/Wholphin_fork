@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 160" role="img" aria-label="NHK">
+  <defs>
+    <linearGradient id="nhk-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6DDCFF"/>
+      <stop offset="1" stop-color="#4B7DFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="38" y="34" width="344" height="92" rx="24" fill="#FFFFFF" opacity=".08"/>
+  <g font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="54" text-anchor="middle">
+    <rect x="66" y="45" width="86" height="70" rx="19" fill="#FFFFFF"/>
+    <rect x="167" y="45" width="86" height="70" rx="19" fill="#FFFFFF"/>
+    <rect x="268" y="45" width="86" height="70" rx="19" fill="#FFFFFF"/>
+    <rect x="66" y="45" width="86" height="70" rx="19" fill="none" stroke="url(#nhk-blue)" stroke-width="5"/>
+    <rect x="167" y="45" width="86" height="70" rx="19" fill="none" stroke="url(#nhk-blue)" stroke-width="5"/>
+    <rect x="268" y="45" width="86" height="70" rx="19" fill="none" stroke="url(#nhk-blue)" stroke-width="5"/>
+    <text x="109" y="99" fill="#111827">N</text>
+    <text x="210" y="99" fill="#111827">H</text>
+    <text x="311" y="99" fill="#111827">K</text>
+  </g>
+</svg>

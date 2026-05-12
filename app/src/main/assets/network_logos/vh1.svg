@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img" aria-label="VH1">
+  <path d="M42 88 H278" stroke="#7CFFB2" stroke-width="5" stroke-linecap="round" opacity="0.85"/>
+  <path d="M72 98 H248" stroke="#20D6C7" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  <text x="160" y="65" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" letter-spacing="1.1" fill="#FFFFFF">VH1</text>
+</svg>

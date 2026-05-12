@@ -1,0 +1,922 @@
+package com.github.damontecres.wholphin.ui.playback
+
+import android.content.Context
+import android.text.format.DateUtils
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
+import androidx.annotation.Dimension
+import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.intl.Locale
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.children
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.SubtitleView
+import androidx.media3.ui.compose.PlayerSurface
+import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import androidx.media3.ui.compose.modifiers.resizeWithContentScale
+import androidx.media3.ui.compose.state.rememberPlayPauseButtonState
+import androidx.media3.ui.compose.state.rememberPresentationState
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import androidx.tv.material3.surfaceColorAtElevation
+import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.data.model.ItemPlayback
+import com.github.damontecres.wholphin.data.model.Playlist
+import com.github.damontecres.wholphin.preferences.AssPlaybackMode
+import com.github.damontecres.wholphin.preferences.PlayerBackend
+import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.skipBackOnResume
+import com.github.damontecres.wholphin.ui.AspectRatios
+import com.github.damontecres.wholphin.ui.LocalImageUrlService
+import com.github.damontecres.wholphin.ui.components.ErrorMessage
+import com.github.damontecres.wholphin.ui.components.LoadingPage
+import com.github.damontecres.wholphin.ui.components.TimeDisplay
+import com.github.damontecres.wholphin.ui.ifElse
+import com.github.damontecres.wholphin.ui.nav.Destination
+import com.github.damontecres.wholphin.ui.playback.overlay.PauseIndicator
+import com.github.damontecres.wholphin.ui.playback.overlay.PlaybackAction
+import com.github.damontecres.wholphin.ui.playback.overlay.PlaybackButton
+import com.github.damontecres.wholphin.ui.playback.overlay.PlaybackOverlay
+import com.github.damontecres.wholphin.ui.playback.overlay.SkipIndicator
+import com.github.damontecres.wholphin.ui.playback.overlay.SkipSegmentButton
+import com.github.damontecres.wholphin.ui.playback.overlay.rememberSeekBarState
+import com.github.damontecres.wholphin.ui.preferences.subtitle.SubtitleSettings.applyToMpv
+import com.github.damontecres.wholphin.ui.preferences.subtitle.SubtitleSettings.calculateEdgeSize
+import com.github.damontecres.wholphin.ui.preferences.subtitle.SubtitleSettings.toSubtitleStyle
+import com.github.damontecres.wholphin.ui.seasonEpisode
+import com.github.damontecres.wholphin.ui.tryRequestFocus
+import com.github.damontecres.wholphin.util.ExceptionHandler
+import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.Media3SubtitleOverride
+import com.github.damontecres.wholphin.util.mpv.MpvPlayer
+import io.github.peerless2012.ass.media.widget.AssSubtitleView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import timber.log.Timber
+import java.util.UUID
+import java.time.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+
+/**
+ * The actual playback page which shows media & playback controls
+ */
+@OptIn(UnstableApi::class)
+@Composable
+fun PlaybackPage(
+    preferences: UserPreferences,
+    destination: Destination,
+    modifier: Modifier = Modifier,
+    viewModel: PlaybackViewModel =
+        hiltViewModel<PlaybackViewModel, PlaybackViewModel.Factory>(
+            creationCallback = { it.create(destination) },
+        ),
+) {
+    LifecycleStartEffect(destination) {
+        onStopOrDispose {
+            viewModel.release()
+        }
+    }
+
+    val loading by viewModel.loading.observeAsState(LoadingState.Loading)
+    when (val st = loading) {
+        is LoadingState.Error -> {
+            ErrorMessage(st, modifier)
+        }
+
+        LoadingState.Pending,
+        LoadingState.Loading,
+        -> {
+            LoadingPage(modifier.background(Color.Black))
+        }
+
+        LoadingState.Success -> {
+            val playerState by viewModel.currentPlayer.collectAsState()
+            PlaybackPageContent(
+                playerState = playerState!!,
+                preferences = preferences,
+                destination = destination,
+                viewModel = viewModel,
+                modifier = modifier,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvPlaybackOverlay(
+    info: LibraryTvPlaybackInfo?,
+    visible: Boolean,
+    showClock: Boolean,
+    captionsEnabled: Boolean,
+    audioEnabled: Boolean,
+    onClickCaptions: () -> Unit,
+    onClickAudio: () -> Unit,
+    onControllerInteraction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val captionFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(visible) {
+        if (visible) {
+            captionFocusRequester.tryRequestFocus()
+        }
+    }
+    Box(modifier = modifier) {
+        AnimatedVisibility(
+            visible = visible && info != null,
+            modifier = Modifier.align(Alignment.BottomStart),
+        ) {
+            info?.let {
+                val shape = RoundedCornerShape(8.dp)
+                val timeText =
+                    remember(context, it.start, it.end) {
+                        "${it.start.libraryTvTimeText(context)} - ${it.end.libraryTvTimeText(context)}"
+                    }
+                val details =
+                    listOfNotNull(
+                        it.subtitle?.takeIf(String::isNotBlank),
+                        timeText,
+                    ).joinToString("  |  ")
+                val overview = it.overview?.takeIf(String::isNotBlank)
+
+                Row(
+                    modifier =
+                        Modifier
+                            .padding(start = 48.dp, end = 48.dp, bottom = 44.dp)
+                            .widthIn(max = 1040.dp)
+                            .clip(shape)
+                            .background(Color.Black.copy(alpha = 0.78f), shape)
+                            .border(
+                                BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                shape,
+                            )
+                            .padding(horizontal = 22.dp, vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.width(112.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "CH",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        )
+                        Text(
+                            text = it.channelNumber.toString(),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                        )
+                    }
+                    Box(
+                        modifier =
+                            Modifier
+                                .height(96.dp)
+                                .width(1.dp)
+                                .background(Color.White.copy(alpha = 0.18f)),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = it.channelName,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = it.title,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = details,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        overview?.let { description ->
+                            Text(
+                                text = description,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        PlaybackButton(
+                            iconRes = R.drawable.captions_svgrepo_com,
+                            onClick = {
+                                onControllerInteraction()
+                                onClickCaptions()
+                            },
+                            enabled = captionsEnabled,
+                            onControllerInteraction = onControllerInteraction,
+                            modifier = Modifier.focusRequester(captionFocusRequester),
+                        )
+                        PlaybackButton(
+                            iconRes = R.drawable.baseline_volume_up_24,
+                            onClick = {
+                                onControllerInteraction()
+                                onClickAudio()
+                            },
+                            enabled = audioEnabled,
+                            onControllerInteraction = onControllerInteraction,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showClock && visible) {
+            TimeDisplay()
+        }
+    }
+}
+
+private fun Instant.libraryTvTimeText(context: Context): String =
+    DateUtils.formatDateTime(
+        context,
+        toEpochMilli(),
+        DateUtils.FORMAT_SHOW_TIME,
+    )
+
+@OptIn(UnstableApi::class)
+@Composable
+fun PlaybackPageContent(
+    playerState: PlayerState,
+    preferences: UserPreferences,
+    destination: Destination,
+    modifier: Modifier = Modifier,
+    viewModel: PlaybackViewModel,
+) {
+    val player = playerState.player
+    val playerBackend = playerState.backend
+
+    val prefs = preferences.appPreferences.playbackPreferences
+    val scope = rememberCoroutineScope()
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val mediaInfo by viewModel.currentMediaInfo.observeAsState()
+    val userDto by viewModel.currentUserDto.observeAsState()
+
+    val currentPlayback by viewModel.currentPlayback.collectAsState()
+    val currentItemPlayback by viewModel.currentItemPlayback.observeAsState(
+        ItemPlayback(
+            userId = -1,
+            itemId = UUID.randomUUID(),
+        ),
+    )
+    val currentSegment by viewModel.currentSegment.collectAsState()
+    val analyticsState by viewModel.analyticsState.collectAsState()
+
+    val cues by viewModel.subtitleCues.observeAsState(listOf())
+    var showDebugInfo by remember { mutableStateOf(prefs.showDebugInfo) }
+
+    val nextUp by viewModel.nextUp.observeAsState(null)
+    val playlist by viewModel.playlist.observeAsState(Playlist(listOf()))
+    val libraryTvMode = (destination as? Destination.Playback)?.libraryTvChannelKey != null
+    val libraryTvPlayback by viewModel.libraryTvPlayback.collectAsState()
+
+    val subtitleSearch by viewModel.subtitleSearchStatus.observeAsState(null)
+    val subtitleSearchLanguage by viewModel.subtitleSearchLanguage.observeAsState(Locale.current.language)
+
+    var playbackDialog by remember { mutableStateOf<PlaybackDialogType?>(null) }
+    LaunchedEffect(player) {
+        if (playerBackend == PlayerBackend.MPV) {
+            scope.launch(Dispatchers.IO + ExceptionHandler()) {
+                // MPV can't play HDR, so always use regular settings
+                preferences.appPreferences.interfacePreferences.subtitlesPreferences.applyToMpv(
+                    configuration,
+                    density,
+                )
+            }
+        }
+    }
+
+    var contentScale by remember(playerBackend) {
+        mutableStateOf(
+            if (playerBackend == PlayerBackend.MPV) {
+                ContentScale.FillBounds
+            } else {
+                prefs.globalContentScale.scale
+            },
+        )
+    }
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    LaunchedEffect(playbackSpeed) { player.setPlaybackSpeed(playbackSpeed) }
+
+    val subtitleDelay = currentPlayback?.subtitleDelay ?: Duration.ZERO
+    LaunchedEffect(subtitleDelay) {
+        (player as? MpvPlayer)?.subtitleDelay = subtitleDelay
+    }
+
+    val presentationState = rememberPresentationState(player, false)
+    val scaledModifier =
+        Modifier.resizeWithContentScale(contentScale, presentationState.videoSizeDp)
+    val focusRequester = remember { FocusRequester() }
+    val playPauseState = rememberPlayPauseButtonState(player)
+    val seekBarState = rememberSeekBarState(player, scope)
+
+    LaunchedEffect(Unit) {
+        focusRequester.tryRequestFocus()
+    }
+    val controllerViewState = remember { viewModel.controllerViewState }
+
+    var skipIndicatorDuration by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(controllerViewState.controlsVisible) {
+        // If controller shows/hides, immediately cancel the skip indicator
+        skipIndicatorDuration = 0L
+    }
+    var skipPosition by remember { mutableLongStateOf(0L) }
+    val updateSkipIndicator = { delta: Long ->
+        if ((skipIndicatorDuration > 0 && delta < 0) || (skipIndicatorDuration < 0 && delta > 0)) {
+            skipIndicatorDuration = 0
+        }
+        skipIndicatorDuration += delta
+        skipPosition = player.currentPosition
+    }
+    val keyHandler =
+        PlaybackKeyHandler(
+            player = player,
+            controlsEnabled = nextUp == null,
+            skipWithLeftRight = !libraryTvMode,
+            seekForward = preferences.appPreferences.playbackPreferences.skipForwardMs.milliseconds,
+            seekBack = preferences.appPreferences.playbackPreferences.skipBackMs.milliseconds,
+            getDurationMs = { player.duration.coerceAtLeast(0L) },
+            controllerViewState = controllerViewState,
+            updateSkipIndicator = updateSkipIndicator,
+            skipBackOnResume = preferences.appPreferences.playbackPreferences.skipBackOnResume,
+            onInteraction = viewModel::reportInteraction,
+            oneClickPause = preferences.appPreferences.playbackPreferences.oneClickPause,
+            onStop = {
+                player.stop()
+                viewModel.navigationManager.goBack()
+            },
+            onPlaybackDialogTypeClick = { playbackDialog = it },
+        )
+    val playbackKeyHandler = { event: androidx.compose.ui.input.key.KeyEvent ->
+        if (!libraryTvMode) {
+            keyHandler.onKeyEvent(event)
+        } else if (
+            event.type == KeyEventType.KeyDown &&
+            (
+                (
+                    !controllerViewState.controlsVisible &&
+                        (isDirectionalDpad(event) || isEnterKey(event) || isBackwardButton(event) || isForwardButton(event))
+                ) ||
+                    (
+                        controllerViewState.controlsVisible &&
+                            (isUp(event) || isDown(event) || isBackwardButton(event) || isForwardButton(event))
+                    )
+            )
+        ) {
+            true
+        } else if (event.type != KeyEventType.KeyUp) {
+            false
+        } else {
+            viewModel.reportInteraction()
+            when {
+                isUp(event) || isBackwardButton(event) -> {
+                    controllerViewState.showControls()
+                    viewModel.tuneLibraryTvChannel(-1)
+                    true
+                }
+
+                isDown(event) || isForwardButton(event) -> {
+                    controllerViewState.showControls()
+                    viewModel.tuneLibraryTvChannel(1)
+                    true
+                }
+
+                isBackKey(event) && controllerViewState.controlsVisible -> {
+                    controllerViewState.hideControls()
+                    true
+                }
+
+                isEnterKey(event) || isControllerMedia(event) || (!controllerViewState.controlsVisible && isDirectionalDpad(event)) -> {
+                    controllerViewState.showControls()
+                    true
+                }
+
+                isDirectionalDpad(event) -> {
+                    false
+                }
+
+                else -> keyHandler.onKeyEvent(event)
+            }
+        }
+    }
+
+    val onPlaybackActionClick: (PlaybackAction) -> Unit = {
+        when (it) {
+            is PlaybackAction.PlaybackSpeed -> {
+                playbackSpeed = it.value
+            }
+
+            is PlaybackAction.Scale -> {
+                contentScale = it.scale
+            }
+
+            PlaybackAction.ShowDebug -> {
+                showDebugInfo = !showDebugInfo
+            }
+
+            PlaybackAction.ShowPlaylist -> {
+                TODO()
+            }
+
+            PlaybackAction.ShowVideoFilterDialog -> {
+                TODO()
+            }
+
+            is PlaybackAction.ToggleAudio -> {
+                viewModel.changeAudioStream(it.index)
+            }
+
+            is PlaybackAction.ToggleCaptions -> {
+                viewModel.changeSubtitleStream(it.index)
+            }
+
+            PlaybackAction.SearchCaptions -> {
+                controllerViewState.hideControls()
+                viewModel.searchForSubtitles()
+            }
+
+            PlaybackAction.Next -> {
+                // TODO focus is lost
+                viewModel.playNextUp()
+            }
+
+            PlaybackAction.Previous -> {
+                val pos = player.currentPosition
+                if (pos < player.maxSeekToPreviousPosition && playlist.hasPrevious()) {
+                    viewModel.playPrevious()
+                } else {
+                    player.seekToPrevious()
+                }
+            }
+        }
+    }
+
+    val showSegment =
+        currentSegment?.interacted == false &&
+            nextUp == null && !controllerViewState.controlsVisible && skipIndicatorDuration == 0L
+    BackHandler(showSegment) {
+        viewModel.updateSegment(currentSegment?.segment?.id, true)
+    }
+    val hasSubtitleDownloadPermission =
+        remember(userDto) { userDto?.policy?.let { it.isAdministrator || it.enableSubtitleManagement } == true }
+
+    Box(
+        modifier
+            .background(if (nextUp == null) Color.Black else MaterialTheme.colorScheme.background),
+    ) {
+        val playerSize by animateFloatAsState(if (nextUp == null) 1f else .6f)
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize(playerSize)
+                    .align(Alignment.TopCenter)
+                    .onKeyEvent(playbackKeyHandler)
+                    .focusRequester(focusRequester)
+                    .focusable(),
+        ) {
+            var playerSurfaceSize by remember { mutableStateOf(IntSize.Zero) }
+            PlayerSurface(
+                player = player,
+                surfaceType = SURFACE_TYPE_SURFACE_VIEW,
+                modifier =
+                    scaledModifier.onSizeChanged {
+                        playerSurfaceSize = it
+                    },
+            )
+            if (presentationState.coverSurface) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(Color.Black),
+                ) {
+                    LoadingPage(focusEnabled = false)
+                }
+            }
+
+            // If D-pad skipping, show the amount skipped in an animation
+            if (!controllerViewState.controlsVisible && skipIndicatorDuration != 0L) {
+                SkipIndicator(
+                    durationMs = skipIndicatorDuration,
+                    onFinish = {
+                        skipIndicatorDuration = 0L
+                    },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 70.dp),
+                )
+                // Show a small progress bar along the bottom of the screen
+                val showSkipProgress = true // TODO get from preferences
+                if (showSkipProgress) {
+                    val percent = skipPosition.toFloat() / player.duration.toFloat()
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .background(MaterialTheme.colorScheme.border)
+                                .clip(RectangleShape)
+                                .height(3.dp)
+                                .fillMaxWidth(percent),
+                    )
+                }
+            }
+
+            if (!controllerViewState.controlsVisible && skipIndicatorDuration == 0L) {
+                PauseIndicator(
+                    player = player,
+                    modifier =
+                        Modifier
+                            .align(Alignment.Center),
+                )
+            }
+
+            // The playback controls
+
+            if (libraryTvMode) {
+                LibraryTvPlaybackOverlay(
+                    info = libraryTvPlayback,
+                    visible = controllerViewState.controlsVisible,
+                    showClock = preferences.appPreferences.interfacePreferences.showClock,
+                    captionsEnabled = mediaInfo?.subtitleStreams.orEmpty().isNotEmpty() || hasSubtitleDownloadPermission,
+                    audioEnabled = mediaInfo?.audioStreams.orEmpty().size > 1,
+                    onClickCaptions = {
+                        controllerViewState.pulseControls(Long.MAX_VALUE)
+                        playbackDialog = PlaybackDialogType.CAPTIONS
+                    },
+                    onClickAudio = {
+                        controllerViewState.pulseControls(Long.MAX_VALUE)
+                        playbackDialog = PlaybackDialogType.AUDIO
+                    },
+                    onControllerInteraction = {
+                        controllerViewState.pulseControls()
+                    },
+                    modifier =
+                        Modifier
+                            .padding(WindowInsets.systemBars.asPaddingValues())
+                            .fillMaxSize(),
+                )
+            } else {
+                PlaybackOverlay(
+                    modifier =
+                        Modifier
+                            .padding(WindowInsets.systemBars.asPaddingValues())
+                            .fillMaxSize()
+                            .background(Color.Transparent),
+                    item = currentPlayback?.item,
+                    player = player,
+                    controllerViewState = controllerViewState,
+                    showPlay = playPauseState.showPlay,
+                    previousEnabled = true,
+                    nextEnabled = playlist.hasNext(),
+                    seekEnabled = true,
+                    seekForward = preferences.appPreferences.playbackPreferences.skipForwardMs.milliseconds,
+                    seekBack = preferences.appPreferences.playbackPreferences.skipBackMs.milliseconds,
+                    skipBackOnResume = preferences.appPreferences.playbackPreferences.skipBackOnResume,
+                    onPlaybackActionClick = onPlaybackActionClick,
+                    onClickPlaybackDialogType = { playbackDialog = it },
+                    onSeekBarChange = seekBarState::onValueChange,
+                    showDebugInfo = showDebugInfo,
+                    currentPlayback = currentPlayback,
+                    chapters = mediaInfo?.chapters ?: listOf(),
+                    trickplayInfo = mediaInfo?.trickPlayInfo,
+                    trickplayUrlFor = viewModel::getTrickplayUrl,
+                    playlist = playlist,
+                    onClickPlaylist = {
+                        viewModel.playItemInPlaylist(it)
+                    },
+                    currentSegment = currentSegment?.segment,
+                    showClock = preferences.appPreferences.interfacePreferences.showClock,
+                    analyticsState = analyticsState,
+                )
+            }
+
+            val subtitleSettings =
+                remember(mediaInfo) {
+                    Timber.v("subtitle choice: ${mediaInfo?.videoStream?.hdr}")
+                    if (mediaInfo?.videoStream?.hdr == true) {
+                        preferences.appPreferences.interfacePreferences.hdrSubtitlesPreferences
+                    } else {
+                        preferences.appPreferences.interfacePreferences.subtitlesPreferences
+                    }
+                }
+            val subtitleImageOpacity =
+                remember(subtitleSettings) { subtitleSettings.imageSubtitleOpacity / 100f }
+
+            // Subtitles
+            if (skipIndicatorDuration == 0L && currentItemPlayback.subtitleIndexEnabled && !presentationState.coverSurface) {
+                val maxSize by animateFloatAsState(if (controllerViewState.controlsVisible) .7f else 1f)
+                val isImageSubtitles = remember(cues) { cues.firstOrNull()?.bitmap != null }
+                AndroidView(
+                    factory = { context ->
+                        SubtitleView(context).apply {
+                            subtitleSettings.let {
+                                setStyle(it.toSubtitleStyle())
+                                setFixedTextSize(Dimension.SP, it.fontSize.toFloat())
+                                setBottomPaddingFraction(it.margin.toFloat() / 100f)
+                            }
+                            playerState.assHandler?.let { assHandler ->
+                                if (prefs.overrides.assPlaybackMode == AssPlaybackMode.ASS_LIBASS) {
+                                    Timber.v("Adding AssSubtitleView")
+                                    addView(
+                                        AssSubtitleView(context, assHandler).apply {
+                                            layoutParams =
+                                                FrameLayout
+                                                    .LayoutParams(
+                                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                                    ).apply { gravity = Gravity.CENTER }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    update = {
+                        it.setCues(cues)
+                        Media3SubtitleOverride(subtitleSettings.calculateEdgeSize(density))
+                            .apply(it)
+                        it.children.firstOrNull { it is AssSubtitleView }?.let {
+                            (it as? AssSubtitleView)?.apply {
+                                val resized =
+                                    layoutParams.let { it.width != playerSurfaceSize.width || it.height != playerSurfaceSize.height }
+                                if (resized) {
+                                    Timber.v("Resizing AssSubtitleView: $playerSurfaceSize")
+                                    layoutParams =
+                                        FrameLayout
+                                            .LayoutParams(
+                                                playerSurfaceSize.width,
+                                                playerSurfaceSize.height,
+                                            ).apply { gravity = Gravity.CENTER }
+                                }
+                            }
+                        }
+                    },
+                    onReset = {
+                        it.setCues(null)
+                    },
+                    modifier =
+                        Modifier
+                            .fillMaxSize(maxSize)
+                            .align(Alignment.TopCenter)
+                            .background(Color.Transparent)
+                            .ifElse(isImageSubtitles, Modifier.alpha(subtitleImageOpacity)),
+                )
+            }
+        }
+
+        // Ask to skip intros, etc button
+        AnimatedVisibility(
+            showSegment,
+            modifier =
+                Modifier
+                    .padding(40.dp)
+                    .align(Alignment.BottomEnd),
+        ) {
+            currentSegment?.let { segment ->
+                val focusRequester = remember { FocusRequester() }
+                LaunchedEffect(Unit) {
+                    focusRequester.tryRequestFocus()
+                    delay(10.seconds)
+                    viewModel.updateSegment(segment.segment.id, true)
+                }
+                SkipSegmentButton(
+                    type = segment.segment.type,
+                    onClick = {
+                        viewModel.updateSegment(segment.segment.id, false)
+                    },
+                    modifier = Modifier.focusRequester(focusRequester),
+                )
+            }
+        }
+
+        // Next up episode
+        BackHandler(nextUp != null) {
+            if (player.isPlaying) {
+                scope.launch(ExceptionHandler()) {
+                    viewModel.cancelUpNextEpisode()
+                }
+            } else {
+                viewModel.navigationManager.goBack()
+            }
+        }
+        AnimatedVisibility(
+            nextUp != null,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter),
+        ) {
+            nextUp?.let {
+                var autoPlayEnabled by remember { mutableStateOf(viewModel.shouldAutoPlayNextUp()) }
+                var timeLeft by remember {
+                    mutableLongStateOf(
+                        preferences.appPreferences.playbackPreferences.autoPlayNextDelaySeconds,
+                    )
+                }
+                BackHandler(timeLeft > 0 && autoPlayEnabled) {
+                    timeLeft = -1
+                    autoPlayEnabled = false
+                }
+                if (autoPlayEnabled) {
+                    LaunchedEffect(Unit) {
+                        if (timeLeft == 0L) {
+                            viewModel.playNextUp()
+                        } else {
+                            while (timeLeft > 0) {
+                                delay(1.seconds)
+                                timeLeft--
+                            }
+                            if (timeLeft == 0L && autoPlayEnabled) {
+                                viewModel.playNextUp()
+                            }
+                        }
+                    }
+                }
+                NextUpEpisode(
+                    title =
+                        listOfNotNull(
+                            it.data.seasonEpisode,
+                            it.name,
+                        ).joinToString(" - "),
+                    description = it.data.overview,
+                    imageUrl = LocalImageUrlService.current.rememberImageUrl(it),
+                    aspectRatio = it.aspectRatio ?: AspectRatios.WIDE,
+                    onClick = {
+                        viewModel.reportInteraction()
+                        controllerViewState.hideControls()
+                        viewModel.playNextUp()
+                    },
+                    timeLeft = if (autoPlayEnabled) timeLeft.seconds else null,
+                    modifier =
+                        Modifier
+                            .padding(8.dp)
+//                                    .height(128.dp)
+                            .fillMaxHeight(1 - playerSize)
+                            .fillMaxWidth(.66f)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                                shape = RoundedCornerShape(8.dp),
+                            ),
+                )
+            }
+        }
+    }
+
+    subtitleSearch?.let { state ->
+        val wasPlaying = remember { player.isPlaying }
+        LaunchedEffect(Unit) {
+            player.pause()
+        }
+        val onDismissRequest = {
+            if (wasPlaying) {
+                player.play()
+            }
+            viewModel.cancelSubtitleSearch()
+        }
+        Dialog(
+            onDismissRequest = onDismissRequest,
+            properties =
+                DialogProperties(
+                    usePlatformDefaultWidth = false,
+                ),
+        ) {
+            DownloadSubtitlesContent(
+                state = state,
+                language = subtitleSearchLanguage,
+                onSearch = { lang ->
+                    viewModel.searchForSubtitles(lang)
+                },
+                onClickDownload = {
+                    viewModel.downloadAndSwitchSubtitles(it.id, wasPlaying)
+                },
+                onDismissRequest = onDismissRequest,
+                modifier =
+                    Modifier
+                        .widthIn(max = 640.dp)
+                        .heightIn(max = 400.dp),
+            )
+        }
+    }
+
+    playbackDialog?.let { type ->
+        PlaybackDialog(
+            type = type,
+            settings =
+                PlaybackSettings(
+                    showDebugInfo = showDebugInfo,
+                    audioIndex = currentItemPlayback?.audioIndex,
+                    audioStreams = mediaInfo?.audioStreams.orEmpty(),
+                    subtitleIndex = currentItemPlayback?.subtitleIndex,
+                    subtitleStreams = mediaInfo?.subtitleStreams.orEmpty(),
+                    playbackSpeed = playbackSpeed,
+                    contentScale = contentScale,
+                    subtitleDelay = subtitleDelay,
+                    hasSubtitleDownloadPermission = hasSubtitleDownloadPermission,
+                    // TODO Passing through audio prevents changing playback speed
+                    // See https://github.com/damontecres/Wholphin/issues/164
+                    playbackSpeedEnabled = playerBackend == PlayerBackend.MPV || currentPlayback?.audioDecoder != null,
+                ),
+            onDismissRequest = {
+                playbackDialog = null
+                if (controllerViewState.controlsVisible) {
+                    controllerViewState.pulseControls()
+                }
+            },
+            onControllerInteraction = {
+                controllerViewState.pulseControls(Long.MAX_VALUE)
+            },
+            onClickPlaybackDialogType = {
+                if (it == PlaybackDialogType.SUBTITLE_DELAY) {
+                    // Hide controls so subtitles are fully visible
+                    controllerViewState.hideControls()
+                }
+                playbackDialog = it
+            },
+            onPlaybackActionClick = onPlaybackActionClick,
+            onChangeSubtitleDelay = { viewModel.updateSubtitleDelay(it) },
+            enableSubtitleDelay = player is MpvPlayer,
+            enableVideoScale = player !is MpvPlayer,
+        )
+    }
+}

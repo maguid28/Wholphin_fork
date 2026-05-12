@@ -1,0 +1,2175 @@
+package com.github.damontecres.wholphin.ui.detail.librarytv
+
+import android.text.format.DateUtils
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.datastore.core.DataStore
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.data.ServerRepository
+import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.updateLiveTvPreferences
+import com.github.damontecres.wholphin.services.ImageUrlService
+import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.hilt.DefaultDispatcher
+import com.github.damontecres.wholphin.services.hilt.IoCoroutineScope
+import com.github.damontecres.wholphin.services.hilt.IoDispatcher
+import com.github.damontecres.wholphin.ui.components.ErrorMessage
+import com.github.damontecres.wholphin.ui.components.LoadingPage
+import com.github.damontecres.wholphin.ui.components.Network
+import com.github.damontecres.wholphin.ui.components.PopularNetworks
+import com.github.damontecres.wholphin.ui.components.networkLogoAsset
+import com.github.damontecres.wholphin.ui.components.networkLogoAssetForKey
+import com.github.damontecres.wholphin.ui.launchIO
+import com.github.damontecres.wholphin.ui.nav.Destination
+import com.github.damontecres.wholphin.ui.preferences.SwitchPreference
+import com.github.damontecres.wholphin.ui.toBaseItems
+import com.github.damontecres.wholphin.ui.tryRequestFocus
+import com.github.damontecres.wholphin.util.DataLoadingState
+import com.github.damontecres.wholphin.util.GetEpisodesRequestHandler
+import com.github.damontecres.wholphin.util.GetItemsRequestHandler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
+import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.CollectionType
+import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
+import org.jellyfin.sdk.model.api.request.GetEpisodesRequest
+import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import org.jellyfin.sdk.model.extensions.ticks
+import timber.log.Timber
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.time.Duration.Companion.minutes
+
+private const val LibraryTvEpisodePageSize = 300
+private const val LibraryTvMaxEpisodePages = 2
+private const val LibraryTvMoviePageSize = 240
+private const val LibraryTvMaxMoviePages = 2
+private const val LibraryTvSeriesPageSize = 240
+private const val LibraryTvMaxSeriesPages = 1
+private const val LibraryTvTargetShowsPerChannel = 5
+private const val LibraryTvMaxFallbackSeriesNetworkLookups = 200
+private const val LibraryTvMaxSupplementalSeries = 48
+private const val LibraryTvSupplementalEpisodesPerShow = 10
+private const val LibraryTvSupplementalFetchConcurrency = 6
+private const val LibraryTvMaxChannels = 96
+private const val LibraryTvMaxEpisodesPerShowInCycle = 24
+private const val LibraryTvMaxShortEpisodeBlock = 2
+private const val LibraryTvMaxQuickFallbackSeriesNetworkLookups = 90
+private const val LibraryTvMinEpisodesPerGenreChannel = 3
+private const val LibraryTvMinMoviesPerGenreChannel = 3
+private const val LibraryTvGuideHours = 6L
+private const val LibraryTvVisibleHours = 2f
+private const val LibraryTvVisibleMinutes = 120L
+private const val LibraryTvNowInsetMinutes = 15L
+private const val LibraryTvTimeBucketMinutes = 10L
+private val LibraryTvDefaultDurationMs = 30.minutes.inWholeMilliseconds
+private val LibraryTvMinimumDurationMs = 5.minutes.inWholeMilliseconds
+private val LibraryTvShortEpisodeThresholdMs = 28.minutes.inWholeMilliseconds
+private val LibraryTvChannelOffsetMs = 13.minutes.inWholeMilliseconds
+private val LibraryTvScheduleAnchor =
+    ZonedDateTime
+        .of(2024, 1, 1, 0, 0, 0, 0, ZoneId.systemDefault())
+        .toInstant()
+
+private val LibraryTvSurface = Color(0xFF0B1622)
+private val LibraryTvSurfaceElevated = Color(0xFF162338)
+private val LibraryTvOnSurfaceDim = Color(0xFFB5C0CC)
+private val LibraryTvItemFields =
+    listOf(
+        ItemFields.GENRES,
+        ItemFields.OVERVIEW,
+        ItemFields.SORT_NAME,
+        ItemFields.STUDIOS,
+        ItemFields.SERIES_STUDIO,
+    )
+
+private data class LibraryTvGuideCacheKey(
+    val userId: UUID,
+)
+
+object LibraryTvGuideMemoryCache {
+    private var key: LibraryTvGuideCacheKey? = null
+    private var guide: LibraryTvGuideState? = null
+
+    @Synchronized
+    fun get(
+        userId: UUID,
+        now: Instant,
+    ): LibraryTvGuideState? =
+        guide?.takeIf {
+            key == LibraryTvGuideCacheKey(userId) &&
+                !now.isBefore(it.windowStart) &&
+                !now.plusSeconds(LibraryTvVisibleMinutes * 60).isAfter(it.windowEnd)
+        }
+
+    @Synchronized
+    fun put(
+        userId: UUID,
+        guide: LibraryTvGuideState,
+    ) {
+        key = LibraryTvGuideCacheKey(userId)
+        this.guide = guide
+    }
+
+    @Synchronized
+    fun channelOptions(): List<LibraryTvChannelOption> =
+        guide
+            ?.channels
+            ?.map { LibraryTvChannelOption(it.key, it.name) }
+            .orEmpty()
+
+    @Synchronized
+    fun currentGuide(): LibraryTvGuideState? = guide
+
+    @Synchronized
+    fun clear() {
+        key = null
+        guide = null
+    }
+}
+
+@Singleton
+class LibraryTvGuideService
+    @Inject
+    constructor(
+        @param:IoCoroutineScope private val ioScope: CoroutineScope,
+        @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+        @param:DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
+        private val api: ApiClient,
+        private val imageUrlService: ImageUrlService,
+    ) {
+        private val loadingMutex = Mutex()
+        private var inFlightUserId: UUID? = null
+        private var inFlight: Deferred<LibraryTvGuideState>? = null
+
+        fun cachedGuide(
+            userId: UUID,
+            now: Instant = Instant.now(),
+        ): LibraryTvGuideState? = LibraryTvGuideMemoryCache.get(userId, now)
+
+        fun warm(userId: UUID) {
+            if (cachedGuide(userId) != null) return
+            ioScope.launch {
+                try {
+                    load(userId)
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not warm Library TV guide")
+                }
+            }
+        }
+
+        suspend fun load(userId: UUID): LibraryTvGuideState {
+            cachedGuide(userId)?.let { return it }
+            val deferred =
+                loadingMutex.withLock {
+                    cachedGuide(userId)?.let { cachedGuide ->
+                        return@withLock CompletableDeferred(cachedGuide)
+                    }
+                    inFlight
+                        ?.takeIf { inFlightUserId == userId && it.isActive }
+                        ?: ioScope
+                            .async {
+                                buildFreshGuide(userId)
+                            }.also {
+                                inFlightUserId = userId
+                                inFlight = it
+                            }
+                }
+            return try {
+                deferred.await()
+            } finally {
+                loadingMutex.withLock {
+                    if (inFlight === deferred && deferred.isCompleted) {
+                        inFlight = null
+                        inFlightUserId = null
+                    }
+                }
+            }
+        }
+
+        private suspend fun buildFreshGuide(userId: UUID): LibraryTvGuideState {
+            val now = Instant.now().roundDownToMinutes(LibraryTvTimeBucketMinutes)
+            val windowStart = now.minusSeconds(LibraryTvNowInsetMinutes * 60)
+            val windowEnd = now.plusSeconds(LibraryTvGuideHours * 60 * 60)
+            val (episodes, movies, seriesNetworkNames) =
+                withContext(ioDispatcher) {
+                    val views =
+                        api.userViewsApi
+                            .getUserViews(userId = userId)
+                            .content
+                            .items
+                    val tvLibraries =
+                        views.filter {
+                            (it.collectionType ?: CollectionType.UNKNOWN) == CollectionType.TVSHOWS
+                        }
+                    val movieLibraries =
+                        views.filter {
+                            (it.collectionType ?: CollectionType.UNKNOWN) == CollectionType.MOVIES
+                        }
+                    val folderLibraries =
+                        views.filter {
+                            (it.collectionType ?: CollectionType.UNKNOWN) == CollectionType.FOLDERS
+                        }
+
+                    val tvLibraryIds = tvLibraries.ifEmpty { folderLibraries }.mapNotNull { it.id }
+                    val movieLibraryIds = movieLibraries.ifEmpty { folderLibraries }.mapNotNull { it.id }
+                    val (episodes, movies) =
+                        coroutineScope {
+                            val episodesDeferred = async { fetchLibraryEpisodes(userId, tvLibraryIds) }
+                            val moviesDeferred = async { fetchLibraryMovies(userId, movieLibraryIds) }
+                            episodesDeferred.await() to moviesDeferred.await()
+                        }
+                    val seriesNetworkNames =
+                        fetchFallbackSeriesNetworkNames(
+                            userId = userId,
+                            episodes = episodes,
+                            maxLookups = LibraryTvMaxQuickFallbackSeriesNetworkLookups,
+                        )
+                    Triple(episodes, movies, seriesNetworkNames)
+                }
+            val guide =
+                withContext(defaultDispatcher) {
+                    buildGuideState(
+                        windowStart = windowStart,
+                        windowEnd = windowEnd,
+                        episodes = episodes,
+                        movies = movies,
+                        seriesNetworkNames = seriesNetworkNames,
+                    )
+                }
+            if (guide.channels.isNotEmpty()) {
+                LibraryTvGuideMemoryCache.put(userId, guide)
+            }
+            return guide
+        }
+
+        private suspend fun fetchLibraryEpisodes(
+            userId: UUID,
+            libraryIds: List<UUID>,
+        ): List<BaseItem> =
+            coroutineScope {
+                libraryIds
+                    .map { libraryId ->
+                        async {
+                            val libraryEpisodes = mutableListOf<BaseItem>()
+                            repeat(LibraryTvMaxEpisodePages) { page ->
+                                val fetched =
+                                    GetItemsRequestHandler
+                                        .execute(
+                                            api,
+                                            GetItemsRequest(
+                                                userId = userId,
+                                                parentId = libraryId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(BaseItemKind.EPISODE),
+                                                fields = LibraryTvItemFields,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                sortOrder = listOf(SortOrder.ASCENDING),
+                                                startIndex = page * LibraryTvEpisodePageSize,
+                                                limit = LibraryTvEpisodePageSize,
+                                                enableUserData = false,
+                                                enableTotalRecordCount = false,
+                                                enableImages = false,
+                                            ),
+                                        ).toBaseItems(api, useSeriesForPrimary = true)
+                                        .filter { it.playable }
+                                libraryEpisodes.addAll(fetched)
+                                if (fetched.size < LibraryTvEpisodePageSize) {
+                                    return@async libraryEpisodes
+                                }
+                            }
+                            libraryEpisodes
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .distinctBy { it.id }
+            }
+
+        private suspend fun fetchLibraryMovies(
+            userId: UUID,
+            libraryIds: List<UUID>,
+        ): List<BaseItem> =
+            coroutineScope {
+                libraryIds
+                    .map { libraryId ->
+                        async {
+                            val libraryMovies = mutableListOf<BaseItem>()
+                            repeat(LibraryTvMaxMoviePages) { page ->
+                                val fetched =
+                                    GetItemsRequestHandler
+                                        .execute(
+                                            api,
+                                            GetItemsRequest(
+                                                userId = userId,
+                                                parentId = libraryId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(BaseItemKind.MOVIE),
+                                                fields = LibraryTvItemFields,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                sortOrder = listOf(SortOrder.ASCENDING),
+                                                startIndex = page * LibraryTvMoviePageSize,
+                                                limit = LibraryTvMoviePageSize,
+                                                enableUserData = false,
+                                                enableTotalRecordCount = false,
+                                                enableImages = false,
+                                            ),
+                                        ).toBaseItems(api, useSeriesForPrimary = false)
+                                        .filter { it.playable }
+                                libraryMovies.addAll(fetched)
+                                if (fetched.size < LibraryTvMoviePageSize) {
+                                    return@async libraryMovies
+                                }
+                            }
+                            libraryMovies
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .distinctBy { it.id }
+            }
+
+        private suspend fun fetchFallbackSeriesNetworkNames(
+            userId: UUID,
+            episodes: List<BaseItem>,
+            maxLookups: Int = LibraryTvMaxFallbackSeriesNetworkLookups,
+        ): Map<UUID, List<String>> {
+            val seriesIds =
+                episodes
+                    .filter { it.networkNames().isEmpty() }
+                    .mapNotNull { it.data.seriesId }
+                    .distinct()
+                    .take(maxLookups)
+            if (seriesIds.isEmpty()) return emptyMap()
+
+            return coroutineScope {
+                seriesIds
+                    .chunked(100)
+                    .map { ids ->
+                        async {
+                            api.itemsApi
+                                .getItems(
+                                    userId = userId,
+                                    ids = ids,
+                                    fields = LibraryTvItemFields,
+                                    enableImages = false,
+                                ).toBaseItems(api, useSeriesForPrimary = false)
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .associate { it.id to it.networkNames() }
+            }
+        }
+
+        private fun buildGuideState(
+            windowStart: Instant,
+            windowEnd: Instant,
+            episodes: List<BaseItem>,
+            movies: List<BaseItem>,
+            seriesNetworkNames: Map<UUID, List<String>>,
+        ): LibraryTvGuideState {
+            val networkGroups =
+                groupEpisodesByNetwork(
+                    episodes = episodes,
+                    seriesNetworkNames = seriesNetworkNames,
+                )
+            val networkKeys = networkGroups.map { it.network.key }.toSet()
+            val episodeGenreGroups =
+                groupEpisodesByGenre(episodes)
+                    .filterNot { it.network.key in networkKeys }
+            val movieGenreGroups = groupMoviesByGenre(movies)
+            val channelPlans =
+                (networkGroups + episodeGenreGroups + movieGenreGroups)
+                    .asSequence()
+                    .mapNotNull { group ->
+                        val items = group.items.buildNaturalScheduleCycle(group.network.key, windowStart)
+                        if (items.isEmpty()) null else LibraryTvChannelPlan(group, items)
+                    }.take(LibraryTvMaxChannels)
+                    .toList()
+            val channels =
+                channelPlans
+                    .mapIndexed { index, plan ->
+                        val group = plan.group
+                        val showImageUrls = mutableMapOf<String, String?>()
+                        val scheduledItems =
+                            plan.items.map {
+                                LibraryTvScheduledItem(
+                                    item = it,
+                                    imageUrl =
+                                        showImageUrls.getOrPut(it.seriesKey()) {
+                                            imageUrlService.getItemImageUrl(
+                                                item = it,
+                                                imageType = ImageType.PRIMARY,
+                                                fillWidth = 96,
+                                                fillHeight = 54,
+                                                useSeriesForPrimary = it.type == BaseItemKind.EPISODE,
+                                            )
+                                        },
+                                    durationMs = it.libraryTvDurationMs(),
+                                )
+                            }
+                        LibraryTvChannel(
+                            key = group.network.key,
+                            id = group.network.id,
+                            number = index + 1,
+                            name = group.network.name,
+                            imageUrl = group.network.imageUrl,
+                            programs =
+                                buildPrograms(
+                                    channelKey = group.network.key,
+                                    channelId = group.network.id,
+                                    channelName = group.network.name,
+                                    channelImageUrl = group.network.imageUrl,
+                                    items = scheduledItems,
+                                    windowStart = windowStart,
+                                    windowEnd = windowEnd,
+                                    channelIndex = index,
+                                ),
+                        )
+                    }
+            return LibraryTvGuideState(
+                channels = channels,
+                windowStart = windowStart,
+                windowEnd = windowEnd,
+            )
+        }
+    }
+
+@HiltViewModel
+class LibraryTvViewModel
+    @Inject
+    constructor(
+        private val api: ApiClient,
+        private val serverRepository: ServerRepository,
+        private val navigationManager: NavigationManager,
+        private val imageUrlService: ImageUrlService,
+        private val libraryTvGuideService: LibraryTvGuideService,
+    ) : ViewModel() {
+        var lastFocusedProgramKey: LibraryTvProgramFocusKey? = null
+            private set
+
+        private val _loading =
+            MutableStateFlow<DataLoadingState<LibraryTvGuideState>>(DataLoadingState.Pending)
+        val loading = _loading.asStateFlow()
+
+        init {
+            load()
+        }
+
+        fun load() {
+            viewModelScope.launchIO {
+                try {
+                    val userId =
+                        serverRepository.currentUser.value?.id
+                            ?: throw IllegalStateException("No active Jellyfin user")
+                    libraryTvGuideService.cachedGuide(userId)?.let { cachedGuide ->
+                        _loading.update { DataLoadingState.Success(cachedGuide) }
+                        return@launchIO
+                    }
+                    _loading.update { DataLoadingState.Loading }
+
+                    val guide = libraryTvGuideService.load(userId)
+                    if (guide.channels.isNotEmpty()) {
+                        _loading.update { DataLoadingState.Success(guide) }
+                    } else {
+                        _loading.update {
+                            DataLoadingState.Error(
+                                message = "Could not build Library TV",
+                                exception = null,
+                            )
+                        }
+                    }
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Could not build Library TV")
+                    _loading.update {
+                        DataLoadingState.Error(
+                            message = "Could not build Library TV",
+                            exception = ex,
+                        )
+                    }
+                }
+            }
+        }
+
+        fun rememberFocusedProgram(program: LibraryTvProgram) {
+            lastFocusedProgramKey = program.focusKey()
+        }
+
+        fun play(program: LibraryTvProgram) {
+            rememberFocusedProgram(program)
+            val now = Instant.now()
+            val positionMs =
+                if (!now.isBefore(program.start) && now.isBefore(program.end)) {
+                    (now.toEpochMilli() - program.start.toEpochMilli()).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+            navigationManager.navigateTo(
+                Destination.Playback(
+                    itemId = program.item.id,
+                    positionMs = positionMs,
+                    trackPlayback = false,
+                    libraryTvChannelKey = program.channelKey,
+                ),
+            )
+        }
+
+        private suspend fun fetchLibraryEpisodes(
+            userId: UUID,
+            libraryIds: List<UUID>,
+        ): List<BaseItem> =
+            coroutineScope {
+                libraryIds
+                    .map { libraryId ->
+                        async {
+                            val libraryEpisodes = mutableListOf<BaseItem>()
+                            repeat(LibraryTvMaxEpisodePages) { page ->
+                                val fetched =
+                                    GetItemsRequestHandler
+                                        .execute(
+                                            api,
+                                            GetItemsRequest(
+                                                userId = userId,
+                                                parentId = libraryId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(BaseItemKind.EPISODE),
+                                                fields = LibraryTvItemFields,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                sortOrder = listOf(SortOrder.ASCENDING),
+                                                startIndex = page * LibraryTvEpisodePageSize,
+                                                limit = LibraryTvEpisodePageSize,
+                                                enableUserData = false,
+                                                enableTotalRecordCount = false,
+                                                enableImages = false,
+                                            ),
+                                        ).toBaseItems(api, useSeriesForPrimary = true)
+                                        .filter { it.playable }
+                                libraryEpisodes.addAll(fetched)
+                                if (fetched.size < LibraryTvEpisodePageSize) {
+                                    return@async libraryEpisodes
+                                }
+                            }
+                            libraryEpisodes
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .distinctBy { it.id }
+            }
+
+        private suspend fun fetchLibraryMovies(
+            userId: UUID,
+            libraryIds: List<UUID>,
+        ): List<BaseItem> =
+            coroutineScope {
+                libraryIds
+                    .map { libraryId ->
+                        async {
+                            val libraryMovies = mutableListOf<BaseItem>()
+                            repeat(LibraryTvMaxMoviePages) { page ->
+                                val fetched =
+                                    GetItemsRequestHandler
+                                        .execute(
+                                            api,
+                                            GetItemsRequest(
+                                                userId = userId,
+                                                parentId = libraryId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(BaseItemKind.MOVIE),
+                                                fields = LibraryTvItemFields,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                sortOrder = listOf(SortOrder.ASCENDING),
+                                                startIndex = page * LibraryTvMoviePageSize,
+                                                limit = LibraryTvMoviePageSize,
+                                                enableUserData = false,
+                                                enableTotalRecordCount = false,
+                                                enableImages = false,
+                                            ),
+                                        ).toBaseItems(api, useSeriesForPrimary = false)
+                                        .filter { it.playable }
+                                libraryMovies.addAll(fetched)
+                                if (fetched.size < LibraryTvMoviePageSize) {
+                                    return@async libraryMovies
+                                }
+                            }
+                            libraryMovies
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .distinctBy { it.id }
+            }
+
+        private suspend fun fetchLibrarySeries(
+            userId: UUID,
+            libraryIds: List<UUID>,
+        ): List<BaseItem> =
+            coroutineScope {
+                libraryIds
+                    .map { libraryId ->
+                        async {
+                            val librarySeries = mutableListOf<BaseItem>()
+                            repeat(LibraryTvMaxSeriesPages) { page ->
+                                val fetched =
+                                    GetItemsRequestHandler
+                                        .execute(
+                                            api,
+                                            GetItemsRequest(
+                                                userId = userId,
+                                                parentId = libraryId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(BaseItemKind.SERIES),
+                                                fields = LibraryTvItemFields,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                sortOrder = listOf(SortOrder.ASCENDING),
+                                                startIndex = page * LibraryTvSeriesPageSize,
+                                                limit = LibraryTvSeriesPageSize,
+                                                enableUserData = false,
+                                                enableTotalRecordCount = false,
+                                                enableImages = false,
+                                            ),
+                                        ).toBaseItems(api, useSeriesForPrimary = false)
+                                librarySeries.addAll(fetched)
+                                if (fetched.size < LibraryTvSeriesPageSize) {
+                                    return@async librarySeries
+                                }
+                            }
+                            librarySeries
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .distinctBy { it.id }
+            }
+
+        private suspend fun fetchFallbackSeriesNetworkNames(
+            userId: UUID,
+            episodes: List<BaseItem>,
+            maxLookups: Int = LibraryTvMaxFallbackSeriesNetworkLookups,
+        ): Map<UUID, List<String>> {
+            val seriesIds =
+                episodes
+                    .filter { it.networkNames().isEmpty() }
+                    .mapNotNull { it.data.seriesId }
+                    .distinct()
+                    .take(maxLookups)
+            if (seriesIds.isEmpty()) return emptyMap()
+
+            return coroutineScope {
+                seriesIds
+                    .chunked(100)
+                    .map { ids ->
+                        async {
+                            api.itemsApi
+                                .getItems(
+                                    userId = userId,
+                                    ids = ids,
+                                    fields = LibraryTvItemFields,
+                                    enableImages = false,
+                                ).toBaseItems(api, useSeriesForPrimary = false)
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .associate { it.id to it.networkNames() }
+            }
+        }
+
+        private suspend fun fetchSupplementalNetworkEpisodes(
+            series: List<BaseItem>,
+            existingEpisodes: List<BaseItem>,
+            seriesNetworkNames: Map<UUID, List<String>>,
+            windowStart: Instant,
+        ): List<BaseItem> {
+            if (series.isEmpty()) return emptyList()
+
+            val matcher = LibraryTvNetworkMatcher()
+            val existingSeriesIdsByNetwork =
+                existingEpisodes
+                    .mapNotNull { episode ->
+                        val network =
+                            matcher.networkFor(
+                                episode.networkNames() +
+                                    episode.data.seriesId
+                                        ?.let { seriesNetworkNames[it] }
+                                        .orEmpty(),
+                            ) ?: return@mapNotNull null
+                        val seriesId = episode.data.seriesId ?: return@mapNotNull null
+                        network.key to seriesId
+                    }.groupBy({ it.first }, { it.second })
+                    .mapValues { (_, ids) -> ids.toSet() }
+            val scheduleDay = windowStart.atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+            val candidates =
+                series
+                    .mapNotNull { seriesItem ->
+                        val network =
+                            matcher.networkFor(
+                                seriesItem.networkNames() +
+                                    seriesNetworkNames[seriesItem.id].orEmpty(),
+                            ) ?: return@mapNotNull null
+                        network to seriesItem
+                    }.groupBy({ it.first }, { it.second })
+                    .toList()
+                    .sortedWith(
+                        compareBy<Pair<LibraryTvNetwork, List<BaseItem>>> { it.first.sortIndex }
+                            .thenBy { it.first.name },
+                    ).flatMap { (network, networkSeries) ->
+                        val existingSeriesIds = existingSeriesIdsByNetwork[network.key].orEmpty()
+                        val needed = (LibraryTvTargetShowsPerChannel - existingSeriesIds.size).coerceAtLeast(0)
+                        if (needed == 0) {
+                            emptyList()
+                        } else {
+                            networkSeries
+                                .filterNot { it.id in existingSeriesIds }
+                                .sortedWith(
+                                    compareBy<BaseItem> {
+                                        stableSortKey("${network.key}:${it.id}:$scheduleDay")
+                                    }.thenBy { it.sortName },
+                                ).take(needed)
+                        }
+                    }.take(LibraryTvMaxSupplementalSeries)
+
+            if (candidates.isEmpty()) return emptyList()
+
+            val episodes = mutableListOf<BaseItem>()
+            candidates.chunked(LibraryTvSupplementalFetchConcurrency).forEach { batch ->
+                episodes +=
+                    coroutineScope {
+                        batch
+                            .map { seriesItem ->
+                                async {
+                                    fetchSeriesEpisodes(seriesItem.id)
+                                }
+                            }.awaitAll()
+                            .flatten()
+                    }
+            }
+            return episodes.distinctBy { it.id }
+        }
+
+        private suspend fun fetchSeriesEpisodes(seriesId: UUID): List<BaseItem> =
+            GetEpisodesRequestHandler
+                .execute(
+                    api,
+                    GetEpisodesRequest(
+                        seriesId = seriesId,
+                        fields = LibraryTvItemFields,
+                        sortBy = ItemSortBy.INDEX_NUMBER,
+                        limit = LibraryTvSupplementalEpisodesPerShow,
+                    ),
+                ).toBaseItems(api, useSeriesForPrimary = true)
+                .filter { it.playable }
+
+        private fun buildGuideState(
+            windowStart: Instant,
+            windowEnd: Instant,
+            episodes: List<BaseItem>,
+            movies: List<BaseItem>,
+            seriesNetworkNames: Map<UUID, List<String>>,
+        ): LibraryTvGuideState {
+            val networkGroups =
+                groupEpisodesByNetwork(
+                    episodes = episodes,
+                    seriesNetworkNames = seriesNetworkNames,
+                )
+            val networkKeys = networkGroups.map { it.network.key }.toSet()
+            val episodeGenreGroups =
+                groupEpisodesByGenre(episodes)
+                    .filterNot { it.network.key in networkKeys }
+            val movieGenreGroups = groupMoviesByGenre(movies)
+            val channelPlans =
+                (networkGroups + episodeGenreGroups + movieGenreGroups)
+                    .asSequence()
+                    .mapNotNull { group ->
+                        val items = group.items.buildNaturalScheduleCycle(group.network.key, windowStart)
+                        if (items.isEmpty()) null else LibraryTvChannelPlan(group, items)
+                    }.take(LibraryTvMaxChannels)
+                    .toList()
+            val channels =
+                channelPlans
+                    .mapIndexed { index, plan ->
+                        val group = plan.group
+                        val showImageUrls = mutableMapOf<String, String?>()
+                        val scheduledItems =
+                            plan.items.map {
+                                LibraryTvScheduledItem(
+                                    item = it,
+                                    imageUrl =
+                                        showImageUrls.getOrPut(it.seriesKey()) {
+                                            imageUrlService.getItemImageUrl(
+                                                item = it,
+                                                imageType = ImageType.PRIMARY,
+                                                fillWidth = 96,
+                                                fillHeight = 54,
+                                                useSeriesForPrimary = it.type == BaseItemKind.EPISODE,
+                                            )
+                                        },
+                                    durationMs = it.libraryTvDurationMs(),
+                                )
+                            }
+                        LibraryTvChannel(
+                            key = group.network.key,
+                            id = group.network.id,
+                            number = index + 1,
+                            name = group.network.name,
+                            imageUrl = group.network.imageUrl,
+                            programs =
+                                buildPrograms(
+                                    channelKey = group.network.key,
+                                    channelId = group.network.id,
+                                    channelName = group.network.name,
+                                    channelImageUrl = group.network.imageUrl,
+                                    items = scheduledItems,
+                                    windowStart = windowStart,
+                                    windowEnd = windowEnd,
+                                    channelIndex = index,
+                                ),
+                        )
+                    }
+            return LibraryTvGuideState(
+                channels = channels,
+                windowStart = windowStart,
+                windowEnd = windowEnd,
+            )
+        }
+
+        private fun LibraryTvGuideState.publishIfUsable(
+            userId: UUID,
+        ) {
+            if (channels.isNotEmpty()) {
+                LibraryTvGuideMemoryCache.put(userId, this)
+                _loading.update { DataLoadingState.Success(this) }
+            }
+        }
+
+    }
+
+@Composable
+fun LibraryTvPage(
+    preferences: UserPreferences,
+    modifier: Modifier = Modifier,
+    viewModel: LibraryTvViewModel = hiltViewModel(),
+) {
+    val loading by viewModel.loading.collectAsState()
+    val showHeader = preferences.appPreferences.interfacePreferences.liveTvPreferences.showHeader
+    val disabledChannelKeys =
+        preferences.appPreferences.interfacePreferences.liveTvPreferences.disabledLibraryTvChannelKeysList.toSet()
+
+    when (val state = loading) {
+        DataLoadingState.Pending,
+        DataLoadingState.Loading,
+        -> LoadingPage(modifier)
+
+        is DataLoadingState.Error -> ErrorMessage(state, modifier)
+        is DataLoadingState.Success -> {
+            val guideState =
+                remember(state.data, disabledChannelKeys) {
+                    state.data.withEnabledChannels(disabledChannelKeys)
+                }
+            if (guideState.channels.isEmpty()) {
+                ErrorMessage(
+                    message = stringResource(R.string.library_tv_empty),
+                    exception = null,
+                    modifier = modifier,
+                )
+            } else {
+                LibraryTvGuide(
+                    state = guideState,
+                    showHeader = showHeader,
+                    onProgramClick = viewModel::play,
+                    onProgramFocus = viewModel::rememberFocusedProgram,
+                    preferredFocusKey = viewModel.lastFocusedProgramKey,
+                    modifier = modifier,
+                )
+            }
+        }
+    }
+}
+
+@HiltViewModel
+class LibraryTvChannelSettingsViewModel
+    @Inject
+    constructor(
+        private val preferenceDataStore: DataStore<AppPreferences>,
+    ) : ViewModel() {
+        fun setChannelEnabled(
+            key: String,
+            enabled: Boolean,
+        ) {
+            viewModelScope.launchIO {
+                preferenceDataStore.updateData { preferences ->
+                    preferences.updateLiveTvPreferences {
+                        val disabledKeys = disabledLibraryTvChannelKeysList.toMutableSet()
+                        if (enabled) {
+                            disabledKeys.remove(key)
+                        } else {
+                            disabledKeys.add(key)
+                        }
+                        clearDisabledLibraryTvChannelKeys()
+                        addAllDisabledLibraryTvChannelKeys(disabledKeys.sorted())
+                    }
+                }
+            }
+        }
+    }
+
+@Composable
+fun LibraryTvChannelSettingsPage(
+    preferences: AppPreferences,
+    modifier: Modifier = Modifier,
+    viewModel: LibraryTvChannelSettingsViewModel = hiltViewModel(),
+) {
+    val disabledChannelKeys =
+        preferences.interfacePreferences.liveTvPreferences.disabledLibraryTvChannelKeysList.toSet()
+    val channelOptions =
+        remember {
+            (
+                PopularNetworks.mapIndexed { index, network ->
+                    network
+                        .toLibraryTvNetwork(sortIndex = index)
+                        .let { LibraryTvChannelOption(it.key, it.name) }
+                } + LibraryTvGuideMemoryCache.channelOptions()
+            ).distinctBy { it.key }
+                .sortedBy { it.name }
+        }
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+    ) {
+        Text(
+            text = stringResource(R.string.library_tv_channels),
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color.White,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
+        )
+        LazyColumn(
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            if (channelOptions.isEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.library_tv_channels_empty),
+                        color = LibraryTvOnSurfaceDim,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+            items(
+                items = channelOptions,
+                key = { it.key },
+            ) { channel ->
+                val enabled = channel.key !in disabledChannelKeys
+                SwitchPreference(
+                    title = channel.name,
+                    value = enabled,
+                    onClick = { viewModel.setChannelEnabled(channel.key, !enabled) },
+                    summary = stringResource(if (enabled) R.string.enabled else R.string.disabled),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvGuide(
+    state: LibraryTvGuideState,
+    showHeader: Boolean,
+    onProgramClick: (LibraryTvProgram) -> Unit,
+    onProgramFocus: (LibraryTvProgram) -> Unit,
+    preferredFocusKey: LibraryTvProgramFocusKey?,
+    modifier: Modifier = Modifier,
+) {
+    val now = remember(state) { Instant.now() }
+    val initialProgram =
+        remember(state, preferredFocusKey) {
+            state.programForFocusKey(preferredFocusKey)
+                ?: state.channels.firstNotNullOfOrNull { it.programAt(now) }
+                ?: state.channels.firstOrNull()?.programs?.firstOrNull()
+        }
+    var focusedProgram by remember(state, initialProgram) { mutableStateOf(initialProgram) }
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+    ) {
+        if (showHeader) {
+            LibraryTvHeader(
+                program = focusedProgram,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(176.dp),
+            )
+        }
+        LibraryTvGrid(
+            state = state,
+            focusProgramKey = initialProgram?.focusKey(),
+            onProgramFocus = {
+                focusedProgram = it
+                onProgramFocus(it)
+            },
+            onProgramClick = onProgramClick,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun LibraryTvHeader(
+    program: LibraryTvProgram?,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val logoRequest =
+        remember(context, program?.channelImageUrl) {
+            program
+                ?.channelImageUrl
+                ?.let {
+                    ImageRequest
+                        .Builder(context)
+                        .data(it)
+                        .crossfade(false)
+                        .build()
+                }
+        }
+    val meta =
+        program?.let {
+            listOfNotNull(
+                it.channelName.takeIf { _ -> it.channelImageUrl == null },
+                it.item.subtitle?.takeIf { subtitle -> subtitle.isNotBlank() },
+                "${it.start.timeText(context)} - ${it.end.timeText(context)}",
+            ).joinToString("  |  ")
+        } ?: stringResource(R.string.tv_guide)
+
+    Box(
+        modifier =
+            modifier
+                .background(
+                    Brush.horizontalGradient(
+                        colors =
+                            listOf(
+                                LibraryTvSurface,
+                                LibraryTvSurfaceElevated,
+                                MaterialTheme.colorScheme.background,
+                            ),
+                    ),
+                ).padding(start = 28.dp, top = 18.dp, end = 32.dp, bottom = 12.dp),
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.align(Alignment.CenterStart),
+        ) {
+            logoRequest?.let {
+                AsyncImage(
+                    model = it,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(width = 104.dp, height = 34.dp),
+                )
+            }
+            Text(
+                text = program?.title ?: stringResource(R.string.tv_guide),
+                color = Color.White,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = meta,
+                color = LibraryTvOnSurfaceDim,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            program?.item?.data?.overview?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    color = Color.White.copy(alpha = .72f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(.84f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvGrid(
+    state: LibraryTvGuideState,
+    focusProgramKey: LibraryTvProgramFocusKey?,
+    onProgramFocus: (LibraryTvProgram) -> Unit,
+    onProgramClick: (LibraryTvProgram) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    val listState = rememberLazyListState()
+    val programFocusRequesters =
+        remember(state.channels) {
+            state.channels
+                .flatMap { channel -> channel.programs.map { it.focusKey() to FocusRequester() } }
+                .toMap()
+        }
+    val initialFocusRequester = focusProgramKey?.let(programFocusRequesters::get)
+    val focusChannelIndex =
+        remember(state.channels, focusProgramKey) {
+            state.channels.indexOfFirst { channel ->
+                channel.programs.any { it.focusKey() == focusProgramKey }
+            }.takeIf { it >= 0 }
+        }
+    val channelRailWidth = 180.dp
+    val timelineGap = 4.dp
+    val rowHeight = 54.dp
+
+    LaunchedEffect(focusChannelIndex, initialFocusRequester) {
+        focusChannelIndex?.let { listState.scrollToItem(it) }
+        initialFocusRequester?.tryRequestFocus("library_tv_guide")
+    }
+
+    BoxWithConstraints(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+    ) {
+        val visibleWindowStart =
+            remember(state) {
+                val now = Instant.now().roundDownToMinutes(LibraryTvTimeBucketMinutes)
+                maxOf(
+                    now.minusSeconds(LibraryTvNowInsetMinutes * 60),
+                    state.windowStart,
+                )
+            }
+        val viewportWidth = (maxWidth - channelRailWidth - timelineGap).coerceAtLeast(640.dp)
+        val totalDurationMs = (state.windowEnd.toEpochMilli() - visibleWindowStart.toEpochMilli()).coerceAtLeast(1L)
+        val visibleDurationMs = (LibraryTvVisibleHours * 60 * 60 * 1000).toLong()
+        val calculatedTimelineWidth = viewportWidth * (totalDurationMs.toFloat() / visibleDurationMs.toFloat())
+        val totalTimelineWidth = calculatedTimelineWidth.coerceAtLeast(viewportWidth)
+        LaunchedEffect(visibleWindowStart, state.windowEnd, totalTimelineWidth, viewportWidth) {
+            scrollState.scrollTo(0)
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            LibraryTvTimelineHeader(
+                windowStart = visibleWindowStart,
+                windowEnd = state.windowEnd,
+                channelRailWidth = channelRailWidth,
+                timelineGap = timelineGap,
+                totalTimelineWidth = totalTimelineWidth,
+                scrollState = scrollState,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                itemsIndexed(
+                    items = state.channels,
+                    key = { _, channel -> channel.id },
+                ) { channelIndex, channel ->
+                    LibraryTvChannelRow(
+                        channel = channel,
+                        previousChannel = state.channels.getOrNull(channelIndex - 1),
+                        nextChannel = state.channels.getOrNull(channelIndex + 1),
+                        windowStart = visibleWindowStart,
+                        windowEnd = state.windowEnd,
+                        channelRailWidth = channelRailWidth,
+                        timelineGap = timelineGap,
+                        viewportWidth = viewportWidth,
+                        totalTimelineWidth = totalTimelineWidth,
+                        rowHeight = rowHeight,
+                        scrollState = scrollState,
+                        programFocusRequesters = programFocusRequesters,
+                        onProgramFocus = onProgramFocus,
+                        onProgramClick = onProgramClick,
+                        modifier = Modifier.height(rowHeight),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvTimelineHeader(
+    windowStart: Instant,
+    windowEnd: Instant,
+    channelRailWidth: Dp,
+    timelineGap: Dp,
+    totalTimelineWidth: Dp,
+    scrollState: androidx.compose.foundation.ScrollState,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val totalDurationMs = (windowEnd.toEpochMilli() - windowStart.toEpochMilli()).coerceAtLeast(1L)
+    val markers = remember(windowStart, windowEnd) { buildTimelineMarkers(windowStart, windowEnd) }
+    val now = Instant.now()
+    val nowRatio =
+        ((now.toEpochMilli() - windowStart.toEpochMilli()).toFloat() / totalDurationMs.toFloat())
+            .coerceIn(0f, 1f)
+
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(32.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            text = stringResource(R.string.channels),
+            color = LibraryTvOnSurfaceDim,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier =
+                Modifier
+                    .width(channelRailWidth)
+                    .padding(start = 12.dp, bottom = 6.dp),
+        )
+        Spacer(modifier = Modifier.width(timelineGap))
+        Box(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .horizontalScroll(scrollState),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .width(totalTimelineWidth)
+                        .fillMaxHeight(),
+            ) {
+                markers.forEach { marker ->
+                    val ratio =
+                        ((marker.toEpochMilli() - windowStart.toEpochMilli()).toFloat() / totalDurationMs.toFloat())
+                            .coerceIn(0f, 1f)
+                    Text(
+                        text = marker.timeText(context),
+                        color = LibraryTvOnSurfaceDim,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        modifier =
+                            Modifier
+                                .offset(x = totalTimelineWidth * ratio)
+                                .padding(bottom = 6.dp),
+                    )
+                }
+                Box(
+                    modifier =
+                        Modifier
+                            .offset(x = totalTimelineWidth * nowRatio)
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.border),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvChannelRow(
+    channel: LibraryTvChannel,
+    previousChannel: LibraryTvChannel?,
+    nextChannel: LibraryTvChannel?,
+    windowStart: Instant,
+    windowEnd: Instant,
+    channelRailWidth: Dp,
+    timelineGap: Dp,
+    viewportWidth: Dp,
+    totalTimelineWidth: Dp,
+    rowHeight: Dp,
+    scrollState: androidx.compose.foundation.ScrollState,
+    programFocusRequesters: Map<LibraryTvProgramFocusKey, FocusRequester>,
+    onProgramFocus: (LibraryTvProgram) -> Unit,
+    onProgramClick: (LibraryTvProgram) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LibraryTvChannelCell(
+            channel = channel,
+            onFocus = {
+                channel.programAt(Instant.now())?.let(onProgramFocus)
+            },
+            onClick = {
+                channel.programAt(Instant.now())?.let(onProgramClick)
+            },
+            modifier =
+                Modifier
+                    .width(channelRailWidth)
+                    .fillMaxHeight(),
+        )
+        Spacer(modifier = Modifier.width(timelineGap))
+        Box(
+            modifier =
+                Modifier
+                    .width(viewportWidth)
+                    .fillMaxHeight()
+                    .horizontalScroll(scrollState),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .width(totalTimelineWidth)
+                        .fillMaxHeight(),
+            ) {
+                channel.programs.forEach { program ->
+                    val focusInstant = program.verticalFocusInstant()
+                    LibraryTvProgramCell(
+                        program = program,
+                        windowStart = windowStart,
+                        windowEnd = windowEnd,
+                        totalTimelineWidth = totalTimelineWidth,
+                        rowHeight = rowHeight,
+                        viewportWidth = viewportWidth,
+                        scrollState = scrollState,
+                        focusRequester = programFocusRequesters[program.focusKey()],
+                        upFocusRequester =
+                            previousChannel
+                                ?.programAt(focusInstant)
+                                ?.focusKey()
+                                ?.let(programFocusRequesters::get),
+                        downFocusRequester =
+                            nextChannel
+                                ?.programAt(focusInstant)
+                                ?.focusKey()
+                                ?.let(programFocusRequesters::get),
+                        onFocus = { onProgramFocus(program) },
+                        onClick = {
+                            channel.programAt(Instant.now())?.let(onProgramClick)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvChannelCell(
+    channel: LibraryTvChannel,
+    onFocus: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var focused by remember { mutableStateOf(false) }
+    val borderColor = if (focused) MaterialTheme.colorScheme.border else Color.White.copy(alpha = .08f)
+    val channelImage =
+        remember(context, channel.imageUrl) {
+            channel.imageUrl?.let {
+                ImageRequest
+                    .Builder(context)
+                    .data(it)
+                    .crossfade(false)
+                    .build()
+            }
+        }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (focused) LibraryTvSurfaceElevated else LibraryTvSurface)
+                .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+                .onFocusChanged {
+                    focused = it.isFocused
+                    if (it.isFocused) onFocus()
+                }.clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.border.copy(alpha = .18f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = channel.number.toString().padStart(2, '0'),
+                color = MaterialTheme.colorScheme.border,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+        channelImage?.let {
+            SubcomposeAsyncImage(
+                model = it,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                loading = {
+                    LibraryTvChannelName(channel.name)
+                },
+                error = {
+                    LibraryTvChannelName(channel.name)
+                },
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(30.dp)
+                        .padding(end = 6.dp),
+            )
+        } ?: run {
+            LibraryTvChannelName(
+                name = channel.name,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryTvChannelName(
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = name,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun LibraryTvProgramCell(
+    program: LibraryTvProgram,
+    windowStart: Instant,
+    windowEnd: Instant,
+    totalTimelineWidth: Dp,
+    rowHeight: Dp,
+    viewportWidth: Dp,
+    scrollState: androidx.compose.foundation.ScrollState,
+    focusRequester: FocusRequester?,
+    upFocusRequester: FocusRequester?,
+    downFocusRequester: FocusRequester?,
+    onFocus: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val windowStartMs = windowStart.toEpochMilli()
+    val windowEndMs = windowEnd.toEpochMilli()
+    val totalDurationMs = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+    val clippedStart = max(program.start.toEpochMilli(), windowStartMs)
+    val clippedEnd = min(program.end.toEpochMilli(), windowEndMs)
+    val startRatio = ((clippedStart - windowStartMs).toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+    val widthRatio = ((clippedEnd - clippedStart).toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+    val cellStart = totalTimelineWidth * startRatio
+    val cellWidth = (totalTimelineWidth * widthRatio).coerceAtLeast(1.dp)
+    val showImage = cellWidth >= 42.dp
+    val showText = cellWidth >= 72.dp
+    val currentlyPlaying = program.contains(Instant.now())
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val loadImage =
+        if (showImage) {
+            val preloadBufferPx = with(density) { 180.dp.toPx() }
+            val cellStartPx = with(density) { cellStart.toPx() }
+            val cellEndPx = with(density) { (cellStart + cellWidth).toPx() }
+            val viewportEndPx = scrollState.value + with(density) { viewportWidth.toPx() }
+            cellEndPx >= scrollState.value - preloadBufferPx &&
+                cellStartPx <= viewportEndPx + preloadBufferPx
+        } else {
+            false
+        }
+    val programImage =
+        remember(context, program.imageUrl, loadImage) {
+            program.imageUrl?.takeIf { loadImage }?.let {
+                ImageRequest
+                    .Builder(context)
+                    .data(it)
+                    .crossfade(false)
+                    .build()
+            }
+        }
+    var focused by remember { mutableStateOf(false) }
+    val backgroundColor =
+        when {
+            focused -> MaterialTheme.colorScheme.border
+            currentlyPlaying -> MaterialTheme.colorScheme.border.copy(alpha = .24f)
+            else -> LibraryTvSurfaceElevated
+        }
+    val contentColor = if (focused) Color.Black else Color.White
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            modifier
+                .offset(x = cellStart)
+                .width(cellWidth)
+                .height(rowHeight)
+                .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+                .focusProperties {
+                    up = upFocusRequester ?: FocusRequester.Default
+                    down = downFocusRequester ?: FocusRequester.Default
+                }
+                .padding(horizontal = 2.dp, vertical = 3.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(backgroundColor)
+                .border(
+                    width = if (focused) 2.dp else 1.dp,
+                    color = if (focused) Color.White.copy(alpha = .65f) else Color.White.copy(alpha = .10f),
+                    shape = RoundedCornerShape(8.dp),
+                ).onFocusChanged {
+                    focused = it.isFocused
+                    if (it.isFocused) onFocus()
+                }.clickable(onClick = onClick),
+    ) {
+        if (showImage) programImage?.let {
+            AsyncImage(
+                model = it,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .width(54.dp),
+            )
+        }
+        if (showText) {
+            Column(
+                verticalArrangement = Arrangement.Center,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 10.dp, end = 10.dp),
+            ) {
+                Text(
+                    text = program.title,
+                    color = contentColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = program.item.subtitle ?: "",
+                    color = contentColor.copy(alpha = .68f),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private fun groupEpisodesByNetwork(
+    episodes: List<BaseItem>,
+    seriesNetworkNames: Map<UUID, List<String>>,
+): List<LibraryTvNetworkGroup> {
+    val matcher = LibraryTvNetworkMatcher()
+    val groups = linkedMapOf<String, LibraryTvNetworkGroup>()
+    episodes.forEach { episode ->
+        val network =
+            matcher.networkFor(
+                episode.networkNames() +
+                    episode.data.seriesId
+                        ?.let { seriesNetworkNames[it] }
+                        .orEmpty(),
+            ) ?: return@forEach
+        groups
+            .getOrPut(network.key) { LibraryTvNetworkGroup(network) }
+            .add(episode)
+    }
+    return groups
+        .values
+        .filter { it.items.isNotEmpty() }
+        .sortedWith(
+            compareBy<LibraryTvNetworkGroup> { it.network.sortIndex }
+                .thenBy { it.network.name },
+        )
+}
+
+private fun groupEpisodesByGenre(episodes: List<BaseItem>): List<LibraryTvNetworkGroup> {
+    if (episodes.isEmpty()) return emptyList()
+
+    val groups = linkedMapOf<String, LibraryTvNetworkGroup>()
+    episodes.forEach { episode ->
+        val genreKeys = episode.data.genres.orEmpty().map { it.normalizedNetworkKey() }.toSet()
+        if (genreKeys.isEmpty()) return@forEach
+
+        LibraryTvEpisodeGenreChannels.forEachIndexed { index, genre ->
+            if (genre.aliasKeys.any { it in genreKeys }) {
+                val channel = genre.toLibraryTvNetwork(index)
+                groups
+                    .getOrPut(channel.key) { LibraryTvNetworkGroup(channel) }
+                    .add(episode)
+            }
+        }
+    }
+
+    return groups
+        .values
+        .filter { it.items.size >= LibraryTvMinEpisodesPerGenreChannel }
+        .sortedWith(
+            compareBy<LibraryTvNetworkGroup> { it.network.sortIndex }
+                .thenBy { it.network.name },
+        )
+}
+
+private fun groupMoviesByGenre(movies: List<BaseItem>): List<LibraryTvNetworkGroup> {
+    if (movies.isEmpty()) return emptyList()
+
+    val groups = linkedMapOf<String, LibraryTvNetworkGroup>()
+    movies.forEach { movie ->
+        val genreKeys = movie.data.genres.orEmpty().map { it.normalizedNetworkKey() }.toSet()
+        if (genreKeys.isEmpty()) return@forEach
+
+        LibraryTvMovieGenreChannels.forEachIndexed { index, genre ->
+            if (genre.aliasKeys.any { it in genreKeys }) {
+                val channel = genre.toLibraryTvNetwork(index)
+                groups
+                    .getOrPut(channel.key) { LibraryTvNetworkGroup(channel) }
+                    .add(movie)
+            }
+        }
+    }
+
+    return groups
+        .values
+        .filter { it.items.size >= LibraryTvMinMoviesPerGenreChannel }
+        .sortedWith(
+            compareBy<LibraryTvNetworkGroup> { it.network.sortIndex }
+                .thenBy { it.network.name },
+        )
+}
+
+private data class LibraryTvEpisodeGenreChannel(
+    val key: String,
+    val name: String,
+    val aliases: List<String> = listOf(name),
+) {
+    val aliasKeys: Set<String> = aliases.map { it.normalizedNetworkKey() }.toSet()
+}
+
+private val LibraryTvEpisodeGenreChannels =
+    listOf(
+        LibraryTvEpisodeGenreChannel("anime", "Anime", listOf("Anime", "Japanimation")),
+    )
+
+private fun LibraryTvEpisodeGenreChannel.toLibraryTvNetwork(index: Int): LibraryTvNetwork =
+    LibraryTvNetwork(
+        key = key,
+        id = UUID.nameUUIDFromBytes("library-tv-episode-genre:$key".toByteArray()),
+        name = name,
+        aliases = aliases,
+        imageUrl = networkLogoAsset("$key.svg"),
+        sortIndex = PopularNetworks.size + 400 + index,
+    )
+
+private data class LibraryTvMovieGenreChannel(
+    val key: String,
+    val name: String,
+    val aliases: List<String> = listOf(name),
+) {
+    val aliasKeys: Set<String> = aliases.map { it.normalizedNetworkKey() }.toSet()
+}
+
+private val LibraryTvMovieGenreChannels =
+    listOf(
+        LibraryTvMovieGenreChannel("movieaction", "Action Movies", listOf("Action", "Action & Adventure")),
+        LibraryTvMovieGenreChannel("movieadventure", "Adventure Movies", listOf("Adventure", "Action & Adventure")),
+        LibraryTvMovieGenreChannel("movieanimation", "Animation Movies", listOf("Animation", "Animated")),
+        LibraryTvMovieGenreChannel("moviecomedy", "Comedy Movies", listOf("Comedy")),
+        LibraryTvMovieGenreChannel("moviecrime", "Crime Movies", listOf("Crime")),
+        LibraryTvMovieGenreChannel("moviedocumentary", "Documentary Movies", listOf("Documentary", "Documentaries")),
+        LibraryTvMovieGenreChannel("moviedrama", "Drama Movies", listOf("Drama")),
+        LibraryTvMovieGenreChannel("moviefamily", "Family Movies", listOf("Family", "Kids")),
+        LibraryTvMovieGenreChannel("moviefantasy", "Fantasy Movies", listOf("Fantasy", "Sci-Fi & Fantasy")),
+        LibraryTvMovieGenreChannel("moviehorror", "Horror Movies", listOf("Horror")),
+        LibraryTvMovieGenreChannel("moviemystery", "Mystery Movies", listOf("Mystery")),
+        LibraryTvMovieGenreChannel("movieromance", "Romance Movies", listOf("Romance")),
+        LibraryTvMovieGenreChannel(
+            "moviescifi",
+            "Sci-Fi Movies",
+            listOf("Sci-Fi", "Science Fiction", "Sci Fi", "Sci-Fi & Fantasy", "Science Fiction & Fantasy"),
+        ),
+        LibraryTvMovieGenreChannel("moviethriller", "Thriller Movies", listOf("Thriller", "Suspense")),
+        LibraryTvMovieGenreChannel("moviewar", "War Movies", listOf("War", "War & Politics")),
+        LibraryTvMovieGenreChannel("moviewestern", "Western Movies", listOf("Western")),
+    )
+
+private fun LibraryTvMovieGenreChannel.toLibraryTvNetwork(index: Int): LibraryTvNetwork =
+    LibraryTvNetwork(
+        key = key,
+        id = UUID.nameUUIDFromBytes("library-tv-movie-genre:$key".toByteArray()),
+        name = name,
+        aliases = aliases,
+        imageUrl = networkLogoAsset("$key.svg"),
+        sortIndex = PopularNetworks.size + 500 + index,
+    )
+
+private class LibraryTvNetworkMatcher {
+    private val knownNetworks =
+        PopularNetworks.mapIndexed { index, network ->
+            network.toLibraryTvNetwork(sortIndex = index)
+        }
+    private val knownByAlias =
+        knownNetworks
+            .flatMap { network ->
+                network.aliases.map { alias -> alias.normalizedNetworkKey() to network }
+            }.toMap()
+
+    fun networkFor(names: List<String>): LibraryTvNetwork? {
+        names.forEach { name ->
+            knownByAlias[name.normalizedNetworkKey()]?.let { return it }
+        }
+        val fallbackName = names.firstOrNull { it.isNotBlank() } ?: return null
+        return fallbackName.toFallbackNetwork()
+    }
+}
+
+private class LibraryTvNetworkGroup(
+    val network: LibraryTvNetwork,
+    val items: MutableList<BaseItem> = mutableListOf(),
+) {
+    private val episodeIds = mutableSetOf<UUID>()
+
+    fun add(episode: BaseItem) {
+        if (episodeIds.add(episode.id)) {
+            items.add(episode)
+        }
+    }
+}
+
+private data class LibraryTvChannelPlan(
+    val group: LibraryTvNetworkGroup,
+    val items: List<BaseItem>,
+)
+
+private data class LibraryTvNetwork(
+    val key: String,
+    val id: UUID,
+    val name: String,
+    val aliases: List<String>,
+    val imageUrl: String?,
+    val sortIndex: Int,
+)
+
+private fun Network.toLibraryTvNetwork(sortIndex: Int) =
+    LibraryTvNetwork(
+        key = name.normalizedNetworkKey(),
+        id = id,
+        name = name,
+        aliases = aliases,
+        imageUrl = imageUrl,
+        sortIndex = sortIndex,
+    )
+
+private fun String.toFallbackNetwork(): LibraryTvNetwork {
+    val key = normalizedNetworkKey()
+    return LibraryTvNetwork(
+        key = key,
+        id = UUID.nameUUIDFromBytes("library-tv-network:$key".toByteArray()),
+        name = trim(),
+        aliases = listOf(trim()),
+        imageUrl = networkLogoAssetForKey(key),
+        sortIndex = PopularNetworks.size,
+    )
+}
+
+private fun BaseItem.networkNames(): List<String> =
+    buildList {
+        data.seriesStudio
+            ?.splitNetworkNames()
+            ?.let(::addAll)
+        data.studios
+            ?.mapNotNull { it.name }
+            ?.flatMap { it.splitNetworkNames() }
+            ?.let(::addAll)
+    }.distinctBy { it.normalizedNetworkKey() }
+
+private fun List<BaseItem>.buildNaturalScheduleCycle(
+    channelKey: String,
+    windowStart: Instant,
+): List<BaseItem> {
+    val scheduleDay = windowStart.atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+    val orderedShowQueues =
+        groupBy { it.seriesKey() }
+            .mapNotNull { (seriesKey, seriesItems) ->
+                val sortedEpisodes =
+                    seriesItems
+                        .distinctBy { it.id }
+                        .sortedWith(
+                            compareBy<BaseItem> { it.data.parentIndexNumber ?: Int.MAX_VALUE }
+                                .thenBy { it.data.indexNumber ?: Int.MAX_VALUE }
+                                .thenBy { it.sortName },
+                        )
+                val episodes =
+                    sortedEpisodes
+                        .rotatedBy(stableIndex("$channelKey:$seriesKey:$scheduleDay", sortedEpisodes.size))
+                        .take(LibraryTvMaxEpisodesPerShowInCycle)
+                if (episodes.isEmpty()) {
+                    null
+                } else {
+                    val averageDurationMs =
+                        episodes
+                            .map { it.libraryTvDurationMs() }
+                            .average()
+                            .let { if (it.isNaN()) LibraryTvDefaultDurationMs.toDouble() else it }
+                    LibraryTvShowQueue(
+                        seriesKey = seriesKey,
+                        title = episodes.first().title ?: episodes.first().name ?: "",
+                        episodes = ArrayDeque(episodes),
+                        blockSize =
+                            if (averageDurationMs <= LibraryTvShortEpisodeThresholdMs) {
+                                LibraryTvMaxShortEpisodeBlock
+                            } else {
+                                1
+                            },
+                    )
+                }
+            }.sortedWith(
+                compareBy<LibraryTvShowQueue> {
+                    stableSortKey("$channelKey:${it.seriesKey}:$scheduleDay")
+                }.thenBy { it.title },
+            )
+    val showQueues =
+        orderedShowQueues
+            .rotatedBy(stableIndex("$channelKey:$scheduleDay:shows", orderedShowQueues.size))
+            .toMutableList()
+
+    if (showQueues.size <= 1) {
+        return showQueues.firstOrNull()?.episodes?.toList().orEmpty()
+    }
+
+    val result = mutableListOf<BaseItem>()
+    var cursor = 0
+    var previousSeriesKey: String? = null
+
+    while (showQueues.any { it.episodes.isNotEmpty() }) {
+        val nextIndex =
+            showQueues.indices.firstOrNull { offset ->
+                val index = (cursor + offset) % showQueues.size
+                val queue = showQueues[index]
+                queue.episodes.isNotEmpty() && queue.seriesKey != previousSeriesKey
+            }?.let { offset -> (cursor + offset) % showQueues.size }
+                ?: showQueues.indexOfFirst { it.episodes.isNotEmpty() }
+                    .takeIf { it >= 0 }
+                ?: break
+        val queue = showQueues[nextIndex]
+        val blockSize = queue.blockSize.coerceIn(1, LibraryTvMaxShortEpisodeBlock).coerceAtMost(queue.episodes.size)
+        repeat(blockSize) {
+            result.add(queue.episodes.removeFirst())
+        }
+        previousSeriesKey = queue.seriesKey
+        cursor = (nextIndex + 1) % showQueues.size
+    }
+    return result
+}
+
+private data class LibraryTvShowQueue(
+    val seriesKey: String,
+    val title: String,
+    val episodes: ArrayDeque<BaseItem>,
+    val blockSize: Int,
+)
+
+private fun BaseItem.libraryTvDurationMs(): Long =
+    (
+        data.runTimeTicks
+            ?.ticks
+            ?.inWholeMilliseconds
+            ?.takeIf { it > 0 }
+            ?: LibraryTvDefaultDurationMs
+    ).coerceAtLeast(LibraryTvMinimumDurationMs)
+
+private fun stableIndex(
+    value: String,
+    size: Int,
+): Int = if (size <= 0) 0 else Math.floorMod(value.hashCode(), size)
+
+private fun stableSortKey(value: String): Int = value.hashCode()
+
+private fun <T> List<T>.rotatedBy(offset: Int): List<T> {
+    if (isEmpty()) return this
+    val safeOffset = Math.floorMod(offset, size)
+    if (safeOffset == 0) return this
+    return drop(safeOffset) + take(safeOffset)
+}
+
+private fun BaseItem.seriesKey(): String =
+    data.seriesId?.toString()
+        ?: title
+            ?.normalizedNetworkKey()
+            ?.takeIf { it.isNotBlank() }
+        ?: id.toString()
+
+private fun String.splitNetworkNames(): List<String> =
+    split(",", "/", ";")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+
+private fun String.normalizedNetworkKey(): String =
+    trim()
+        .lowercase()
+        .replace("&", "and")
+        .replace("+", "plus")
+        .replace(Regex("[^a-z0-9]+"), "")
+
+data class LibraryTvGuideState(
+    val channels: List<LibraryTvChannel>,
+    val windowStart: Instant,
+    val windowEnd: Instant,
+)
+
+data class LibraryTvChannel(
+    val key: String,
+    val id: UUID,
+    val number: Int,
+    val name: String,
+    val imageUrl: String?,
+    val programs: List<LibraryTvProgram>,
+) {
+    fun programAt(now: Instant): LibraryTvProgram? = programs.firstOrNull { it.contains(now) }
+}
+
+data class LibraryTvChannelOption(
+    val key: String,
+    val name: String,
+)
+
+fun LibraryTvGuideState.withEnabledChannels(disabledChannelKeys: Set<String>): LibraryTvGuideState =
+    copy(
+        channels =
+            channels
+                .filterNot { it.key in disabledChannelKeys }
+                .mapIndexed { index, channel -> channel.copy(number = index + 1) },
+    )
+
+data class LibraryTvProgram(
+    val channelKey: String,
+    val channelId: UUID,
+    val channelName: String,
+    val channelImageUrl: String?,
+    val item: BaseItem,
+    val imageUrl: String?,
+    val start: Instant,
+    val end: Instant,
+) {
+    val title: String get() = item.title ?: item.name ?: "Untitled"
+
+    fun contains(now: Instant): Boolean = !now.isBefore(start) && now.isBefore(end)
+}
+
+data class LibraryTvProgramFocusKey(
+    val channelKey: String,
+    val itemId: UUID,
+    val start: Instant,
+    val end: Instant,
+)
+
+private fun LibraryTvProgram.focusKey(): LibraryTvProgramFocusKey =
+    LibraryTvProgramFocusKey(
+        channelKey = channelKey,
+        itemId = item.id,
+        start = start,
+        end = end,
+    )
+
+private fun LibraryTvProgram.verticalFocusInstant(): Instant {
+    val startMs = start.toEpochMilli()
+    val durationMs = (end.toEpochMilli() - startMs).coerceAtLeast(0L)
+    return Instant.ofEpochMilli(startMs + durationMs / 2)
+}
+
+private fun LibraryTvGuideState.programForFocusKey(key: LibraryTvProgramFocusKey?): LibraryTvProgram? =
+    key?.let {
+        channels
+            .firstOrNull { channel -> channel.key == it.channelKey }
+            ?.programs
+            ?.firstOrNull { program -> program.focusKey() == key }
+    }
+
+private data class LibraryTvScheduledItem(
+    val item: BaseItem,
+    val imageUrl: String?,
+    val durationMs: Long,
+)
+
+private fun buildPrograms(
+    channelKey: String,
+    channelId: UUID,
+    channelName: String,
+    channelImageUrl: String?,
+    items: List<LibraryTvScheduledItem>,
+    windowStart: Instant,
+    windowEnd: Instant,
+    channelIndex: Int,
+): List<LibraryTvProgram> {
+    if (items.isEmpty()) return emptyList()
+
+    val windowStartMs = windowStart.toEpochMilli()
+    val windowEndMs = windowEnd.toEpochMilli()
+    val cycleDurationMs = items.sumOf { it.durationMs }.coerceAtLeast(1L)
+    val anchorMs = LibraryTvScheduleAnchor.toEpochMilli() + (channelIndex * LibraryTvChannelOffsetMs)
+    val windowOffsetMs = Math.floorMod(windowStartMs - anchorMs, cycleDurationMs)
+    var itemIndex = 0
+    var elapsedInCycleMs = 0L
+
+    while (itemIndex < items.lastIndex && elapsedInCycleMs + items[itemIndex].durationMs <= windowOffsetMs) {
+        elapsedInCycleMs += items[itemIndex].durationMs
+        itemIndex++
+    }
+
+    var cursorMs = windowStartMs - (windowOffsetMs - elapsedInCycleMs)
+    val programs = mutableListOf<LibraryTvProgram>()
+    while (cursorMs < windowEndMs) {
+        val scheduledItem = items[itemIndex]
+        val programEndMs = cursorMs + scheduledItem.durationMs
+        if (programEndMs > windowStartMs) {
+            programs.add(
+                LibraryTvProgram(
+                    channelKey = channelKey,
+                    channelId = channelId,
+                    channelName = channelName,
+                    channelImageUrl = channelImageUrl,
+                    item = scheduledItem.item,
+                    imageUrl = scheduledItem.imageUrl,
+                    start = Instant.ofEpochMilli(cursorMs),
+                    end = Instant.ofEpochMilli(programEndMs),
+                ),
+            )
+        }
+        cursorMs = programEndMs
+        itemIndex = (itemIndex + 1) % items.size
+    }
+    return programs
+}
+
+private fun Instant.roundDownToMinutes(intervalMinutes: Long): Instant {
+    val zoned = atZone(ZoneId.systemDefault())
+    val minute = (zoned.minute / intervalMinutes * intervalMinutes).toInt()
+    return zoned
+        .withMinute(minute)
+        .withSecond(0)
+        .withNano(0)
+        .toInstant()
+}
+
+private fun buildTimelineMarkers(
+    windowStart: Instant,
+    windowEnd: Instant,
+): List<Instant> =
+    buildList {
+        var marker = windowStart
+        while (!marker.isAfter(windowEnd)) {
+            add(marker)
+            marker = marker.plusSeconds(30 * 60)
+        }
+    }
+
+private fun Instant.timeText(context: android.content.Context): String =
+    DateUtils.formatDateTime(
+        context,
+        toEpochMilli(),
+        DateUtils.FORMAT_SHOW_TIME,
+    )
