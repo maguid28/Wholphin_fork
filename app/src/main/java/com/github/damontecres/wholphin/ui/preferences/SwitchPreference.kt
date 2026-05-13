@@ -116,6 +116,7 @@ fun SwitchColors(): SwitchColors {
         AppThemeColors.RAINBOW_GLASS,
         AppThemeColors.PEACOCK,
         AppThemeColors.ELECTRIC_NEON,
+        AppThemeColors.ELECTRIC_INDIGO,
         AppThemeColors.CUSTOM,
         -> {
             SwitchDefaults.colors(

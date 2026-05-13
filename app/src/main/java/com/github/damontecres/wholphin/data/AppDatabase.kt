@@ -13,6 +13,7 @@ import com.github.damontecres.wholphin.data.model.ItemTrackModification
 import com.github.damontecres.wholphin.data.model.JellyfinServer
 import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.data.model.LibraryDisplayInfo
+import com.github.damontecres.wholphin.data.model.LibraryTvWatchedEpisode
 import com.github.damontecres.wholphin.data.model.NavDrawerPinnedItem
 import com.github.damontecres.wholphin.data.model.PlaybackEffect
 import com.github.damontecres.wholphin.data.model.PlaybackLanguageChoice
@@ -38,9 +39,10 @@ import java.util.UUID
         ItemTrackModification::class,
         SeerrServer::class,
         SeerrUser::class,
+        LibraryTvWatchedEpisode::class,
 
     ],
-    version = 31,
+    version = 32,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(3, 4),
@@ -55,6 +57,7 @@ import java.util.UUID
         AutoMigration(12, 20),
         AutoMigration(20, 30),
         AutoMigration(30, 31),
+        AutoMigration(31, 32),
     ],
 )
 @TypeConverters(Converters::class)
@@ -72,6 +75,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seerrServerDao(): SeerrServerDao
 
     abstract fun playbackEffectDao(): PlaybackEffectDao
+
+    abstract fun libraryTvWatchedEpisodeDao(): LibraryTvWatchedEpisodeDao
 }
 
 class Converters {

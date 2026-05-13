@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.detail.livetv
 
+import android.os.SystemClock
 import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -64,6 +65,9 @@ import eu.wewox.programguide.ProgramGuide
 import eu.wewox.programguide.ProgramGuideDimensions
 import eu.wewox.programguide.ProgramGuideItem
 import eu.wewox.programguide.rememberSaveableProgramGuideState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -273,6 +277,17 @@ val tvGuideDimensions =
         currentTimeWidth = 2.dp,
     )
 
+private const val TvGuideStaleRepeatInputMs = 120L
+private const val TvGuideVerticalCoalesceMs = 110L
+
+private fun tvGuideVerticalStep(repeatCount: Int): Int =
+    when {
+        repeatCount >= 14 -> 4
+        repeatCount >= 6 -> 3
+        repeatCount >= 2 -> 2
+        else -> 1
+    }
+
 @Composable
 fun TvGuideGridContent(
     preferences: LiveTvPreferences,
@@ -292,6 +307,9 @@ fun TvGuideGridContent(
     val state = rememberSaveableProgramGuideState()
     val scope = rememberCoroutineScope()
     val guideStart = guideTimes.first()
+    var scrollJob by remember { mutableStateOf<Job?>(null) }
+    var pendingVerticalItem by remember { mutableStateOf<RowColumn?>(null) }
+    var pendingVerticalJob by remember { mutableStateOf<Job?>(null) }
 
     var focusedItem by rememberPosition(RowColumn(0, 0))
     val focusedChannelIndex = focusedItem.row
@@ -299,6 +317,49 @@ fun TvGuideGridContent(
 
     var gridHasFocus by rememberSaveable { mutableStateOf(false) }
     var channelColumnFocused by rememberSaveable { mutableStateOf(false) }
+    fun programIndexFor(focus: RowColumn): Int =
+        (programs.range.first..<focus.row).sumOf {
+            val channelId = channels[it].id
+            channelProgramCount[channelId] ?: 0
+        } + focus.column
+
+    fun commitFocus(
+        focus: RowColumn,
+        key: Key,
+    ) {
+        pendingVerticalItem = null
+        focusedItem = focus
+        val programIndex = programIndexFor(focus)
+        focusedProgramIndex = programIndex
+        scrollJob?.cancel()
+        scope.launch {
+            try {
+                if (key == Key.DirectionUp || key == Key.DirectionDown) {
+                    state.snapToChannel(focus.row, Alignment.CenterVertically)
+                } else {
+                    state.animateToProgram(programIndex, Alignment.Center)
+                }
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                Timber.e(ex, "Couldn't scroll to $focus")
+            }
+        }.also { scrollJob = it }
+        onFocus(focus)
+    }
+
+    fun scheduleVerticalFocus(focus: RowColumn, key: Key) {
+        pendingVerticalItem = focus
+        pendingVerticalJob?.cancel()
+        pendingVerticalJob =
+            scope.launch {
+                delay(TvGuideVerticalCoalesceMs)
+                pendingVerticalItem?.let { pending ->
+                    commitFocus(pending, key)
+                }
+            }
+    }
+
     Box(modifier = modifier) {
         ProgramGuide(
             state = state,
@@ -315,9 +376,20 @@ fun TvGuideGridContent(
                         if (it.type == KeyEventType.KeyUp) {
                             return@onPreviewKeyEvent false
                         }
-                        val item = focusedItem
+                        val key = it.key
+                        val nativeEvent = it.nativeKeyEvent
+                        val isVerticalKey = key == Key.DirectionUp || key == Key.DirectionDown
+                        if (
+                            isVerticalKey &&
+                            nativeEvent.repeatCount > 0 &&
+                            SystemClock.uptimeMillis() - nativeEvent.eventTime > TvGuideStaleRepeatInputMs
+                        ) {
+                            return@onPreviewKeyEvent true
+                        }
+                        val verticalStep = if (isVerticalKey) tvGuideVerticalStep(nativeEvent.repeatCount) else 1
+                        val item = pendingVerticalItem ?: focusedItem
                         val newFocusedItem =
-                            when (it.key) {
+                            when (key) {
                                 Key.Back -> {
                                     if (item.column > 0) {
                                         // Not at beginning of row, so move to beginning
@@ -335,7 +407,13 @@ fun TvGuideGridContent(
                                         channelColumnFocused = false
                                         item.copy(column = 0)
                                     } else {
-                                        item.copy(column = item.column + 1)
+                                        val currentChannel = channels[item.row].id
+                                        val currentPrograms = programs.programsByChannel[currentChannel].orEmpty()
+                                        if (item.column >= currentPrograms.lastIndex) {
+                                            item.copy(column = 0)
+                                        } else {
+                                            item.copy(column = item.column + 1)
+                                        }
                                     }
                                 }
 
@@ -356,7 +434,7 @@ fun TvGuideGridContent(
 //                                        focusManager.moveFocus(FocusDirection.Up)
                                         null
                                     } else {
-                                        val newChannelIndex = item.row - 1
+                                        val newChannelIndex = (item.row - verticalStep).coerceAtLeast(0)
                                         if (channelColumnFocused) {
                                             RowColumn(newChannelIndex, 0)
                                         } else {
@@ -393,12 +471,12 @@ fun TvGuideGridContent(
 
                                 Key.DirectionDown -> {
                                     // Move channel focus down
-                                    val newChannelIndex = item.row + 1
-                                    if (newChannelIndex >= channels.size) {
+                                    if (item.row >= channels.lastIndex) {
                                         // If trying to move below the final channel, then move focus out of the grid
                                         focusManager.moveFocus(FocusDirection.Down)
                                         null
                                     } else {
+                                        val newChannelIndex = (item.row + verticalStep).coerceAtMost(channels.lastIndex)
                                         // Otherwise, moving to a new row
                                         // Get the new row/channel's programs
                                         val newChannelId = channels[newChannelIndex].id
@@ -449,10 +527,12 @@ fun TvGuideGridContent(
                                 }
 
                                 Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                                    pendingVerticalItem = null
+                                    pendingVerticalJob?.cancel()
                                     if (channelColumnFocused) {
-                                        val channel = channels[focusedChannelIndex]
+                                        val channel = channels[item.row]
                                         Timber.v("Clicked on %s", channel)
-                                        onClickChannel.invoke(focusedChannelIndex, channel)
+                                        onClickChannel.invoke(item.row, channel)
                                     } else {
                                         val currentChannel = channels[item.row].id
                                         val currentProgram =
@@ -463,7 +543,7 @@ fun TvGuideGridContent(
                                         }
                                         Timber.v("Clicked on %s", currentProgram)
                                         onClickProgram.invoke(
-                                            focusedProgramIndex,
+                                            programIndexFor(item),
                                             currentProgram,
                                         )
                                     }
@@ -489,22 +569,11 @@ fun TvGuideGridContent(
                                                 (channelPrograms.size - 1).coerceAtLeast(0),
                                             ),
                                     )
-                            focusedItem = toFocus
-                            focusedProgramIndex =
-                                toFocus.let { focus ->
-                                    (programs.range.first..<focus.row).sumOf {
-                                        val channelId = channels[it].id
-                                        channelProgramCount[channelId] ?: 0
-                                    } + focus.column
-                                }
-                            scope.launch {
-                                try {
-                                    state.animateToProgram(focusedProgramIndex, Alignment.Center)
-                                } catch (ex: Exception) {
-                                    Timber.e(ex, "Couldn't scroll to $focusedProgramIndex")
-                                }
+                            if (isVerticalKey) {
+                                scheduleVerticalFocus(toFocus, key)
+                            } else {
+                                commitFocus(toFocus, key)
                             }
-                            onFocus(toFocus)
                             return@onPreviewKeyEvent true
                         }
                         return@onPreviewKeyEvent false

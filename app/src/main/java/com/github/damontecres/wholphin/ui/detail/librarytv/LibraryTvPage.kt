@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.ui.detail.librarytv
 
+import android.os.SystemClock
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -63,8 +70,10 @@ import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.github.damontecres.wholphin.R
+import com.github.damontecres.wholphin.data.LibraryTvWatchedEpisodeDao
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.preferences.updateLiveTvPreferences
@@ -93,12 +102,15 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -122,6 +134,7 @@ import java.time.ZonedDateTime
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.Duration.Companion.minutes
@@ -148,6 +161,8 @@ private const val LibraryTvVisibleHours = 2f
 private const val LibraryTvVisibleMinutes = 120L
 private const val LibraryTvNowInsetMinutes = 15L
 private const val LibraryTvTimeBucketMinutes = 10L
+private const val LibraryTvStaleRepeatInputMs = 120L
+private val LibraryTvGuideRefreshInterval = 5.minutes
 private val LibraryTvDefaultDurationMs = 30.minutes.inWholeMilliseconds
 private val LibraryTvMinimumDurationMs = 5.minutes.inWholeMilliseconds
 private val LibraryTvShortEpisodeThresholdMs = 28.minutes.inWholeMilliseconds
@@ -208,6 +223,12 @@ object LibraryTvGuideMemoryCache {
     fun currentGuide(): LibraryTvGuideState? = guide
 
     @Synchronized
+    fun currentGuide(userId: UUID): LibraryTvGuideState? =
+        guide?.takeIf {
+            key == LibraryTvGuideCacheKey(userId)
+        }
+
+    @Synchronized
     fun clear() {
         key = null
         guide = null
@@ -223,21 +244,27 @@ class LibraryTvGuideService
         @param:DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
         private val api: ApiClient,
         private val imageUrlService: ImageUrlService,
+        private val watchedEpisodeDao: LibraryTvWatchedEpisodeDao,
     ) {
         private val loadingMutex = Mutex()
         private var inFlightUserId: UUID? = null
         private var inFlight: Deferred<LibraryTvGuideState>? = null
 
         fun cachedGuide(
+            user: JellyfinUser,
+            now: Instant = Instant.now(),
+        ): LibraryTvGuideState? = cachedGuide(user.id, now)
+
+        fun cachedGuide(
             userId: UUID,
             now: Instant = Instant.now(),
         ): LibraryTvGuideState? = LibraryTvGuideMemoryCache.get(userId, now)
 
-        fun warm(userId: UUID) {
-            if (cachedGuide(userId) != null) return
+        fun warm(user: JellyfinUser) {
+            if (cachedGuide(user) != null) return
             ioScope.launch {
                 try {
-                    load(userId)
+                    load(user)
                 } catch (ex: CancellationException) {
                     throw ex
                 } catch (ex: Exception) {
@@ -246,20 +273,20 @@ class LibraryTvGuideService
             }
         }
 
-        suspend fun load(userId: UUID): LibraryTvGuideState {
-            cachedGuide(userId)?.let { return it }
+        suspend fun load(user: JellyfinUser): LibraryTvGuideState {
+            cachedGuide(user)?.let { return it }
             val deferred =
                 loadingMutex.withLock {
-                    cachedGuide(userId)?.let { cachedGuide ->
+                    cachedGuide(user)?.let { cachedGuide ->
                         return@withLock CompletableDeferred(cachedGuide)
                     }
                     inFlight
-                        ?.takeIf { inFlightUserId == userId && it.isActive }
+                        ?.takeIf { inFlightUserId == user.id && it.isActive }
                         ?: ioScope
                             .async {
-                                buildFreshGuide(userId)
+                                buildOrExtendGuide(user)
                             }.also {
-                                inFlightUserId = userId
+                                inFlightUserId = user.id
                                 inFlight = it
                             }
                 }
@@ -275,15 +302,73 @@ class LibraryTvGuideService
             }
         }
 
-        private suspend fun buildFreshGuide(userId: UUID): LibraryTvGuideState {
+        private suspend fun buildOrExtendGuide(user: JellyfinUser): LibraryTvGuideState {
             val now = Instant.now().roundDownToMinutes(LibraryTvTimeBucketMinutes)
+            cachedGuide(user, now)?.let { return it }
+
+            val currentGuide = LibraryTvGuideMemoryCache.currentGuide(user.id)
+            if (currentGuide != null && currentGuide.channels.isNotEmpty()) {
+                val extensionStart =
+                    if (now.isAfter(currentGuide.windowEnd)) {
+                        now.minusSeconds(LibraryTvNowInsetMinutes * 60)
+                    } else {
+                        currentGuide.windowEnd
+                    }
+                val extensionEnd =
+                    maxInstant(
+                        now.plusSeconds(LibraryTvGuideHours * 60 * 60),
+                        extensionStart.plusSeconds(LibraryTvGuideHours * 60 * 60),
+                    )
+                val extension =
+                    buildGuideWindow(
+                        user = user,
+                        windowStart = extensionStart,
+                        windowEnd = extensionEnd,
+                        extraAvoidedEpisodeIds = currentGuide.scheduledEpisodeIds(),
+                    )
+                val mergedGuide =
+                    currentGuide.append(
+                        extension = extension,
+                        pruneBefore = now.minusSeconds(LibraryTvNowInsetMinutes * 60),
+                    )
+                if (mergedGuide.channels.isNotEmpty()) {
+                    LibraryTvGuideMemoryCache.put(user.id, mergedGuide)
+                    return mergedGuide
+                }
+            }
+
+            return buildFreshGuide(user, now)
+        }
+
+        private suspend fun buildFreshGuide(
+            user: JellyfinUser,
+            now: Instant = Instant.now().roundDownToMinutes(LibraryTvTimeBucketMinutes),
+        ): LibraryTvGuideState {
             val windowStart = now.minusSeconds(LibraryTvNowInsetMinutes * 60)
             val windowEnd = now.plusSeconds(LibraryTvGuideHours * 60 * 60)
+            val guide =
+                buildGuideWindow(
+                    user = user,
+                    windowStart = windowStart,
+                    windowEnd = windowEnd,
+                )
+            if (guide.channels.isNotEmpty()) {
+                LibraryTvGuideMemoryCache.put(user.id, guide)
+            }
+            return guide
+        }
+
+        private suspend fun buildGuideWindow(
+            user: JellyfinUser,
+            windowStart: Instant,
+            windowEnd: Instant,
+            extraAvoidedEpisodeIds: Set<UUID> = emptySet(),
+        ): LibraryTvGuideState {
             val (episodes, movies, seriesNetworkNames) =
                 withContext(ioDispatcher) {
                     val views =
                         api.userViewsApi
-                            .getUserViews(userId = userId)
+                            .getUserViews(userId = user.id)
                             .content
                             .items
                     val tvLibraries =
@@ -303,13 +388,13 @@ class LibraryTvGuideService
                     val movieLibraryIds = movieLibraries.ifEmpty { folderLibraries }.mapNotNull { it.id }
                     val (episodes, movies) =
                         coroutineScope {
-                            val episodesDeferred = async { fetchLibraryEpisodes(userId, tvLibraryIds) }
-                            val moviesDeferred = async { fetchLibraryMovies(userId, movieLibraryIds) }
+                            val episodesDeferred = async { fetchLibraryEpisodes(user.id, tvLibraryIds) }
+                            val moviesDeferred = async { fetchLibraryMovies(user.id, movieLibraryIds) }
                             episodesDeferred.await() to moviesDeferred.await()
                         }
                     val seriesNetworkNames =
                         fetchFallbackSeriesNetworkNames(
-                            userId = userId,
+                            userId = user.id,
                             episodes = episodes,
                             maxLookups = LibraryTvMaxQuickFallbackSeriesNetworkLookups,
                         )
@@ -323,11 +408,12 @@ class LibraryTvGuideService
                         episodes = episodes,
                         movies = movies,
                         seriesNetworkNames = seriesNetworkNames,
+                        avoidedEpisodeIds =
+                            watchedEpisodeDao
+                                .getWatchedEpisodeIds(user.rowId)
+                                .toSet() + extraAvoidedEpisodeIds,
                     )
                 }
-            if (guide.channels.isNotEmpty()) {
-                LibraryTvGuideMemoryCache.put(userId, guide)
-            }
             return guide
         }
 
@@ -453,6 +539,7 @@ class LibraryTvGuideService
             episodes: List<BaseItem>,
             movies: List<BaseItem>,
             seriesNetworkNames: Map<UUID, List<String>>,
+            avoidedEpisodeIds: Set<UUID> = emptySet(),
         ): LibraryTvGuideState {
             val networkGroups =
                 groupEpisodesByNetwork(
@@ -468,7 +555,12 @@ class LibraryTvGuideService
                 (networkGroups + episodeGenreGroups + movieGenreGroups)
                     .asSequence()
                     .mapNotNull { group ->
-                        val items = group.items.buildNaturalScheduleCycle(group.network.key, windowStart)
+                        val items =
+                            group.items.buildNaturalScheduleCycle(
+                                channelKey = group.network.key,
+                                windowStart = windowStart,
+                                avoidedEpisodeIds = avoidedEpisodeIds,
+                            )
                         if (items.isEmpty()) null else LibraryTvChannelPlan(group, items)
                     }.take(LibraryTvMaxChannels)
                     .toList()
@@ -533,6 +625,8 @@ class LibraryTvViewModel
     ) : ViewModel() {
         var lastFocusedProgramKey: LibraryTvProgramFocusKey? = null
             private set
+        var lastFocusedChannelKey: String? = null
+            private set
 
         private val _loading =
             MutableStateFlow<DataLoadingState<LibraryTvGuideState>>(DataLoadingState.Pending)
@@ -540,21 +634,22 @@ class LibraryTvViewModel
 
         init {
             load()
+            startGuideRefresh()
         }
 
         fun load() {
             viewModelScope.launchIO {
                 try {
-                    val userId =
-                        serverRepository.currentUser.value?.id
+                    val user =
+                        serverRepository.currentUser.value
                             ?: throw IllegalStateException("No active Jellyfin user")
-                    libraryTvGuideService.cachedGuide(userId)?.let { cachedGuide ->
+                    libraryTvGuideService.cachedGuide(user)?.let { cachedGuide ->
                         _loading.update { DataLoadingState.Success(cachedGuide) }
                         return@launchIO
                     }
                     _loading.update { DataLoadingState.Loading }
 
-                    val guide = libraryTvGuideService.load(userId)
+                    val guide = libraryTvGuideService.load(user)
                     if (guide.channels.isNotEmpty()) {
                         _loading.update { DataLoadingState.Success(guide) }
                     } else {
@@ -577,12 +672,41 @@ class LibraryTvViewModel
             }
         }
 
+        private fun startGuideRefresh() {
+            viewModelScope.launchIO {
+                while (isActive) {
+                    delay(LibraryTvGuideRefreshInterval)
+                    try {
+                        val user = serverRepository.currentUser.value ?: continue
+                        val guide = libraryTvGuideService.load(user)
+                        if (guide.channels.isNotEmpty()) {
+                            _loading.update { DataLoadingState.Success(guide) }
+                        }
+                    } catch (ex: CancellationException) {
+                        throw ex
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Could not refresh Library TV guide")
+                    }
+                }
+            }
+        }
+
         fun rememberFocusedProgram(program: LibraryTvProgram) {
             lastFocusedProgramKey = program.focusKey()
+            lastFocusedChannelKey = null
+        }
+
+        fun rememberFocusedChannel(
+            channelKey: String,
+            program: LibraryTvProgram?,
+        ) {
+            lastFocusedChannelKey = channelKey
+            program?.let { lastFocusedProgramKey = it.focusKey() }
         }
 
         fun play(program: LibraryTvProgram) {
-            rememberFocusedProgram(program)
+            lastFocusedProgramKey = program.focusKey()
+            lastFocusedChannelKey = program.channelKey
             val now = Instant.now()
             val positionMs =
                 if (!now.isBefore(program.start) && now.isBefore(program.end)) {
@@ -848,6 +972,7 @@ class LibraryTvViewModel
             episodes: List<BaseItem>,
             movies: List<BaseItem>,
             seriesNetworkNames: Map<UUID, List<String>>,
+            avoidedEpisodeIds: Set<UUID> = emptySet(),
         ): LibraryTvGuideState {
             val networkGroups =
                 groupEpisodesByNetwork(
@@ -863,7 +988,12 @@ class LibraryTvViewModel
                 (networkGroups + episodeGenreGroups + movieGenreGroups)
                     .asSequence()
                     .mapNotNull { group ->
-                        val items = group.items.buildNaturalScheduleCycle(group.network.key, windowStart)
+                        val items =
+                            group.items.buildNaturalScheduleCycle(
+                                channelKey = group.network.key,
+                                windowStart = windowStart,
+                                avoidedEpisodeIds = avoidedEpisodeIds,
+                            )
                         if (items.isEmpty()) null else LibraryTvChannelPlan(group, items)
                     }.take(LibraryTvMaxChannels)
                     .toList()
@@ -960,7 +1090,9 @@ fun LibraryTvPage(
                     showHeader = showHeader,
                     onProgramClick = viewModel::play,
                     onProgramFocus = viewModel::rememberFocusedProgram,
+                    onChannelFocus = viewModel::rememberFocusedChannel,
                     preferredFocusKey = viewModel.lastFocusedProgramKey,
+                    preferredChannelKey = viewModel.lastFocusedChannelKey,
                     modifier = modifier,
                 )
             }
@@ -1001,8 +1133,12 @@ fun LibraryTvChannelSettingsPage(
     modifier: Modifier = Modifier,
     viewModel: LibraryTvChannelSettingsViewModel = hiltViewModel(),
 ) {
-    val disabledChannelKeys =
+    val persistedDisabledChannelKeys =
         preferences.interfacePreferences.liveTvPreferences.disabledLibraryTvChannelKeysList.toSet()
+    var disabledChannelKeys by remember { mutableStateOf(persistedDisabledChannelKeys) }
+    LaunchedEffect(persistedDisabledChannelKeys) {
+        disabledChannelKeys = persistedDisabledChannelKeys
+    }
     val channelOptions =
         remember {
             (
@@ -1051,7 +1187,16 @@ fun LibraryTvChannelSettingsPage(
                 SwitchPreference(
                     title = channel.name,
                     value = enabled,
-                    onClick = { viewModel.setChannelEnabled(channel.key, !enabled) },
+                    onClick = {
+                        val nextEnabled = !enabled
+                        disabledChannelKeys =
+                            if (nextEnabled) {
+                                disabledChannelKeys - channel.key
+                            } else {
+                                disabledChannelKeys + channel.key
+                            }
+                        viewModel.setChannelEnabled(channel.key, nextEnabled)
+                    },
                     summary = stringResource(if (enabled) R.string.enabled else R.string.disabled),
                 )
             }
@@ -1065,7 +1210,9 @@ private fun LibraryTvGuide(
     showHeader: Boolean,
     onProgramClick: (LibraryTvProgram) -> Unit,
     onProgramFocus: (LibraryTvProgram) -> Unit,
+    onChannelFocus: (String, LibraryTvProgram?) -> Unit,
     preferredFocusKey: LibraryTvProgramFocusKey?,
+    preferredChannelKey: String?,
     modifier: Modifier = Modifier,
 ) {
     val now = remember(state) { Instant.now() }
@@ -1094,10 +1241,15 @@ private fun LibraryTvGuide(
         }
         LibraryTvGrid(
             state = state,
-            focusProgramKey = initialProgram?.focusKey(),
+            focusProgramKey = initialProgram?.focusKey().takeIf { preferredChannelKey == null },
+            focusChannelKey = preferredChannelKey,
             onProgramFocus = {
                 focusedProgram = it
                 onProgramFocus(it)
+            },
+            onChannelFocus = { channel, program ->
+                focusedProgram = program
+                onChannelFocus(channel.key, program)
             },
             onProgramClick = onProgramClick,
             modifier =
@@ -1193,32 +1345,69 @@ private fun LibraryTvHeader(
 private fun LibraryTvGrid(
     state: LibraryTvGuideState,
     focusProgramKey: LibraryTvProgramFocusKey?,
+    focusChannelKey: String?,
     onProgramFocus: (LibraryTvProgram) -> Unit,
+    onChannelFocus: (LibraryTvChannel, LibraryTvProgram?) -> Unit,
     onProgramClick: (LibraryTvProgram) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
     val listState = rememberLazyListState()
+    val scrollScope = rememberCoroutineScope()
+    var rowScrollJob by remember { mutableStateOf<Job?>(null) }
     val programFocusRequesters =
         remember(state.channels) {
             state.channels
                 .flatMap { channel -> channel.programs.map { it.focusKey() to FocusRequester() } }
                 .toMap()
         }
-    val initialFocusRequester = focusProgramKey?.let(programFocusRequesters::get)
+    val channelFocusRequesters =
+        remember(state.channels) {
+            state.channels.associate { it.key to FocusRequester() }
+        }
+    val initialProgramFocusRequester = focusProgramKey?.let(programFocusRequesters::get)
+    val initialChannelFocusRequester = focusChannelKey?.let(channelFocusRequesters::get)
     val focusChannelIndex =
-        remember(state.channels, focusProgramKey) {
-            state.channels.indexOfFirst { channel ->
-                channel.programs.any { it.focusKey() == focusProgramKey }
-            }.takeIf { it >= 0 }
+        remember(state.channels, focusProgramKey, focusChannelKey) {
+            focusChannelKey
+                ?.let { key ->
+                    state.channels.indexOfFirst { it.key == key }.takeIf { it >= 0 }
+                }
+                ?: state.channels.indexOfFirst { channel ->
+                    channel.programs.any { it.focusKey() == focusProgramKey }
+                }.takeIf { it >= 0 }
         }
     val channelRailWidth = 180.dp
     val timelineGap = 4.dp
     val rowHeight = 54.dp
+    fun keepChannelRowReady(channelIndex: Int) {
+        val visibleRows = listState.layoutInfo.visibleItemsInfo
+        if (visibleRows.isEmpty()) return
 
-    LaunchedEffect(focusChannelIndex, initialFocusRequester) {
+        val firstVisibleRow = visibleRows.first().index
+        val lastVisibleRow = visibleRows.last().index
+        val visibleRowCount = (lastVisibleRow - firstVisibleRow + 1).coerceAtLeast(1)
+        val targetFirstRow =
+            when {
+                channelIndex <= firstVisibleRow + 1 -> (channelIndex - 1).coerceAtLeast(0)
+                channelIndex >= lastVisibleRow - 1 ->
+                    (channelIndex - visibleRowCount + 2)
+                        .coerceIn(0, state.channels.lastIndex.coerceAtLeast(0))
+                else -> return
+            }
+        if (targetFirstRow == firstVisibleRow) return
+
+        rowScrollJob?.cancel()
+        rowScrollJob =
+            scrollScope.launch {
+                listState.scrollToItem(targetFirstRow)
+            }
+    }
+
+    LaunchedEffect(focusChannelIndex, initialChannelFocusRequester, initialProgramFocusRequester) {
         focusChannelIndex?.let { listState.scrollToItem(it) }
-        initialFocusRequester?.tryRequestFocus("library_tv_guide")
+        initialChannelFocusRequester?.tryRequestFocus("library_tv_channel")
+            ?: initialProgramFocusRequester?.tryRequestFocus("library_tv_guide")
     }
 
     BoxWithConstraints(
@@ -1275,8 +1464,16 @@ private fun LibraryTvGrid(
                         totalTimelineWidth = totalTimelineWidth,
                         rowHeight = rowHeight,
                         scrollState = scrollState,
+                        channelFocusRequester = channelFocusRequesters[channel.key],
                         programFocusRequesters = programFocusRequesters,
-                        onProgramFocus = onProgramFocus,
+                        onChannelFocus = { focusedChannel, program ->
+                            keepChannelRowReady(channelIndex)
+                            onChannelFocus(focusedChannel, program)
+                        },
+                        onProgramFocus = { program ->
+                            keepChannelRowReady(channelIndex)
+                            onProgramFocus(program)
+                        },
                         onProgramClick = onProgramClick,
                         modifier = Modifier.height(rowHeight),
                     )
@@ -1376,7 +1573,9 @@ private fun LibraryTvChannelRow(
     totalTimelineWidth: Dp,
     rowHeight: Dp,
     scrollState: androidx.compose.foundation.ScrollState,
+    channelFocusRequester: FocusRequester?,
     programFocusRequesters: Map<LibraryTvProgramFocusKey, FocusRequester>,
+    onChannelFocus: (LibraryTvChannel, LibraryTvProgram?) -> Unit,
     onProgramFocus: (LibraryTvProgram) -> Unit,
     onProgramClick: (LibraryTvProgram) -> Unit,
     modifier: Modifier = Modifier,
@@ -1388,11 +1587,13 @@ private fun LibraryTvChannelRow(
         LibraryTvChannelCell(
             channel = channel,
             onFocus = {
-                channel.programAt(Instant.now())?.let(onProgramFocus)
+                val program = channel.programAt(Instant.now()) ?: channel.programs.firstOrNull()
+                onChannelFocus(channel, program)
             },
             onClick = {
                 channel.programAt(Instant.now())?.let(onProgramClick)
             },
+            focusRequester = channelFocusRequester,
             modifier =
                 Modifier
                     .width(channelRailWidth)
@@ -1412,8 +1613,22 @@ private fun LibraryTvChannelRow(
                         .width(totalTimelineWidth)
                         .fillMaxHeight(),
             ) {
-                channel.programs.forEach { program ->
+                val visiblePrograms = channel.visiblePrograms(windowStart, windowEnd)
+                val firstProgramFocusRequester =
+                    visiblePrograms
+                        .firstOrNull()
+                        ?.focusKey()
+                        ?.let(programFocusRequesters::get)
+                visiblePrograms.forEachIndexed { programIndex, program ->
                     val focusInstant = program.verticalFocusInstant()
+                    val nextProgramFocusRequester =
+                        visiblePrograms
+                            .getOrNull(programIndex + 1)
+                            ?.focusKey()
+                            ?.let(programFocusRequesters::get)
+                    val rightFocusRequester =
+                        nextProgramFocusRequester
+                            ?: firstProgramFocusRequester.takeIf { visiblePrograms.size > 1 }
                     LibraryTvProgramCell(
                         program = program,
                         windowStart = windowStart,
@@ -1425,14 +1640,15 @@ private fun LibraryTvChannelRow(
                         focusRequester = programFocusRequesters[program.focusKey()],
                         upFocusRequester =
                             previousChannel
-                                ?.programAt(focusInstant)
+                                ?.programNear(focusInstant, windowStart, windowEnd)
                                 ?.focusKey()
                                 ?.let(programFocusRequesters::get),
                         downFocusRequester =
                             nextChannel
-                                ?.programAt(focusInstant)
+                                ?.programNear(focusInstant, windowStart, windowEnd)
                                 ?.focusKey()
                                 ?.let(programFocusRequesters::get),
+                        rightFocusRequester = rightFocusRequester,
                         onFocus = { onProgramFocus(program) },
                         onClick = {
                             channel.programAt(Instant.now())?.let(onProgramClick)
@@ -1449,6 +1665,7 @@ private fun LibraryTvChannelCell(
     channel: LibraryTvChannel,
     onFocus: () -> Unit,
     onClick: () -> Unit,
+    focusRequester: FocusRequester?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1470,9 +1687,11 @@ private fun LibraryTvChannelCell(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier =
             modifier
+                .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (focused) LibraryTvSurfaceElevated else LibraryTvSurface)
                 .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+                .onPreviewKeyEvent(::isStaleLibraryTvVerticalRepeat)
                 .onFocusChanged {
                     focused = it.isFocused
                     if (it.isFocused) onFocus()
@@ -1489,7 +1708,7 @@ private fun LibraryTvChannelCell(
         ) {
             Text(
                 text = channel.number.toString().padStart(2, '0'),
-                color = MaterialTheme.colorScheme.border,
+                color = Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1550,6 +1769,7 @@ private fun LibraryTvProgramCell(
     focusRequester: FocusRequester?,
     upFocusRequester: FocusRequester?,
     downFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
     onFocus: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1596,7 +1816,7 @@ private fun LibraryTvProgramCell(
             currentlyPlaying -> MaterialTheme.colorScheme.border.copy(alpha = .24f)
             else -> LibraryTvSurfaceElevated
         }
-    val contentColor = if (focused) Color.Black else Color.White
+    val contentColor = Color.White
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1609,7 +1829,9 @@ private fun LibraryTvProgramCell(
                 .focusProperties {
                     up = upFocusRequester ?: FocusRequester.Default
                     down = downFocusRequester ?: FocusRequester.Default
+                    right = rightFocusRequester ?: FocusRequester.Default
                 }
+                .onPreviewKeyEvent(::isStaleLibraryTvVerticalRepeat)
                 .padding(horizontal = 2.dp, vertical = 3.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(backgroundColor)
@@ -1890,10 +2112,12 @@ private fun BaseItem.networkNames(): List<String> =
 private fun List<BaseItem>.buildNaturalScheduleCycle(
     channelKey: String,
     windowStart: Instant,
+    avoidedEpisodeIds: Set<UUID> = emptySet(),
 ): List<BaseItem> {
+    val scheduleItems = preferredLibraryTvItems(avoidedEpisodeIds)
     val scheduleDay = windowStart.atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
     val orderedShowQueues =
-        groupBy { it.seriesKey() }
+        scheduleItems.groupBy { it.seriesKey() }
             .mapNotNull { (seriesKey, seriesItems) ->
                 val sortedEpisodes =
                     seriesItems
@@ -1966,6 +2190,15 @@ private fun List<BaseItem>.buildNaturalScheduleCycle(
     return result
 }
 
+private fun List<BaseItem>.preferredLibraryTvItems(avoidedEpisodeIds: Set<UUID>): List<BaseItem> {
+    if (avoidedEpisodeIds.isEmpty()) return this
+    val preferred =
+        filterNot {
+            it.type == BaseItemKind.EPISODE && it.id in avoidedEpisodeIds
+        }
+    return preferred.ifEmpty { this }
+}
+
 private data class LibraryTvShowQueue(
     val seriesKey: String,
     val title: String,
@@ -1988,6 +2221,11 @@ private fun stableIndex(
 ): Int = if (size <= 0) 0 else Math.floorMod(value.hashCode(), size)
 
 private fun stableSortKey(value: String): Int = value.hashCode()
+
+private fun maxInstant(
+    first: Instant,
+    second: Instant,
+): Instant = if (first.isAfter(second)) first else second
 
 private fun <T> List<T>.rotatedBy(offset: Int): List<T> {
     if (isEmpty()) return this
@@ -2032,6 +2270,22 @@ data class LibraryTvChannel(
     fun programAt(now: Instant): LibraryTvProgram? = programs.firstOrNull { it.contains(now) }
 }
 
+private fun LibraryTvChannel.visiblePrograms(
+    windowStart: Instant,
+    windowEnd: Instant,
+): List<LibraryTvProgram> =
+    programs.filter { it.end.isAfter(windowStart) && it.start.isBefore(windowEnd) }
+
+private fun LibraryTvChannel.programNear(
+    instant: Instant,
+    windowStart: Instant,
+    windowEnd: Instant,
+): LibraryTvProgram? {
+    val visiblePrograms = visiblePrograms(windowStart, windowEnd)
+    return visiblePrograms.firstOrNull { it.contains(instant) }
+        ?: visiblePrograms.minByOrNull { it.distanceTo(instant) }
+}
+
 data class LibraryTvChannelOption(
     val key: String,
     val name: String,
@@ -2044,6 +2298,62 @@ fun LibraryTvGuideState.withEnabledChannels(disabledChannelKeys: Set<String>): L
                 .filterNot { it.key in disabledChannelKeys }
                 .mapIndexed { index, channel -> channel.copy(number = index + 1) },
     )
+
+private fun LibraryTvGuideState.scheduledEpisodeIds(): Set<UUID> =
+    channels
+        .asSequence()
+        .flatMap { channel -> channel.programs.asSequence() }
+        .map { it.item }
+        .filter { it.type == BaseItemKind.EPISODE }
+        .map { it.id }
+        .toSet()
+
+private fun LibraryTvGuideState.append(
+    extension: LibraryTvGuideState,
+    pruneBefore: Instant,
+): LibraryTvGuideState {
+    val extensionByKey = extension.channels.associateBy { it.key }
+    val mergedChannels =
+        (
+            channels.mapNotNull { channel ->
+                val retainedPrograms =
+                    channel.programs
+                        .filter { it.end.isAfter(pruneBefore) }
+                val lastEnd = retainedPrograms.maxOfOrNull { it.end }
+                val appendedPrograms =
+                    extensionByKey[channel.key]
+                        ?.programs
+                        .orEmpty()
+                        .filter { program ->
+                            program.end.isAfter(pruneBefore) &&
+                                (lastEnd == null || !program.start.isBefore(lastEnd))
+                        }
+                val programs =
+                    (retainedPrograms + appendedPrograms)
+                        .distinctBy { it.focusKey() }
+                channel
+                    .copy(programs = programs)
+                    .takeIf { it.programs.isNotEmpty() }
+            } +
+                extension.channels
+                    .filterNot { extensionChannel ->
+                        channels.any { it.key == extensionChannel.key }
+                    }.mapNotNull { extensionChannel ->
+                        extensionChannel
+                            .copy(
+                                programs =
+                                    extensionChannel.programs
+                                        .filter { it.end.isAfter(pruneBefore) },
+                            ).takeIf { it.programs.isNotEmpty() }
+                    }
+        ).mapIndexed { index, channel -> channel.copy(number = index + 1) }
+
+    return copy(
+        channels = mergedChannels,
+        windowStart = maxInstant(windowStart, pruneBefore),
+        windowEnd = maxInstant(windowEnd, extension.windowEnd),
+    )
+}
 
 data class LibraryTvProgram(
     val channelKey: String,
@@ -2079,6 +2389,23 @@ private fun LibraryTvProgram.verticalFocusInstant(): Instant {
     val startMs = start.toEpochMilli()
     val durationMs = (end.toEpochMilli() - startMs).coerceAtLeast(0L)
     return Instant.ofEpochMilli(startMs + durationMs / 2)
+}
+
+private fun LibraryTvProgram.distanceTo(instant: Instant): Long {
+    if (contains(instant)) return 0L
+    val instantMs = instant.toEpochMilli()
+    return min(
+        abs(start.toEpochMilli() - instantMs),
+        abs(end.toEpochMilli() - instantMs),
+    )
+}
+
+private fun isStaleLibraryTvVerticalRepeat(event: androidx.compose.ui.input.key.KeyEvent): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    if (event.key != Key.DirectionUp && event.key != Key.DirectionDown) return false
+    val nativeEvent = event.nativeKeyEvent
+    return nativeEvent.repeatCount > 0 &&
+        SystemClock.uptimeMillis() - nativeEvent.eventTime > LibraryTvStaleRepeatInputMs
 }
 
 private fun LibraryTvGuideState.programForFocusKey(key: LibraryTvProgramFocusKey?): LibraryTvProgram? =

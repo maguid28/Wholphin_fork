@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.center
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,10 +58,12 @@ import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.ScreensaverService
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.CrossFadeFactory
+import com.github.damontecres.wholphin.ui.main.HomeMediaBanner
 import com.github.damontecres.wholphin.ui.nav.TOP_SCRIM_ALPHA
 import com.github.damontecres.wholphin.ui.nav.TOP_SCRIM_END_FRACTION
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import java.util.UUID
 import javax.inject.Inject
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -82,6 +85,11 @@ sealed interface ScreensaverItem {
 
     data object Empty : ScreensaverItem
 
+    data class CurrentItems(
+        val items: List<BaseItem>,
+        val audienceScores: Map<UUID, Float>,
+    ) : ScreensaverItem
+
     data class CurrentItem(
         val item: BaseItem,
         val backdropUrl: String,
@@ -100,6 +108,7 @@ fun AppScreensaver(
     AppScreensaverContent(
         currentItem = currentItem,
         showClock = prefs.interfacePreferences.screensaverPreference.showClock,
+        showLogo = prefs.interfacePreferences.showLogos,
         duration = prefs.interfacePreferences.screensaverPreference.duration.milliseconds,
         animate = prefs.interfacePreferences.screensaverPreference.animate,
         modifier = modifier,
@@ -111,6 +120,7 @@ fun AppScreensaver(
 fun AppScreensaverContent(
     currentItem: ScreensaverItem?,
     showClock: Boolean,
+    showLogo: Boolean,
     duration: Duration,
     animate: Boolean,
     modifier: Modifier = Modifier,
@@ -145,6 +155,23 @@ fun AppScreensaverContent(
                 ScreensaverPlaceholder(
                     text = "Error connecting to Jellyfin server",
                     duration = duration,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            is ScreensaverItem.CurrentItems -> {
+                val bannerFocusRequester = remember { FocusRequester() }
+                HomeMediaBanner(
+                    items = currentItem.items,
+                    audienceScores = currentItem.audienceScores,
+                    showLogo = showLogo,
+                    onFocusedItem = {},
+                    onClickItem = {},
+                    onHoldItem = {},
+                    onClickPlay = {},
+                    focusRequester = bannerFocusRequester,
+                    fullScreen = true,
+                    active = true,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -224,12 +251,14 @@ fun AppScreensaverContent(
                         )
                     }
                 }
-            }
+        }
         Canvas(Modifier.fillMaxSize()) {
-            drawRect(
-                brush = largeRadialGradient,
-                blendMode = BlendMode.Multiply,
-            )
+            if (currentItem !is ScreensaverItem.CurrentItems) {
+                drawRect(
+                    brush = largeRadialGradient,
+                    blendMode = BlendMode.Multiply,
+                )
+            }
             if (showClock) {
                 // Add scrim to make clock more readable
                 drawRect(

@@ -285,6 +285,14 @@ val ElectricNeonThemeColors =
         bold = true,
         neutralSurfaces = true,
     )
+val ElectricIndigoThemeColors =
+    cinematicThemeColors(
+        seed = Color(0xFF6C63FF),
+        secondarySeed = Color(0xFFD8B4FE),
+        tertiarySeed = Color(0xFF6C63FF),
+        bold = true,
+        neutralSurfaces = true,
+    )
 
 data class CustomThemeTone(
     @param:StringRes val label: Int,

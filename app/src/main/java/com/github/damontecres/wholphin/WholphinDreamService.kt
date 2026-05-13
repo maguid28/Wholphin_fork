@@ -112,6 +112,7 @@ class WholphinDreamService :
                                     AppScreensaverContent(
                                         currentItem = currentItem,
                                         showClock = screensaverPrefs.showClock,
+                                        showLogo = prefs.interfacePreferences.showLogos,
                                         duration = screensaverPrefs.duration.milliseconds,
                                         animate = screensaverPrefs.animate,
                                         modifier = Modifier.fillMaxSize(),

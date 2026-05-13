@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,7 +44,7 @@ fun Program(
         } else {
             MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
         }
-    val textColor = MaterialTheme.colorScheme.contentColorFor(background)
+    val textColor = if (focused) Color.White else MaterialTheme.colorScheme.contentColorFor(background)
     val startedBeforeGuide = program.start.isBefore(guideStart)
     val shape =
         remember(startedBeforeGuide) {
@@ -137,7 +138,7 @@ fun Channel(
         } else {
             MaterialTheme.colorScheme.surface
         }
-    val textColor = MaterialTheme.colorScheme.contentColorFor(background)
+    val textColor = if (focused) Color.White else MaterialTheme.colorScheme.contentColorFor(background)
     Box(
         modifier =
             modifier

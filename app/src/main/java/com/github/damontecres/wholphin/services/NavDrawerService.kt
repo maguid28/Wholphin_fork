@@ -150,7 +150,7 @@ class NavDrawerService
 
         private fun warmLibraryTvGuide(user: JellyfinUser) {
             if (libraryTvEnabled) {
-                libraryTvGuideService.warm(user.id)
+                libraryTvGuideService.warm(user)
             }
         }
 

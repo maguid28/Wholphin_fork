@@ -95,6 +95,9 @@ class HomeSettingsService
          */
         val currentSettings = MutableStateFlow(HomePageResolvedSettings.EMPTY)
 
+        private var mediaBannerUserId: UUID? = null
+        private var mediaBannerItemsCache: List<BaseItem> = emptyList()
+
         /**
          * Saves a [HomePageSettings] to the server for the user under the display preference ID
          *
@@ -562,6 +565,18 @@ class HomeSettingsService
             }
 
         /**
+         * Returns the latest home page media banner set, fetching it if the cache is empty.
+         */
+        suspend fun fetchCurrentMediaBannerItems(limit: Int = 10): List<BaseItem> {
+            val userDto = serverRepository.currentUserDto.value ?: return emptyList()
+            if (mediaBannerUserId == userDto.id && mediaBannerItemsCache.isNotEmpty()) {
+                return mediaBannerItemsCache.take(limit)
+            }
+            val libraries = navDrawerService.getAllUserLibraries(userDto.id, userDto.tvAccess)
+            return fetchMediaBannerItems(userDto, libraries, limit)
+        }
+
+        /**
          * Fetches a small randomized movie/show set for the home page media banner.
          */
         suspend fun fetchMediaBannerItems(
@@ -617,7 +632,10 @@ class HomeSettingsService
                         item.data.seriesId ?: item.id
                     }.shuffled()
 
-            return items.take(limit)
+            val bannerItems = items.take(limit)
+            mediaBannerUserId = userDto.id
+            mediaBannerItemsCache = bannerItems
+            return bannerItems
         }
 
         /**

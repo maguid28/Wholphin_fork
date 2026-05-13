@@ -30,10 +30,12 @@ import coil3.request.ImageRequest
 import coil3.size.Size
 import com.github.damontecres.wholphin.data.ItemPlaybackDao
 import com.github.damontecres.wholphin.data.ItemPlaybackRepository
+import com.github.damontecres.wholphin.data.LibraryTvWatchedEpisodeDao
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.Chapter
 import com.github.damontecres.wholphin.data.model.ItemPlayback
+import com.github.damontecres.wholphin.data.model.LibraryTvWatchedEpisode
 import com.github.damontecres.wholphin.data.model.Playlist
 import com.github.damontecres.wholphin.data.model.PlaylistItem
 import com.github.damontecres.wholphin.data.model.TrackIndex
@@ -56,6 +58,7 @@ import com.github.damontecres.wholphin.services.StreamChoiceService
 import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvChannel
 import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvGuideMemoryCache
+import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvGuideService
 import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvProgram
 import com.github.damontecres.wholphin.ui.detail.librarytv.withEnabledChannels
 import com.github.damontecres.wholphin.ui.formatBitrate
@@ -146,6 +149,15 @@ data class LibraryTvPlaybackInfo(
     val end: Instant,
 )
 
+private val LibraryTvWatchedProgressInterval = 5.seconds
+private const val LibraryTvChannelTuneDebounceMs = 180L
+
+private data class LibraryTvWatchSample(
+    val isPlaying: Boolean,
+    val positionMs: Long,
+    val durationMs: Long,
+)
+
 @HiltViewModel(assistedFactory = PlaybackViewModel.Factory::class)
 @OptIn(markerClass = [UnstableApi::class])
 class PlaybackViewModel
@@ -156,6 +168,7 @@ class PlaybackViewModel
         val navigationManager: NavigationManager,
         private val playlistCreator: PlaylistCreator,
         private val itemPlaybackDao: ItemPlaybackDao,
+        private val libraryTvWatchedEpisodeDao: LibraryTvWatchedEpisodeDao,
         private val serverRepository: ServerRepository,
         private val itemPlaybackRepository: ItemPlaybackRepository,
         private val playerFactory: PlayerFactory,
@@ -168,6 +181,7 @@ class PlaybackViewModel
         private val imageUrlService: ImageUrlService,
         private val screensaverService: ScreensaverService,
         private val musicService: MusicService,
+        private val libraryTvGuideService: LibraryTvGuideService,
         @Assisted private val destination: Destination,
     ) : ViewModel(),
         Player.Listener,
@@ -205,6 +219,8 @@ class PlaybackViewModel
         internal lateinit var currentItem: PlaylistItem
         internal var forceTranscoding: Boolean = false
         private var activityListener: TrackActivityPlaybackListener? = null
+        private var libraryTvWatchedJob: Job? = null
+        private val markedLibraryTvEpisodeIds = mutableSetOf<UUID>()
         private val jobs = mutableListOf<Job>()
 
         val nextUp = MutableLiveData<BaseItem?>()
@@ -214,6 +230,8 @@ class PlaybackViewModel
         private val isLibraryTvPlayback = initialLibraryTvChannelKey != null
         private var currentLibraryTvChannelKey = initialLibraryTvChannelKey
         private var currentLibraryTvProgram: LibraryTvProgram? = null
+        private var pendingLibraryTvChannelIndex: Int? = null
+        private var libraryTvTuneJob: Job? = null
 
         val playlist = MutableLiveData<Playlist>(Playlist(listOf()))
         val libraryTvPlayback = MutableStateFlow<LibraryTvPlaybackInfo?>(null)
@@ -244,6 +262,9 @@ class PlaybackViewModel
                 player.release()
                 mediaSession?.release()
             }
+            libraryTvTuneJob?.cancel()
+            pendingLibraryTvChannelIndex = null
+            libraryTvWatchedJob?.cancel()
             jobs.forEach { it.cancel() }
         }
 
@@ -626,7 +647,11 @@ class PlaybackViewModel
                     player.prepare()
                     player.play()
                 }
-                listenForSegments(item.id)
+                listenForSegments(
+                    itemId = item.id,
+                    suppressIntroOutroSegments = isLiveTv,
+                )
+                startLibraryTvWatchedTracking(item)
                 return@withContext true
             }
 
@@ -1121,7 +1146,10 @@ class PlaybackViewModel
         /**
          * This sets up a coroutine to periodically check whether the current playback progress is within a media segment (intro, outro, etc)
          */
-        private fun listenForSegments(itemId: UUID) {
+        private fun listenForSegments(
+            itemId: UUID,
+            suppressIntroOutroSegments: Boolean,
+        ) {
             segmentJob?.cancel()
             segmentJob =
                 viewModelScope.launchIO {
@@ -1135,7 +1163,10 @@ class PlaybackViewModel
                             val currentSegment =
                                 segments.items
                                     .firstOrNull {
-                                        it.type != MediaSegmentType.UNKNOWN && currentTicks >= it.startTicks && currentTicks < it.endTicks
+                                        it.type != MediaSegmentType.UNKNOWN &&
+                                            !(suppressIntroOutroSegments && it.type.isIntroOrOutro()) &&
+                                            currentTicks >= it.startTicks &&
+                                            currentTicks < it.endTicks
                                     }
                             if (currentSegment != null &&
                                 currentSegment.itemId == this@PlaybackViewModel.itemId
@@ -1213,6 +1244,9 @@ class PlaybackViewModel
                 }
         }
 
+        private fun MediaSegmentType.isIntroOrOutro(): Boolean =
+            this == MediaSegmentType.INTRO || this == MediaSegmentType.OUTRO
+
         fun updateSegment(
             segmentId: UUID?,
             dismissed: Boolean,
@@ -1280,21 +1314,41 @@ class PlaybackViewModel
         fun tuneLibraryTvChannel(direction: Int) {
             if (!isLibraryTvPlayback) return
             viewModelScope.launchDefault {
-                val channels = currentLibraryTvChannels()
+                val channels = ensureCurrentLibraryTvChannels()
                 if (channels.isEmpty()) return@launchDefault
                 val currentIndex =
-                    channels
-                        .indexOfFirst { it.key == currentLibraryTvChannelKey }
-                        .takeIf { it >= 0 }
+                    pendingLibraryTvChannelIndex
+                        ?: channels
+                            .indexOfFirst { it.key == currentLibraryTvChannelKey }
+                            .takeIf { it >= 0 }
                         ?: 0
                 val nextIndex = Math.floorMod(currentIndex + direction, channels.size)
-                playLibraryTvChannel(channels[nextIndex])
+                pendingLibraryTvChannelIndex = nextIndex
+                updateLibraryTvPlaybackPreview(channels[nextIndex])
+                libraryTvTuneJob?.cancel()
+                libraryTvTuneJob =
+                    viewModelScope.launchDefault {
+                        delay(LibraryTvChannelTuneDebounceMs)
+                        val channelIndex = pendingLibraryTvChannelIndex ?: return@launchDefault
+                        pendingLibraryTvChannelIndex = null
+                        channels.getOrNull(channelIndex)?.let { channel ->
+                            playLibraryTvChannel(channel)
+                        }
+                    }
             }
         }
 
+        private fun updateLibraryTvPlaybackPreview(channel: LibraryTvChannel) {
+            val now = Instant.now()
+            val program = channel.programAt(now) ?: channel.programs.firstOrNull() ?: return
+            updateLibraryTvPlaybackState(channel, program)
+        }
+
         private suspend fun tuneCurrentLibraryTvChannel() {
+            libraryTvTuneJob?.cancel()
+            pendingLibraryTvChannelIndex = null
             val channel =
-                currentLibraryTvChannels()
+                ensureCurrentLibraryTvChannels()
                     .firstOrNull { it.key == currentLibraryTvChannelKey }
                     ?: return
             playLibraryTvChannel(channel)
@@ -1302,12 +1356,13 @@ class PlaybackViewModel
 
         private suspend fun playNextLibraryTvProgram() {
             val channel =
-                currentLibraryTvChannels()
+                ensureCurrentLibraryTvChannels()
                     .firstOrNull { it.key == currentLibraryTvChannelKey }
                     ?: return
+            val avoidedEpisodeIds = currentLibraryTvAvoidedEpisodeIds()
             val nextProgram =
                 currentLibraryTvProgram
-                    ?.let { currentProgram -> channel.programAfter(currentProgram) }
+                    ?.let { currentProgram -> channel.programAfter(currentProgram, avoidedEpisodeIds) }
                     ?: channel.programAt(Instant.now())
                     ?: channel.programs.firstOrNull()
                     ?: return
@@ -1343,6 +1398,71 @@ class PlaybackViewModel
             }
         }
 
+        private fun startLibraryTvWatchedTracking(item: BaseItem) {
+            libraryTvWatchedJob?.cancel()
+            if (!isLibraryTvPlayback || item.type != BaseItemKind.EPISODE || item.id in markedLibraryTvEpisodeIds) {
+                return
+            }
+            val fallbackDurationMs = item.libraryTvWatchedDurationMs() ?: return
+            libraryTvWatchedJob =
+                viewModelScope.launchIO {
+                    var watchedMs = 0L
+                    var lastPositionMs = withContext(Dispatchers.Main) { player.currentPosition }
+                    while (isActive && this@PlaybackViewModel.itemId == item.id) {
+                        delay(LibraryTvWatchedProgressInterval)
+                        val sample =
+                            withContext(Dispatchers.Main) {
+                                LibraryTvWatchSample(
+                                    isPlaying = player.isPlaying,
+                                    positionMs = player.currentPosition,
+                                    durationMs = player.duration,
+                                )
+                            }
+                        val durationMs =
+                            sample.durationMs
+                                .takeIf { it > 0 && it != C.TIME_UNSET }
+                                ?: fallbackDurationMs
+                        if (sample.isPlaying && sample.positionMs >= 0 && lastPositionMs >= 0) {
+                            watchedMs +=
+                                (sample.positionMs - lastPositionMs)
+                                    .coerceIn(0L, LibraryTvWatchedProgressInterval.inWholeMilliseconds + 1000L)
+                        }
+                        lastPositionMs = sample.positionMs
+                        if (watchedMs * 2 > durationMs) {
+                            markLibraryTvEpisodeWatched(item)
+                            return@launchIO
+                        }
+                    }
+                }
+        }
+
+        private suspend fun markLibraryTvEpisodeWatched(item: BaseItem) {
+            val user = serverRepository.currentUser.value ?: return
+            if (!markedLibraryTvEpisodeIds.add(item.id)) return
+            libraryTvWatchedEpisodeDao.save(
+                LibraryTvWatchedEpisode(
+                    userId = user.rowId,
+                    itemId = item.id,
+                    watchedAtEpochMs = System.currentTimeMillis(),
+                ),
+            )
+        }
+
+        private suspend fun currentLibraryTvAvoidedEpisodeIds(): Set<UUID> {
+            val user = serverRepository.currentUser.value ?: return markedLibraryTvEpisodeIds.toSet()
+            return markedLibraryTvEpisodeIds + libraryTvWatchedEpisodeDao.getWatchedEpisodeIds(user.rowId)
+        }
+
+        private fun BaseItem.libraryTvWatchedDurationMs(): Long? =
+            data.runTimeTicks
+                ?.ticks
+                ?.inWholeMilliseconds
+                ?.takeIf { it > 0 }
+                ?: currentLibraryTvProgram
+                    ?.takeIf { it.item.id == id }
+                    ?.let { it.end.toEpochMilli() - it.start.toEpochMilli() }
+                    ?.takeIf { it > 0 }
+
         private fun currentLibraryTvChannels(): List<LibraryTvChannel> {
             val disabledChannelKeys =
                 preferences.appPreferences.interfacePreferences.liveTvPreferences.disabledLibraryTvChannelKeysList.toSet()
@@ -1351,6 +1471,16 @@ class PlaybackViewModel
                 ?.withEnabledChannels(disabledChannelKeys)
                 ?.channels
                 .orEmpty()
+        }
+
+        private suspend fun ensureCurrentLibraryTvChannels(): List<LibraryTvChannel> {
+            val user = serverRepository.currentUser.value ?: return currentLibraryTvChannels()
+            val disabledChannelKeys =
+                preferences.appPreferences.interfacePreferences.liveTvPreferences.disabledLibraryTvChannelKeysList.toSet()
+            return libraryTvGuideService
+                .load(user)
+                .withEnabledChannels(disabledChannelKeys)
+                .channels
         }
 
         private fun updateLibraryTvPlaybackState(channelKey: String?) {
@@ -1393,7 +1523,10 @@ class PlaybackViewModel
                 0L
             }
 
-        private fun LibraryTvChannel.programAfter(program: LibraryTvProgram): LibraryTvProgram? {
+        private fun LibraryTvChannel.programAfter(
+            program: LibraryTvProgram,
+            avoidedEpisodeIds: Set<UUID> = emptySet(),
+        ): LibraryTvProgram? {
             val exactIndex =
                 programs.indexOfFirst {
                     it.item.id == program.item.id &&
@@ -1401,10 +1534,15 @@ class PlaybackViewModel
                         it.end == program.end
                 }
             if (exactIndex >= 0) {
-                programs.getOrNull(exactIndex + 1)?.let { return it }
+                val nextPrograms = programs.drop(exactIndex + 1)
+                nextPrograms
+                    .firstOrNull { it.item.type != BaseItemKind.EPISODE || it.item.id !in avoidedEpisodeIds }
+                    ?.let { return it }
+                return nextPrograms.firstOrNull()
             }
-            return programs.firstOrNull { it.start.isAfter(program.start) }
-                ?: programs.firstOrNull()
+            val nextPrograms = programs.filter { it.start.isAfter(program.start) }
+            return nextPrograms.firstOrNull { it.item.type != BaseItemKind.EPISODE || it.item.id !in avoidedEpisodeIds }
+                ?: nextPrograms.firstOrNull()
         }
 
         fun shouldAutoPlayNextUp(): Boolean =

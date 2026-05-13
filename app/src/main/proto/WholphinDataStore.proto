@@ -150,6 +150,7 @@ enum AppThemeColors {
   RAINBOW_GLASS = 41;
   PEACOCK = 42;
   ELECTRIC_NEON = 43;
+  ELECTRIC_INDIGO = 44;
 }
 
 enum EdgeStyle{

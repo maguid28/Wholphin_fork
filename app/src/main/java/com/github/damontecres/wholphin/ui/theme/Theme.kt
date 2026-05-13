@@ -16,6 +16,7 @@ import com.github.damontecres.wholphin.ui.theme.colors.CyberpunkThemeColors
 import com.github.damontecres.wholphin.ui.theme.colors.DefaultCustomThemeColorChoices
 import com.github.damontecres.wholphin.ui.theme.colors.DeepOceanThemeColors
 import com.github.damontecres.wholphin.ui.theme.colors.DragonfruitThemeColors
+import com.github.damontecres.wholphin.ui.theme.colors.ElectricIndigoThemeColors
 import com.github.damontecres.wholphin.ui.theme.colors.ElectricNeonThemeColors
 import com.github.damontecres.wholphin.ui.theme.colors.ElectricVioletThemeColors
 import com.github.damontecres.wholphin.ui.theme.colors.EmberThemeColors
@@ -54,7 +55,7 @@ import com.github.damontecres.wholphin.ui.theme.colors.VolcanicTealThemeColors
 import com.github.damontecres.wholphin.ui.theme.colors.buildCustomThemeColors
 
 val LocalTheme =
-    compositionLocalOf<AppThemeColors> { AppThemeColors.ELECTRIC_NEON }
+    compositionLocalOf<AppThemeColors> { AppThemeColors.ELECTRIC_INDIGO }
 
 val AppThemeColorOptions =
     listOf(
@@ -101,6 +102,7 @@ val AppThemeColorOptions =
         AppThemeColors.RAINBOW_GLASS,
         AppThemeColors.PEACOCK,
         AppThemeColors.ELECTRIC_NEON,
+        AppThemeColors.ELECTRIC_INDIGO,
         AppThemeColors.CUSTOM,
     )
 
@@ -163,6 +165,7 @@ fun getThemeColors(
         AppThemeColors.RAINBOW_GLASS -> RainbowGlassThemeColors
         AppThemeColors.PEACOCK -> PeacockThemeColors
         AppThemeColors.ELECTRIC_NEON -> ElectricNeonThemeColors
+        AppThemeColors.ELECTRIC_INDIGO -> ElectricIndigoThemeColors
         AppThemeColors.CUSTOM -> buildCustomThemeColors(customThemeColorChoices)
         AppThemeColors.UNRECOGNIZED -> PurpleThemeColors
     }
@@ -170,7 +173,7 @@ fun getThemeColors(
 @Composable
 fun WholphinTheme(
     darkTheme: Boolean = true,
-    appThemeColors: AppThemeColors = AppThemeColors.ELECTRIC_NEON,
+    appThemeColors: AppThemeColors = AppThemeColors.ELECTRIC_INDIGO,
     customThemeColorChoices: CustomThemeColorChoices = DefaultCustomThemeColorChoices,
     content: @Composable () -> Unit,
 ) {

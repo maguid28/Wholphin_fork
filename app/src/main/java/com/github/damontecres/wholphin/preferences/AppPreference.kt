@@ -483,16 +483,16 @@ sealed interface AppPreference<Pref, T> {
         val ThemeColors =
             AppChoicePreference<AppPreferences, AppThemeColors>(
                 title = R.string.app_theme,
-                defaultValue = AppThemeColors.ELECTRIC_NEON,
+                defaultValue = AppThemeColors.ELECTRIC_INDIGO,
                 getter = { it.interfacePreferences.appThemeColors },
                 setter = { prefs, value ->
                     prefs.updateInterfacePreferences { appThemeColors = value }
                 },
                 displayValues = R.array.app_theme_colors,
-                indexToValue = { AppThemeColorOptions.getOrElse(it) { AppThemeColors.ELECTRIC_NEON } },
+                indexToValue = { AppThemeColorOptions.getOrElse(it) { AppThemeColors.ELECTRIC_INDIGO } },
                 valueToIndex = {
                     AppThemeColorOptions.indexOf(it).takeIf { index -> index >= 0 }
-                        ?: AppThemeColorOptions.indexOf(AppThemeColors.ELECTRIC_NEON)
+                        ?: AppThemeColorOptions.indexOf(AppThemeColors.ELECTRIC_INDIGO)
                 },
             )
 

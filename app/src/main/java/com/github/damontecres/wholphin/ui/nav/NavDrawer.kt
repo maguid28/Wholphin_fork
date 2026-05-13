@@ -390,11 +390,13 @@ fun NavDrawer(
     val focusRequester = remember { FocusRequester() }
     var previewFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
     var activeDrawerFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
+    var enteringContent by remember { mutableStateOf(false) }
+    val retainOpenForPreview = keepOpenOnFocusNavigation && !enteringContent
     val restorePreviewFocus = {
         previewFocusRequester?.tryRequestFocus("nav_drawer_preview") == true
     }
     val retainPreviewFocus: (FocusRequester) -> Boolean = retain@{
-        if (!drawerState.isOpen || activeDrawerFocusRequester !== it) {
+        if (enteringContent || !drawerState.isOpen || activeDrawerFocusRequester !== it) {
             return@retain false
         }
         previewFocusRequester = it
@@ -403,11 +405,12 @@ fun NavDrawer(
     }
     val updatePreviewFocus: (FocusRequester) -> Unit = {
         activeDrawerFocusRequester = it
-        if (keepOpenOnFocusNavigation && drawerState.isOpen) {
+        if (retainOpenForPreview && drawerState.isOpen) {
             previewFocusRequester = it
         }
     }
     val closeForManualNavigation = {
+        enteringContent = false
         previewFocusRequester = null
         activeDrawerFocusRequester = null
         onManualNavigation()
@@ -425,12 +428,22 @@ fun NavDrawer(
             }
     }
     val enterPreviewedContent = {
-        closeForManualNavigation()
-        scope.launch {
-            repeat(5) {
-                delay(50)
-                if (focusManager.moveFocus(FocusDirection.Right)) {
-                    return@launch
+        if (!enteringContent) {
+            enteringContent = true
+            previewFocusRequester = null
+            activeDrawerFocusRequester = null
+            onManualNavigation()
+            drawerState.setValue(DrawerValue.Closed)
+            scope.launch {
+                try {
+                    repeat(20) {
+                        delay(50)
+                        if (focusManager.moveFocus(FocusDirection.Right)) {
+                            return@launch
+                        }
+                    }
+                } finally {
+                    enteringContent = false
                 }
             }
         }
@@ -455,7 +468,7 @@ fun NavDrawer(
     // A negative index is a built-in page, >=0 is a library
     val selectedIndex by viewModel.selectedIndex.observeAsState(-1)
     val attachSelectedFocusRequester =
-        !keepOpenOnFocusNavigation ||
+        !retainOpenForPreview ||
             !drawerState.isOpen ||
             previewFocusRequester == null
     BackHandler(enabled = moreExpanded && drawerState.currentValue == DrawerValue.Open) {
@@ -487,7 +500,7 @@ fun NavDrawer(
                     restartIdleCloseTimer()
                 }
                 if (
-                    keepOpenOnFocusNavigation &&
+                    retainOpenForPreview &&
                     drawerState.isOpen &&
                     it.type == KeyEventType.KeyDown &&
                     it.key == Key.DirectionRight
@@ -497,9 +510,9 @@ fun NavDrawer(
                 } else {
                     false
                 }
-            },
+        },
         drawerState = drawerState,
-        retainOpenOnFocusLoss = keepOpenOnFocusNavigation,
+        retainOpenOnFocusLoss = retainOpenForPreview,
         drawerContent = { drawerValue ->
             val isOpen = drawerValue.isOpen
             val spacedBy = 2.dp
@@ -759,6 +772,7 @@ fun NavDrawer(
                                 },
                                 onFocused = updatePreviewFocus,
                                 onFocusNavigation = retainPreviewFocus,
+                                autoNavigateOnFocus = false,
                                 onManualNavigation = closeForManualNavigation,
                                 modifier = Modifier,
                             )
@@ -779,7 +793,7 @@ fun NavDrawer(
                         .offset { offset }
                         .padding(start = closedDrawerWidth + 8.dp, end = 16.dp)
                         .ifElse(
-                            keepOpenOnFocusNavigation && drawerState.isOpen,
+                            retainOpenForPreview && drawerState.isOpen,
                             Modifier
                                 .focusProperties {
                                     canFocus = false
@@ -856,6 +870,7 @@ fun NavigationDrawerScope.IconNavItem(
     drawerOpen: Boolean,
     modifier: Modifier = Modifier,
     subtext: String? = null,
+    autoNavigateOnFocus: Boolean = true,
     onAutoNavigate: (() -> Unit)? = null,
     onFocused: (FocusRequester) -> Unit = {},
     onFocusNavigation: (FocusRequester) -> Boolean = { true },
@@ -871,8 +886,8 @@ fun NavigationDrawerScope.IconNavItem(
             onFocused(itemFocusRequester)
         }
     }
-    LaunchedEffect(focused, selected, drawerOpen) {
-        if (drawerOpen && focused && !selected) {
+    LaunchedEffect(focused, selected, drawerOpen, autoNavigateOnFocus) {
+        if (autoNavigateOnFocus && drawerOpen && focused && !selected) {
             delay(NavDrawerFocusNavigationDelayMillis)
             if (onFocusNavigation(itemFocusRequester)) {
                 currentOnAutoNavigate()

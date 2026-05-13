@@ -13,6 +13,7 @@ import com.github.damontecres.wholphin.data.AppDatabase
 import com.github.damontecres.wholphin.data.ItemPlaybackDao
 import com.github.damontecres.wholphin.data.JellyfinServerDao
 import com.github.damontecres.wholphin.data.LibraryDisplayInfoDao
+import com.github.damontecres.wholphin.data.LibraryTvWatchedEpisodeDao
 import com.github.damontecres.wholphin.data.Migrations
 import com.github.damontecres.wholphin.data.PlaybackEffectDao
 import com.github.damontecres.wholphin.data.PlaybackLanguageChoiceDao
@@ -73,6 +74,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun playbackEffectDao(db: AppDatabase): PlaybackEffectDao = db.playbackEffectDao()
+
+    @Provides
+    @Singleton
+    fun libraryTvWatchedEpisodeDao(db: AppDatabase): LibraryTvWatchedEpisodeDao = db.libraryTvWatchedEpisodeDao()
 
     @Provides
     @Singleton

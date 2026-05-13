@@ -183,6 +183,7 @@ fun sliderActiveColor(focused: Boolean): Color {
         AppThemeColors.RAINBOW_GLASS,
         AppThemeColors.PEACOCK,
         AppThemeColors.ELECTRIC_NEON,
+        AppThemeColors.ELECTRIC_INDIGO,
         AppThemeColors.CUSTOM,
         -> {
             MaterialTheme.colorScheme.border
@@ -263,6 +264,7 @@ fun sliderInactiveColor(focused: Boolean): Color {
         AppThemeColors.RAINBOW_GLASS,
         AppThemeColors.PEACOCK,
         AppThemeColors.ELECTRIC_NEON,
+        AppThemeColors.ELECTRIC_INDIGO,
         AppThemeColors.CUSTOM,
         -> {
             MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .66f)

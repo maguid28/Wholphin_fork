@@ -78,6 +78,7 @@ fun WatchedIconBackground(): Color =
         AppThemeColors.RAINBOW_GLASS,
         AppThemeColors.PEACOCK,
         AppThemeColors.ELECTRIC_NEON,
+        AppThemeColors.ELECTRIC_INDIGO,
         AppThemeColors.CUSTOM,
         -> MaterialTheme.colorScheme.border.copy(alpha = 1f)
 
@@ -131,6 +132,7 @@ fun WatchedIconColor(): Color =
         AppThemeColors.RAINBOW_GLASS,
         AppThemeColors.PEACOCK,
         AppThemeColors.ELECTRIC_NEON,
+        AppThemeColors.ELECTRIC_INDIGO,
         AppThemeColors.CUSTOM,
         -> Color.White // MaterialTheme.colorScheme.onSurface
     }

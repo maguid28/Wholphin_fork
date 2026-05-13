@@ -626,6 +626,7 @@
     <string name="rainbow_glass">Rainbow Glass</string>
     <string name="peacock">Peacock</string>
     <string name="electric_neon">Electric Neon</string>
+    <string name="electric_indigo">Electric Indigo</string>
     <string name="custom">Custom</string>
     <string name="custom_primary_colour">Custom primary colour</string>
     <string name="custom_secondary_colour">Custom secondary colour</string>
@@ -772,6 +773,7 @@
         <item>@string/rainbow_glass</item>
         <item>@string/peacock</item>
         <item>@string/electric_neon</item>
+        <item>@string/electric_indigo</item>
         <item>@string/custom</item>
     </string-array>
 
