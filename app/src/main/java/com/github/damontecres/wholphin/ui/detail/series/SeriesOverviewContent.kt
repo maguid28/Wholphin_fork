@@ -119,10 +119,16 @@ fun SeriesOverviewContent(
 
     val seasonStr = stringResource(R.string.tv_season)
     val tabs =
-        seasons.map { season ->
-            season?.name
+        seasons.mapIndexed { index, season ->
+            season?.name?.takeUnless { it.isBlank() }
                 ?: season?.data?.indexNumber?.let { "$seasonStr $it" }
-                ?: ""
+                ?: "$seasonStr ${index + 1}"
+        }
+    val tabKeys =
+        seasons.mapIndexed { index, season ->
+            season?.id?.toString()
+                ?: season?.data?.indexNumber?.let { "season:$it" }
+                ?: "season:$index"
         }
     val focusRequesters = remember(seasons) { List(seasons.size) { FocusRequester() } }
 
@@ -162,6 +168,7 @@ fun SeriesOverviewContent(
                 TabRow(
                     selectedTabIndex = selectedTabIndex,
                     tabs = tabs,
+                    tabKeys = tabKeys,
                     onClick =
                         remember {
                             {

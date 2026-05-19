@@ -82,6 +82,7 @@ fun TabRow(
     val currentFocusRequesters by rememberUpdatedState(focusRequesters)
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnMove by rememberUpdatedState(onMove)
+    val lazyItemKeys = remember(tabs, tabKeys) { tabRowItemKeys(tabs, tabKeys) }
 
     LazyRow(
         state = state,
@@ -111,7 +112,7 @@ fun TabRow(
     ) {
         itemsIndexed(
             items = tabs,
-            key = { index, tabTitle -> tabKeys.getOrNull(index) ?: "$index:$tabTitle" },
+            key = { index, _ -> lazyItemKeys[index] },
         ) { index, tabTitle ->
             val interactionSource = remember { MutableInteractionSource() }
             val onTabClick =
@@ -158,6 +159,27 @@ fun TabRow(
         }
     }
 }
+
+internal fun tabRowItemKeys(
+    tabs: List<String>,
+    tabKeys: List<String>,
+): List<String> =
+    buildList {
+        val usedKeys = mutableSetOf<String>()
+        tabs.forEachIndexed { index, tabTitle ->
+            val baseKey =
+                tabKeys.getOrNull(index)?.takeUnless { it.isBlank() }
+                    ?: tabTitle.takeUnless { it.isBlank() }
+                    ?: "tab:$index"
+            var key = baseKey
+            var suffix = 0
+            while (!usedKeys.add(key)) {
+                key = "$index:$suffix:$baseKey"
+                suffix += 1
+            }
+            add(key)
+        }
+    }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
