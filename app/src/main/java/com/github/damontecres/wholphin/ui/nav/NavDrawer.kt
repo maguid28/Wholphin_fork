@@ -519,7 +519,6 @@ fun NavDrawer(
                     restartIdleCloseTimer()
                 }
                 if (
-                    retainOpenForPreview &&
                     drawerState.isOpen &&
                     it.type == KeyEventType.KeyDown &&
                     it.key == Key.DirectionRight
@@ -532,6 +531,12 @@ fun NavDrawer(
         },
         drawerState = drawerState,
         retainOpenOnFocusLoss = retainOpenForPreview,
+        drawerEntryFocusRequester =
+            if (attachSelectedFocusRequester) {
+                focusRequester
+            } else {
+                previewFocusRequester
+            },
         drawerContent = { drawerValue ->
             val isOpen = drawerValue.isOpen
             val spacedBy = 2.dp
@@ -828,7 +833,7 @@ fun NavDrawer(
             ) {
                 content(
                     closeForHomeBanner,
-                    !retainOpenForPreview || !drawerState.isOpen,
+                    !drawerState.isOpen,
                 )
             }
             if (preferences.appPreferences.interfacePreferences.showClock) {

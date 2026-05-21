@@ -37,11 +37,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.layout
@@ -56,6 +58,7 @@ import androidx.tv.material3.NavigationDrawerItemColors
 import androidx.tv.material3.NavigationDrawerItemDefaults
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.rememberDrawerState
+import com.github.damontecres.wholphin.ui.tryRequestFocus
 
 /**
  * This is a re-implementation of [androidx.tv.material3.ModalNavigationDrawer].
@@ -68,6 +71,7 @@ fun ModalNavigationDrawer(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = rememberDrawerState(DrawerValue.Closed),
     retainOpenOnFocusLoss: Boolean = false,
+    drawerEntryFocusRequester: FocusRequester? = null,
     content: @Composable () -> Unit,
 ) {
     Box(modifier = modifier) {
@@ -78,6 +82,7 @@ fun ModalNavigationDrawer(
                     .padding(start = DrawerStartInset),
             drawerState = drawerState,
             retainOpenOnFocusLoss = retainOpenOnFocusLoss,
+            drawerEntryFocusRequester = drawerEntryFocusRequester,
             content = drawerContent,
         )
 
@@ -90,6 +95,7 @@ private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
     retainOpenOnFocusLoss: Boolean = false,
+    drawerEntryFocusRequester: FocusRequester? = null,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
     // indicates that the drawer has been set to its initial state and has grabbed focus if
@@ -97,13 +103,20 @@ private fun DrawerSheet(
     var initializationComplete: Boolean by remember { mutableStateOf(false) }
     var focusState by remember { mutableStateOf<FocusState?>(null) }
     val focusRequester = remember { FocusRequester() }
+    val currentDrawerEntryFocusRequester by rememberUpdatedState(drawerEntryFocusRequester)
+
+    fun restoreDrawerEntryFocus(): Boolean =
+        currentDrawerEntryFocusRequester?.tryRequestFocus("nav_drawer_entry") == true
+
     LaunchedEffect(drawerState.currentValue, retainOpenOnFocusLoss, initializationComplete) {
         if (!initializationComplete) {
             initializationComplete = true
         }
         if (!retainOpenOnFocusLoss && drawerState.currentValue == DrawerValue.Open && focusState?.hasFocus != true) {
             // used to grab focus if the drawer state is set to Open on start or retained during focus navigation.
-            focusRequester.requestFocus()
+            if (!restoreDrawerEntryFocus()) {
+                focusRequester.requestFocus()
+            }
         }
     }
     LaunchedEffect(retainOpenOnFocusLoss, focusState?.hasFocus, initializationComplete) {
@@ -140,6 +153,13 @@ private fun DrawerSheet(
                     }
                 }
             }.focusGroup()
+            .focusProperties {
+                onEnter = {
+                    if (!restoreDrawerEntryFocus()) {
+                        FocusRequester.Default.tryRequestFocus("nav_drawer_default_entry")
+                    }
+                }
+            }
 
     Box(modifier = internalModifier) {
         NavigationDrawerScopeImpl(drawerState.currentValue == DrawerValue.Open).apply {

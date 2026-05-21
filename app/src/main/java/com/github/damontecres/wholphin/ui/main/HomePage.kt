@@ -371,6 +371,12 @@ fun HomePageContent(
     }
     var firstFocused by remember { mutableStateOf(false) }
 
+    LaunchedEffect(takeFocus) {
+        if (!takeFocus) {
+            firstFocused = false
+        }
+    }
+
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
     val focusedPositionJob = remember { arrayOfNulls<Job>(1) }
