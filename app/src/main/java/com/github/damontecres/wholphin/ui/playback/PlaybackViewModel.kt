@@ -1359,7 +1359,12 @@ class PlaybackViewModel
                 ensureCurrentLibraryTvChannels()
                     .firstOrNull { it.key == currentLibraryTvChannelKey }
                     ?: return
-            val avoidedEpisodeIds = currentLibraryTvAvoidedEpisodeIds()
+            val currentEpisodeId =
+                currentLibraryTvProgram
+                    ?.item
+                    ?.takeIf { it.type == BaseItemKind.EPISODE }
+                    ?.id
+            val avoidedEpisodeIds = currentLibraryTvAvoidedEpisodeIds() + listOfNotNull(currentEpisodeId)
             val nextProgram =
                 currentLibraryTvProgram
                     ?.let { currentProgram -> channel.programAfter(currentProgram, avoidedEpisodeIds) }

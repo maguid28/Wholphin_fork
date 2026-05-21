@@ -150,6 +150,7 @@ private const val LibraryTvMaxFallbackSeriesNetworkLookups = 200
 private const val LibraryTvMaxSupplementalSeries = 48
 private const val LibraryTvSupplementalEpisodesPerShow = 10
 private const val LibraryTvSupplementalFetchConcurrency = 6
+private const val LibraryTvMinEpisodesPerShowInCycle = 4
 private const val LibraryTvMaxChannels = 96
 private const val LibraryTvMaxEpisodesPerShowInCycle = 24
 private const val LibraryTvMaxShortEpisodeBlock = 2
@@ -386,19 +387,38 @@ class LibraryTvGuideService
 
                     val tvLibraryIds = tvLibraries.ifEmpty { folderLibraries }.mapNotNull { it.id }
                     val movieLibraryIds = movieLibraries.ifEmpty { folderLibraries }.mapNotNull { it.id }
-                    val (episodes, movies) =
+                    val (episodes, movies, series) =
                         coroutineScope {
                             val episodesDeferred = async { fetchLibraryEpisodes(user.id, tvLibraryIds) }
                             val moviesDeferred = async { fetchLibraryMovies(user.id, movieLibraryIds) }
-                            episodesDeferred.await() to moviesDeferred.await()
+                            val seriesDeferred = async { fetchLibrarySeries(user.id, tvLibraryIds) }
+                            Triple(episodesDeferred.await(), moviesDeferred.await(), seriesDeferred.await())
                         }
-                    val seriesNetworkNames =
+                    val sampledSeriesNetworkNames = episodes.inferredSeriesNetworkNames()
+                    val fetchedSeriesNetworkNames =
+                        series
+                            .associate { it.id to it.networkNames() }
+                            .filterValues { it.isNotEmpty() }
+                    val fallbackSeriesNetworkNames =
                         fetchFallbackSeriesNetworkNames(
                             userId = user.id,
                             episodes = episodes,
                             maxLookups = LibraryTvMaxQuickFallbackSeriesNetworkLookups,
                         )
-                    Triple(episodes, movies, seriesNetworkNames)
+                    val seriesNetworkNames =
+                        mergeSeriesNetworkNames(
+                            sampledSeriesNetworkNames,
+                            fetchedSeriesNetworkNames,
+                            fallbackSeriesNetworkNames,
+                        )
+                    val supplementalEpisodes =
+                        fetchSupplementalNetworkEpisodes(
+                            series = series,
+                            existingEpisodes = episodes,
+                            seriesNetworkNames = seriesNetworkNames,
+                            windowStart = windowStart,
+                        )
+                    Triple((episodes + supplementalEpisodes).distinctBy { it.id }, movies, seriesNetworkNames)
                 }
             val guide =
                 withContext(defaultDispatcher) {
@@ -453,6 +473,47 @@ class LibraryTvGuideService
                                 }
                             }
                             libraryEpisodes
+                        }
+                    }.awaitAll()
+                    .flatten()
+                    .distinctBy { it.id }
+            }
+
+        private suspend fun fetchLibrarySeries(
+            userId: UUID,
+            libraryIds: List<UUID>,
+        ): List<BaseItem> =
+            coroutineScope {
+                libraryIds
+                    .map { libraryId ->
+                        async {
+                            val librarySeries = mutableListOf<BaseItem>()
+                            repeat(LibraryTvMaxSeriesPages) { page ->
+                                val fetched =
+                                    GetItemsRequestHandler
+                                        .execute(
+                                            api,
+                                            GetItemsRequest(
+                                                userId = userId,
+                                                parentId = libraryId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(BaseItemKind.SERIES),
+                                                fields = LibraryTvItemFields,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                sortOrder = listOf(SortOrder.ASCENDING),
+                                                startIndex = page * LibraryTvSeriesPageSize,
+                                                limit = LibraryTvSeriesPageSize,
+                                                enableUserData = false,
+                                                enableTotalRecordCount = false,
+                                                enableImages = false,
+                                            ),
+                                        ).toBaseItems(api, useSeriesForPrimary = false)
+                                librarySeries.addAll(fetched)
+                                if (fetched.size < LibraryTvSeriesPageSize) {
+                                    return@async librarySeries
+                                }
+                            }
+                            librarySeries
                         }
                     }.awaitAll()
                     .flatten()
@@ -532,6 +593,51 @@ class LibraryTvGuideService
                     .associate { it.id to it.networkNames() }
             }
         }
+
+        private suspend fun fetchSupplementalNetworkEpisodes(
+            series: List<BaseItem>,
+            existingEpisodes: List<BaseItem>,
+            seriesNetworkNames: Map<UUID, List<String>>,
+            windowStart: Instant,
+        ): List<BaseItem> {
+            val candidateSeriesIds =
+                supplementalLibraryTvSeriesIds(
+                    series = series,
+                    existingEpisodes = existingEpisodes,
+                    seriesNetworkNames = seriesNetworkNames,
+                    windowStart = windowStart,
+                    maxCandidates = LibraryTvMaxSupplementalSeries,
+                )
+            if (candidateSeriesIds.isEmpty()) return emptyList()
+
+            val episodes = mutableListOf<BaseItem>()
+            candidateSeriesIds.chunked(LibraryTvSupplementalFetchConcurrency).forEach { batch ->
+                episodes +=
+                    coroutineScope {
+                        batch
+                            .map { seriesId ->
+                                async {
+                                    fetchSeriesEpisodes(seriesId)
+                                }
+                            }.awaitAll()
+                            .flatten()
+                    }
+            }
+            return episodes.distinctBy { it.id }
+        }
+
+        private suspend fun fetchSeriesEpisodes(seriesId: UUID): List<BaseItem> =
+            GetEpisodesRequestHandler
+                .execute(
+                    api,
+                    GetEpisodesRequest(
+                        seriesId = seriesId,
+                        fields = LibraryTvItemFields,
+                        sortBy = ItemSortBy.INDEX_NUMBER,
+                        limit = LibraryTvSupplementalEpisodesPerShow,
+                    ),
+                ).toBaseItems(api, useSeriesForPrimary = true)
+                .filter { it.playable }
 
         private fun buildGuideState(
             windowStart: Instant,
@@ -887,64 +993,24 @@ class LibraryTvViewModel
             seriesNetworkNames: Map<UUID, List<String>>,
             windowStart: Instant,
         ): List<BaseItem> {
-            if (series.isEmpty()) return emptyList()
-
-            val matcher = LibraryTvNetworkMatcher()
-            val existingSeriesIdsByNetwork =
-                existingEpisodes
-                    .mapNotNull { episode ->
-                        val network =
-                            matcher.networkFor(
-                                episode.networkNames() +
-                                    episode.data.seriesId
-                                        ?.let { seriesNetworkNames[it] }
-                                        .orEmpty(),
-                            ) ?: return@mapNotNull null
-                        val seriesId = episode.data.seriesId ?: return@mapNotNull null
-                        network.key to seriesId
-                    }.groupBy({ it.first }, { it.second })
-                    .mapValues { (_, ids) -> ids.toSet() }
-            val scheduleDay = windowStart.atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
-            val candidates =
-                series
-                    .mapNotNull { seriesItem ->
-                        val network =
-                            matcher.networkFor(
-                                seriesItem.networkNames() +
-                                    seriesNetworkNames[seriesItem.id].orEmpty(),
-                            ) ?: return@mapNotNull null
-                        network to seriesItem
-                    }.groupBy({ it.first }, { it.second })
-                    .toList()
-                    .sortedWith(
-                        compareBy<Pair<LibraryTvNetwork, List<BaseItem>>> { it.first.sortIndex }
-                            .thenBy { it.first.name },
-                    ).flatMap { (network, networkSeries) ->
-                        val existingSeriesIds = existingSeriesIdsByNetwork[network.key].orEmpty()
-                        val needed = (LibraryTvTargetShowsPerChannel - existingSeriesIds.size).coerceAtLeast(0)
-                        if (needed == 0) {
-                            emptyList()
-                        } else {
-                            networkSeries
-                                .filterNot { it.id in existingSeriesIds }
-                                .sortedWith(
-                                    compareBy<BaseItem> {
-                                        stableSortKey("${network.key}:${it.id}:$scheduleDay")
-                                    }.thenBy { it.sortName },
-                                ).take(needed)
-                        }
-                    }.take(LibraryTvMaxSupplementalSeries)
-
-            if (candidates.isEmpty()) return emptyList()
+            val candidateSeriesIds =
+                supplementalLibraryTvSeriesIds(
+                    series = series,
+                    existingEpisodes = existingEpisodes,
+                    seriesNetworkNames = seriesNetworkNames,
+                    windowStart = windowStart,
+                    maxCandidates = LibraryTvMaxSupplementalSeries,
+                )
+            if (candidateSeriesIds.isEmpty()) return emptyList()
 
             val episodes = mutableListOf<BaseItem>()
-            candidates.chunked(LibraryTvSupplementalFetchConcurrency).forEach { batch ->
+            candidateSeriesIds.chunked(LibraryTvSupplementalFetchConcurrency).forEach { batch ->
                 episodes +=
                     coroutineScope {
                         batch
-                            .map { seriesItem ->
+                            .map { seriesId ->
                                 async {
-                                    fetchSeriesEpisodes(seriesItem.id)
+                                    fetchSeriesEpisodes(seriesId)
                                 }
                             }.awaitAll()
                             .flatten()
@@ -2109,7 +2175,7 @@ private fun BaseItem.networkNames(): List<String> =
             ?.let(::addAll)
     }.distinctBy { it.normalizedNetworkKey() }
 
-private fun List<BaseItem>.buildNaturalScheduleCycle(
+internal fun List<BaseItem>.buildNaturalScheduleCycle(
     channelKey: String,
     windowStart: Instant,
     avoidedEpisodeIds: Set<UUID> = emptySet(),
@@ -2196,7 +2262,106 @@ private fun List<BaseItem>.preferredLibraryTvItems(avoidedEpisodeIds: Set<UUID>)
         filterNot {
             it.type == BaseItemKind.EPISODE && it.id in avoidedEpisodeIds
         }
-    return preferred.ifEmpty { this }
+    return preferred.takeIf { it.size > 1 } ?: this
+}
+
+private data class LibraryTvSupplementalSeriesCandidate(
+    val seriesId: UUID,
+    val networkKey: String,
+    val sortName: String,
+    val priority: Int,
+)
+
+internal fun supplementalLibraryTvSeriesIds(
+    series: List<BaseItem>,
+    existingEpisodes: List<BaseItem>,
+    seriesNetworkNames: Map<UUID, List<String>>,
+    windowStart: Instant,
+    maxCandidates: Int,
+): List<UUID> {
+    val matcher = LibraryTvNetworkMatcher()
+    val scheduleDay = windowStart.atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+    val existingEpisodesBySeries =
+        existingEpisodes
+            .mapNotNull { episode -> episode.data.seriesId?.let { it to episode } }
+            .groupBy({ it.first }, { it.second })
+    val existingSeriesIdsByNetwork =
+        existingEpisodesBySeries
+            .mapNotNull { (seriesId, episodes) ->
+                val network =
+                    matcher.networkFor(
+                        episodes.flatMap { it.networkNames() } +
+                            seriesNetworkNames[seriesId].orEmpty(),
+                    ) ?: return@mapNotNull null
+                network.key to seriesId
+            }.groupBy({ it.first }, { it.second })
+            .mapValues { (_, ids) -> ids.toSet() }
+
+    val underrepresentedExistingSeries =
+        existingEpisodesBySeries
+            .mapNotNull { (seriesId, episodes) ->
+                if (episodes.size >= LibraryTvMinEpisodesPerShowInCycle) {
+                    return@mapNotNull null
+                }
+                val network =
+                    matcher.networkFor(
+                        episodes.flatMap { it.networkNames() } +
+                            seriesNetworkNames[seriesId].orEmpty(),
+                    ) ?: return@mapNotNull null
+                LibraryTvSupplementalSeriesCandidate(
+                    seriesId = seriesId,
+                    networkKey = network.key,
+                    sortName = episodes.firstOrNull()?.sortName.orEmpty(),
+                    priority = 0,
+                )
+            }
+
+    val newSeries =
+        series
+            .mapNotNull { seriesItem ->
+                val network =
+                    matcher.networkFor(
+                        seriesItem.networkNames() +
+                            seriesNetworkNames[seriesItem.id].orEmpty(),
+                    ) ?: return@mapNotNull null
+                network to seriesItem
+            }.groupBy({ it.first }, { it.second })
+            .toList()
+            .sortedWith(
+                compareBy<Pair<LibraryTvNetwork, List<BaseItem>>> { it.first.sortIndex }
+                    .thenBy { it.first.name },
+            ).flatMap { (network, networkSeries) ->
+                val existingSeriesIds = existingSeriesIdsByNetwork[network.key].orEmpty()
+                val needed = (LibraryTvTargetShowsPerChannel - existingSeriesIds.size).coerceAtLeast(0)
+                if (needed == 0) {
+                    emptyList()
+                } else {
+                    networkSeries
+                        .filterNot { it.id in existingSeriesIds }
+                        .sortedWith(
+                            compareBy<BaseItem> {
+                                stableSortKey("${network.key}:${it.id}:$scheduleDay")
+                            }.thenBy { it.sortName },
+                        ).take(needed)
+                        .map { seriesItem ->
+                            LibraryTvSupplementalSeriesCandidate(
+                                seriesId = seriesItem.id,
+                                networkKey = network.key,
+                                sortName = seriesItem.sortName,
+                                priority = 1,
+                            )
+                        }
+                }
+            }
+
+    return (underrepresentedExistingSeries + newSeries)
+        .distinctBy { it.seriesId }
+        .sortedWith(
+            compareBy<LibraryTvSupplementalSeriesCandidate> { it.priority }
+                .thenBy { stableSortKey("${it.networkKey}:${it.seriesId}:$scheduleDay") }
+                .thenBy { it.sortName },
+        ).take(maxCandidates)
+        .map { it.seriesId }
 }
 
 private data class LibraryTvShowQueue(
@@ -2240,6 +2405,19 @@ private fun BaseItem.seriesKey(): String =
             ?.normalizedNetworkKey()
             ?.takeIf { it.isNotBlank() }
         ?: id.toString()
+
+private fun List<BaseItem>.inferredSeriesNetworkNames(): Map<UUID, List<String>> =
+    mapNotNull { item ->
+        item.data.seriesId?.let { seriesId -> seriesId to item.networkNames() }
+    }.filter { (_, names) -> names.isNotEmpty() }
+        .groupBy({ it.first }, { it.second })
+        .mapValues { (_, names) -> names.flatten().distinctBy { it.normalizedNetworkKey() } }
+
+private fun mergeSeriesNetworkNames(vararg maps: Map<UUID, List<String>>): Map<UUID, List<String>> =
+    maps
+        .flatMap { it.entries }
+        .groupBy({ it.key }, { it.value })
+        .mapValues { (_, names) -> names.flatten().distinctBy { it.normalizedNetworkKey() } }
 
 private fun String.splitNetworkNames(): List<String> =
     split(",", "/", ";")
