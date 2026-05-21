@@ -107,7 +107,7 @@ fun ApplicationContent(
                 onManualNavigation = { keepDrawerOpenForPreview = false },
                 onClearBackdrop = viewModel::clearBackdrop,
                 modifier = Modifier.fillMaxSize(),
-            ) { onHomeBannerShown ->
+            ) { onHomeBannerShown, takeHomeFocus ->
                 NavDisplay(
                     backStack = navigationManager.backStack,
                     onBack = { navigationManager.goBack() },
@@ -128,6 +128,7 @@ fun ApplicationContent(
                                     preferences = preferences,
                                     onClearBackdrop = viewModel::clearBackdrop,
                                     onHomeBannerShown = onHomeBannerShown,
+                                    takeHomeFocus = takeHomeFocus,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

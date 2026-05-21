@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -347,6 +348,17 @@ private val NavDrawerMainLineHeight = 16.sp
 private val NavDrawerSubTextSize = 11.sp
 private val NavDrawerSubLineHeight = 13.sp
 
+private suspend fun navigateAfterRetainingDrawerFocus(
+    itemFocusRequester: FocusRequester,
+    onFocusNavigation: (FocusRequester) -> Boolean,
+    onAutoNavigate: () -> Unit,
+) {
+    if (onFocusNavigation(itemFocusRequester)) {
+        withFrameNanos { }
+        onAutoNavigate()
+    }
+}
+
 /**
  * Display the left side navigation drawer with [DestinationContent] on the right
  */
@@ -368,18 +380,20 @@ fun NavDrawer(
             LocalView.current.findViewTreeViewModelStoreOwner()!!,
             key = "${server.id}_${user.id}", // Keyed to the server & user to ensure its reset when switching either
         ),
-    content: @Composable (onHomeBannerShown: () -> Unit) -> Unit = { onHomeBannerShown ->
-        DestinationContent(
-            destination = destination,
-            preferences = preferences,
-            onClearBackdrop = onClearBackdrop,
-            onHomeBannerShown = onHomeBannerShown,
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(start = CollapsedDrawerItemWidth + 8.dp, end = 16.dp),
-        )
-    },
+    content: @Composable (onHomeBannerShown: () -> Unit, takeHomeFocus: Boolean) -> Unit =
+        { onHomeBannerShown, takeHomeFocus ->
+            DestinationContent(
+                destination = destination,
+                preferences = preferences,
+                onClearBackdrop = onClearBackdrop,
+                onHomeBannerShown = onHomeBannerShown,
+                takeHomeFocus = takeHomeFocus,
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(start = CollapsedDrawerItemWidth + 8.dp, end = 16.dp),
+            )
+        },
 ) {
     LaunchedEffect(Unit) { viewModel.updateSelectedIndex() }
     val scope = rememberCoroutineScope()
@@ -415,6 +429,11 @@ fun NavDrawer(
         activeDrawerFocusRequester = null
         onManualNavigation()
         drawerState.setValue(DrawerValue.Closed)
+    }
+    val closeForHomeBanner = {
+        if (!retainOpenForPreview || !drawerState.isOpen) {
+            closeForManualNavigation()
+        }
     }
     val idleCloseJob = remember { arrayOfNulls<Job>(1) }
     fun restartIdleCloseTimer() {
@@ -807,7 +826,10 @@ fun NavDrawer(
                                 },
                         ),
             ) {
-                content(closeForManualNavigation)
+                content(
+                    closeForHomeBanner,
+                    !retainOpenForPreview || !drawerState.isOpen,
+                )
             }
             if (preferences.appPreferences.interfacePreferences.showClock) {
                 TimeDisplay()
@@ -889,9 +911,11 @@ fun NavigationDrawerScope.IconNavItem(
     LaunchedEffect(focused, selected, drawerOpen, autoNavigateOnFocus) {
         if (autoNavigateOnFocus && drawerOpen && focused && !selected) {
             delay(NavDrawerFocusNavigationDelayMillis)
-            if (onFocusNavigation(itemFocusRequester)) {
-                currentOnAutoNavigate()
-            }
+            navigateAfterRetainingDrawerFocus(
+                itemFocusRequester = itemFocusRequester,
+                onFocusNavigation = onFocusNavigation,
+                onAutoNavigate = currentOnAutoNavigate,
+            )
         }
     }
     NavigationDrawerItem(
@@ -998,9 +1022,11 @@ fun NavigationDrawerScope.NavItem(
     LaunchedEffect(focused, selected, drawerOpen, autoNavigateOnFocus) {
         if (autoNavigateOnFocus && drawerOpen && focused && !selected) {
             delay(NavDrawerFocusNavigationDelayMillis)
-            if (onFocusNavigation(itemFocusRequester)) {
-                currentOnAutoNavigate()
-            }
+            navigateAfterRetainingDrawerFocus(
+                itemFocusRequester = itemFocusRequester,
+                onFocusNavigation = onFocusNavigation,
+                onAutoNavigate = currentOnAutoNavigate,
+            )
         }
     }
     NavigationDrawerItem(

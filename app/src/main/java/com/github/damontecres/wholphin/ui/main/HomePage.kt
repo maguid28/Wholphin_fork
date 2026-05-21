@@ -146,6 +146,7 @@ fun HomePage(
     preferences: UserPreferences,
     modifier: Modifier = Modifier,
     onBannerShown: () -> Unit = {},
+    takeFocus: Boolean = true,
     viewModel: HomeViewModel = hiltViewModel(),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
 ) {
@@ -261,6 +262,7 @@ fun HomePage(
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 onBannerShown = onBannerShown,
                 modifier = modifier,
+                takeFocus = takeFocus,
             )
             overviewDialog?.let { info ->
                 ItemDetailsDialog(
@@ -350,7 +352,7 @@ fun HomePageContent(
     val currentOnBannerShown by rememberUpdatedState(onBannerShown)
     val coroutineScope = rememberCoroutineScope()
     fun showHomeBanner() {
-        if (bannerItemsAvailable) {
+        if (takeFocus && bannerItemsAvailable) {
             showBannerHero = true
             currentOnBannerShown()
         }
@@ -400,8 +402,8 @@ fun HomePageContent(
             }
         }
     }
-    LaunchedEffect(showBannerHero, mediaBannerItems) {
-        if (showBannerHero && mediaBannerItems.isNotEmpty()) {
+    LaunchedEffect(showBannerHero, mediaBannerItems, takeFocus) {
+        if (takeFocus && showBannerHero && mediaBannerItems.isNotEmpty()) {
             delay(50)
             bannerFocusRequester.tryRequestFocus("home_banner_hero")
         }
@@ -425,7 +427,7 @@ fun HomePageContent(
     val idleBannerJob = remember { arrayOfNulls<Job>(1) }
     fun restartIdleBannerTimer() {
         idleBannerJob[0]?.cancel()
-        if (bannerItemsAvailable) {
+        if (takeFocus && bannerItemsAvailable) {
             idleBannerJob[0] =
                 coroutineScope.launch {
                     delay(HomeBannerIdleDelayMillis)
@@ -433,7 +435,7 @@ fun HomePageContent(
                 }
         }
     }
-    LaunchedEffect(bannerItemsAvailable) {
+    LaunchedEffect(bannerItemsAvailable, takeFocus) {
         restartIdleBannerTimer()
     }
     DisposableEffect(Unit) {

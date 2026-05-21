@@ -63,6 +63,7 @@ fun DestinationContent(
     onClearBackdrop: () -> Unit,
     modifier: Modifier = Modifier,
     onHomeBannerShown: () -> Unit = {},
+    takeHomeFocus: Boolean = true,
 ) {
     if (destination.fullScreen) {
         LaunchedEffect(Unit) { onClearBackdrop.invoke() }
@@ -72,6 +73,7 @@ fun DestinationContent(
             HomePage(
                 preferences = preferences,
                 onBannerShown = onHomeBannerShown,
+                takeFocus = takeHomeFocus,
                 modifier = modifier,
             )
         }
