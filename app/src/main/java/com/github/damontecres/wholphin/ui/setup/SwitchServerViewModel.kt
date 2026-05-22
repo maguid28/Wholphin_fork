@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.ui.setup
 
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -19,17 +20,22 @@ import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.util.LoadingState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.HttpClientOptions
 import org.jellyfin.sdk.api.client.extensions.quickConnectApi
 import org.jellyfin.sdk.api.client.extensions.systemApi
+import org.jellyfin.sdk.discovery.RecommendedServerInfo
 import org.jellyfin.sdk.discovery.RecommendedServerInfoScore
 import org.jellyfin.sdk.discovery.RecommendedServerIssue
-import org.jellyfin.sdk.model.serializer.toUUID
+import org.jellyfin.sdk.model.api.ServerDiscoveryInfo
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
 import java.util.UUID
@@ -53,8 +59,11 @@ class SwitchServerViewModel
         val serverQuickConnect = MutableLiveData<Map<UUID, Boolean>>(mapOf())
 
         val discoveredServers = MutableLiveData<List<JellyfinServer>>(listOf())
+        val serverDiscoveryRunning = MutableLiveData(false)
 
         val addServerState = MutableLiveData<LoadingState>(LoadingState.Pending)
+
+        private var discoveryJob: Job? = null
 
         fun clearAddServerState() {
             addServerState.value = LoadingState.Pending
@@ -260,25 +269,199 @@ class SwitchServerViewModel
         }
 
         fun discoverServers() {
-            viewModelScope.launchIO {
-                jellyfin.discovery.discoverLocalServers().collect { server ->
-                    val newServerList =
-                        discoveredServers.value!!
-                            .toMutableList()
-                            .apply {
-                                add(
-                                    JellyfinServer(
-                                        server.id.toUUID(),
-                                        server.name,
-                                        server.address,
-                                        null,
-                                    ),
-                                )
+            discoveryJob?.cancel()
+            discoveredServers.value = listOf()
+            serverDiscoveryRunning.value = true
+            discoveryJob =
+                viewModelScope.launchIO {
+                    val multicastLock = acquireMulticastLock()
+                    try {
+                        jellyfin.discovery
+                            .discoverLocalServers(DISCOVERY_TIMEOUT_MS, DISCOVERY_MAX_SERVERS)
+                            .collect { discoveryInfo ->
+                                val server = resolveDiscoveredServer(discoveryInfo) ?: return@collect
+                                addDiscoveredServer(server)
                             }
-                    withContext(Dispatchers.Main) {
-                        discoveredServers.value = newServerList
+                    } catch (ex: CancellationException) {
+                        throw ex
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Error discovering local Jellyfin servers")
+                    } finally {
+                        multicastLock?.releaseIfHeld()
+                        serverDiscoveryRunning.setValueOnMain(false)
                     }
                 }
+        }
+
+        fun stopDiscoveringServers() {
+            discoveryJob?.cancel()
+            discoveryJob = null
+            serverDiscoveryRunning.value = false
+        }
+
+        private fun acquireMulticastLock(): WifiManager.MulticastLock? =
+            runCatching {
+                context.applicationContext
+                    .getSystemService(WifiManager::class.java)
+                    ?.createMulticastLock(MULTICAST_LOCK_TAG)
+                    ?.apply {
+                        setReferenceCounted(false)
+                        acquire()
+                    }
+            }.onFailure { ex ->
+                Timber.w(ex, "Unable to acquire multicast lock for server discovery")
+            }.getOrNull()
+
+        private fun WifiManager.MulticastLock.releaseIfHeld() {
+            runCatching {
+                if (isHeld) release()
+            }.onFailure { ex ->
+                Timber.w(ex, "Unable to release multicast lock for server discovery")
             }
+        }
+
+        private suspend fun resolveDiscoveredServer(discoveryInfo: ServerDiscoveryInfo): JellyfinServer? {
+            val candidates = discoveryCandidates(discoveryInfo)
+            val recommendedServer =
+                runCatching {
+                    jellyfin.discovery
+                        .getRecommendedServers(candidates)
+                        .sortedBy { it.score }
+                        .firstNotNullOfOrNull { server ->
+                            server
+                                .takeUnless { it.score == RecommendedServerInfoScore.BAD }
+                                ?.toJellyfinServerOrNull()
+                        }
+                }.onFailure { ex ->
+                    Timber.w(ex, "Unable to verify discovered server ${discoveryInfo.address}")
+                }.getOrNull()
+
+            return recommendedServer ?: discoveryInfo.toJellyfinServerOrNull(candidates.firstOrNull())
+        }
+
+        private fun discoveryCandidates(discoveryInfo: ServerDiscoveryInfo): List<String> {
+            val advertisedAddress = discoveryInfo.address.trim()
+            val advertisedUrl = advertisedAddress.toDiscoveryHttpUrlOrNull()
+            val endpointCandidate = discoveryInfo.endpointAddress?.toEndpointAddressCandidate(advertisedUrl)
+
+            return buildSet {
+                if (advertisedUrl?.host.isLocalOnlyDiscoveryHost()) {
+                    endpointCandidate?.let { add(it) }
+                }
+                if (advertisedAddress.isNotBlank()) add(advertisedAddress)
+                endpointCandidate?.let { add(it) }
+            }.flatMap { candidate ->
+                buildSet {
+                    add(candidate)
+                    addAll(jellyfin.discovery.getAddressCandidates(candidate))
+                }
+            }.distinct()
+        }
+
+        private fun RecommendedServerInfo.toJellyfinServerOrNull(): JellyfinServer? {
+            val serverInfo = systemInfo.getOrNull() ?: return null
+            val id = serverInfo.id?.toUUIDOrNull() ?: return null
+            if (serverInfo.startupWizardCompleted != true) return null
+
+            return JellyfinServer(
+                id = id,
+                name = serverInfo.serverName,
+                url = address,
+                version = serverInfo.version,
+            )
+        }
+
+        private fun ServerDiscoveryInfo.toJellyfinServerOrNull(url: String?): JellyfinServer? {
+            val serverId = id.toUUIDOrNull()
+            if (serverId == null) {
+                Timber.w("Ignoring discovered server with invalid id $id at $address")
+                return null
+            }
+            val serverUrl = url ?: address
+            if (serverUrl.isBlank()) return null
+
+            return JellyfinServer(
+                id = serverId,
+                name = name,
+                url = serverUrl,
+                version = null,
+            )
+        }
+
+        private fun String.toEndpointAddressCandidate(advertisedUrl: HttpUrl?): String? {
+            val endpointHost = toEndpointHostOrNull() ?: return null
+            return advertisedUrl
+                ?.newBuilder()
+                ?.hostOrNull(endpointHost)
+                ?.build()
+                ?.toString()
+                ?.trimEnd('/')
+                ?: buildDiscoveryUrl("http", endpointHost, JELLYFIN_HTTP_PORT)
+        }
+
+        private fun HttpUrl.Builder.hostOrNull(host: String): HttpUrl.Builder? =
+            runCatching { host(host) }.getOrNull()
+
+        private fun buildDiscoveryUrl(
+            scheme: String,
+            host: String,
+            port: Int,
+        ): String? =
+            runCatching {
+                HttpUrl
+                    .Builder()
+                    .scheme(scheme)
+                    .host(host)
+                    .port(port)
+                    .build()
+                    .toString()
+                    .trimEnd('/')
+            }.getOrNull()
+
+        private fun String.toEndpointHostOrNull(): String? =
+            toDiscoveryHttpUrlOrNull()?.host
+                ?: trim()
+                    .takeIf { it.isNotBlank() && "/" !in it }
+                    ?.substringBeforeLast(':')
+                    ?.takeIf { it.isNotBlank() }
+
+        private fun String.toDiscoveryHttpUrlOrNull(): HttpUrl? {
+            val value = trim()
+            if (value.isBlank()) return null
+            return value.toHttpUrlOrNull() ?: "http://$value".toHttpUrlOrNull()
+        }
+
+        private fun String?.isLocalOnlyDiscoveryHost(): Boolean =
+            this != null &&
+                (
+                    equals("localhost", ignoreCase = true) ||
+                        startsWith("127.") ||
+                        this == "0.0.0.0" ||
+                        this == "::" ||
+                        this == "::1" ||
+                        this == "0:0:0:0:0:0:0:0" ||
+                        this == "0:0:0:0:0:0:0:1"
+                )
+
+        private suspend fun addDiscoveredServer(server: JellyfinServer) {
+            withContext(Dispatchers.Main) {
+                val currentServers = discoveredServers.value.orEmpty()
+                if (
+                    currentServers.none {
+                        it.id == server.id || it.url.equals(server.url, ignoreCase = true)
+                    }
+                ) {
+                    discoveredServers.value =
+                        (currentServers + server)
+                            .sortedWith(compareBy<JellyfinServer> { it.name }.thenBy { it.url })
+                }
+            }
+        }
+
+        companion object {
+            private const val DISCOVERY_TIMEOUT_MS = 2_500
+            private const val DISCOVERY_MAX_SERVERS = 15
+            private const val JELLYFIN_HTTP_PORT = 8096
+            private const val MULTICAST_LOCK_TAG = "WholphinServerDiscovery"
         }
     }

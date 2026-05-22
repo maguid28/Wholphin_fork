@@ -208,6 +208,7 @@ fun SwitchServerContent(
             }
 
             val discoveredServers by viewModel.discoveredServers.observeAsState(listOf())
+            val discoveryRunning by viewModel.serverDiscoveryRunning.observeAsState(false)
 
             // Filter out duplicates within the discovered servers list (same URL appearing multiple times)
             val filteredDiscoveredServers =
@@ -237,6 +238,7 @@ fun SwitchServerContent(
                 onDismissRequest = {
                     showAddServer = false
                     showEnterAddress = false
+                    viewModel.stopDiscoveringServers()
                     viewModel.clearAddServerState()
                 },
                 properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -258,7 +260,7 @@ fun SwitchServerContent(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
 
-                        if (filteredDiscoveredServers.isEmpty() && discoveredServers.isEmpty()) {
+                        if (filteredDiscoveredServers.isEmpty() && discoveryRunning) {
                             Text(
                                 text = stringResource(R.string.searching),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -315,6 +317,7 @@ fun SwitchServerContent(
 
                         TextButton(
                             onClick = {
+                                viewModel.stopDiscoveringServers()
                                 showEnterAddress = true
                             },
                             modifier = Modifier.align(Alignment.CenterHorizontally),

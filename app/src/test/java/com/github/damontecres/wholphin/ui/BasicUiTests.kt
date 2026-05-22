@@ -35,6 +35,8 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -47,6 +49,7 @@ import org.jellyfin.sdk.discovery.RecommendedServerInfo
 import org.jellyfin.sdk.discovery.RecommendedServerInfoScore
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.PublicSystemInfo
+import org.jellyfin.sdk.model.api.ServerDiscoveryInfo
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -124,6 +127,8 @@ class BasicUiTests {
 
         every { jellyfin.createApi(any(), any(), any(), any(), any()) } returns api
         every { jellyfin.discovery } returns discovery
+        every { discovery.discoverLocalServers(any(), any()) } returns emptyFlow()
+        every { discovery.getAddressCandidates(any()) } answers { listOf(firstArg()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -256,5 +261,69 @@ class BasicUiTests {
         Assert.assertTrue(switchServerViewModel.addServerState.value is LoadingState.Error)
 
         composeTestRule.onNodeWithText("Server returned invalid response").assertIsDisplayed()
+    }
+
+    /**
+     * Tests that local discovery swaps unusable advertised hosts, such as localhost, for the
+     * reachable endpoint address before presenting the server.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun test_discovered_server_uses_endpoint_address() {
+        val serverId = UUID.randomUUID()
+        every { discovery.discoverLocalServers(any(), any()) } returns
+            flowOf(
+                ServerDiscoveryInfo(
+                    address = "http://localhost:8096",
+                    id = serverId.toString(),
+                    name = "Jellyfin",
+                    endpointAddress = "192.168.1.25",
+                ),
+            )
+        coEvery {
+            discovery.getRecommendedServers(
+                match<Collection<String>> { candidates ->
+                    "http://192.168.1.25:8096" in candidates
+                },
+            )
+        } returns
+            listOf(
+                RecommendedServerInfo(
+                    address = "http://192.168.1.25:8096",
+                    responseTime = 50,
+                    score = RecommendedServerInfoScore.GREAT,
+                    issues = emptyList(),
+                    systemInfo =
+                        Result.success(
+                            PublicSystemInfo(
+                                id = serverId.toString(),
+                                serverName = "Jellyfin",
+                                startupWizardCompleted = true,
+                            ),
+                        ),
+                ),
+            )
+
+        composeTestRule.setContent {
+            WholphinTheme {
+                switchServerViewModel = hiltViewModel()
+                SwitchServerContent(
+                    modifier = Modifier.fillMaxSize(),
+                    viewModel = switchServerViewModel,
+                )
+            }
+        }
+
+        TestModule.testDispatcher.scheduler.advanceUntilIdle()
+        composeTestRule.runOnIdle {
+            switchServerViewModel.discoverServers()
+        }
+
+        TestModule.testDispatcher.scheduler.advanceUntilIdle()
+
+        Assert.assertEquals(
+            "http://192.168.1.25:8096",
+            switchServerViewModel.discoveredServers.value?.single()?.url,
+        )
     }
 }
