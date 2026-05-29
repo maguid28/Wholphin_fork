@@ -11,6 +11,79 @@ import java.util.UUID
 
 class LibraryTvScheduleTest {
     @Test
+    fun append_trimsOverlappingExtensionProgramToAvoidGap() {
+        val handoff = WindowStart.plusSeconds(2.hours)
+        val current =
+            LibraryTvGuideState(
+                channels =
+                    listOf(
+                        channel(
+                            listOf(
+                                program(
+                                    item = episode(uuid("current-1"), uuid("current-show"), 1, "Current S1E1", "MTV"),
+                                    start = WindowStart,
+                                    end = WindowStart.plusSeconds(1.hours),
+                                ),
+                                program(
+                                    item = episode(uuid("current-2"), uuid("current-show"), 2, "Current S1E2", "MTV"),
+                                    start = WindowStart.plusSeconds(1.hours),
+                                    end = handoff,
+                                ),
+                            ),
+                        ),
+                    ),
+                windowStart = WindowStart,
+                windowEnd = handoff,
+            )
+        val extension =
+            LibraryTvGuideState(
+                channels =
+                    listOf(
+                        channel(
+                            listOf(
+                                program(
+                                    item = episode(uuid("extension-1"), uuid("extension-show"), 1, "Extension S1E1", "MTV"),
+                                    start = WindowStart.plusSeconds(90.minutes),
+                                    end = WindowStart.plusSeconds(150.minutes),
+                                ),
+                                program(
+                                    item = episode(uuid("extension-2"), uuid("extension-show"), 2, "Extension S1E2", "MTV"),
+                                    start = WindowStart.plusSeconds(150.minutes),
+                                    end = WindowStart.plusSeconds(210.minutes),
+                                ),
+                            ),
+                        ),
+                    ),
+                windowStart = handoff,
+                windowEnd = WindowStart.plusSeconds(210.minutes),
+            )
+
+        val programs = current.append(extension, pruneBefore = WindowStart).channels.single().programs
+
+        assertEquals(
+            listOf(
+                WindowStart,
+                WindowStart.plusSeconds(1.hours),
+                handoff,
+                WindowStart.plusSeconds(150.minutes),
+            ),
+            programs.map { it.start },
+        )
+        assertEquals(
+            listOf(
+                WindowStart.plusSeconds(1.hours),
+                handoff,
+                WindowStart.plusSeconds(150.minutes),
+                WindowStart.plusSeconds(210.minutes),
+            ),
+            programs.map { it.end },
+        )
+        programs.zipWithNext().forEach { (first, second) ->
+            assertEquals(first.end, second.start)
+        }
+    }
+
+    @Test
     fun supplementalLibraryTvSeriesIds_includesExistingSeriesWithTooFewEpisodes() {
         val seriesId = uuid("rob-and-big")
         val sampledEpisode =
@@ -74,6 +147,8 @@ class LibraryTvScheduleTest {
 }
 
 private val WindowStart: Instant = Instant.parse("2026-05-19T00:00:00Z")
+private val Int.minutes: Long get() = this * 60L
+private val Int.hours: Long get() = this * 60.minutes
 
 private fun episode(
     id: UUID = UUID.randomUUID(),
@@ -110,6 +185,32 @@ private fun series(
             sortName = name,
             seriesStudio = network,
         ),
+    )
+
+private fun channel(programs: List<LibraryTvProgram>): LibraryTvChannel =
+    LibraryTvChannel(
+        key = "mtv",
+        id = uuid("mtv-channel"),
+        number = 1,
+        name = "MTV",
+        imageUrl = null,
+        programs = programs,
+    )
+
+private fun program(
+    item: BaseItem,
+    start: Instant,
+    end: Instant,
+): LibraryTvProgram =
+    LibraryTvProgram(
+        channelKey = "mtv",
+        channelId = uuid("mtv-channel"),
+        channelName = "MTV",
+        channelImageUrl = null,
+        item = item,
+        imageUrl = null,
+        start = start,
+        end = end,
     )
 
 private fun uuid(value: String): UUID = UUID.nameUUIDFromBytes(value.toByteArray())

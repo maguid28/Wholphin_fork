@@ -2486,7 +2486,7 @@ private fun LibraryTvGuideState.scheduledEpisodeIds(): Set<UUID> =
         .map { it.id }
         .toSet()
 
-private fun LibraryTvGuideState.append(
+internal fun LibraryTvGuideState.append(
     extension: LibraryTvGuideState,
     pruneBefore: Instant,
 ): LibraryTvGuideState {
@@ -2502,9 +2502,14 @@ private fun LibraryTvGuideState.append(
                     extensionByKey[channel.key]
                         ?.programs
                         .orEmpty()
-                        .filter { program ->
-                            program.end.isAfter(pruneBefore) &&
-                                (lastEnd == null || !program.start.isBefore(lastEnd))
+                        .mapNotNull { program ->
+                            when {
+                                !program.end.isAfter(pruneBefore) -> null
+                                lastEnd == null -> program
+                                !program.end.isAfter(lastEnd) -> null
+                                program.start.isBefore(lastEnd) -> program.copy(start = lastEnd)
+                                else -> program
+                            }
                         }
                 val programs =
                     (retainedPrograms + appendedPrograms)
