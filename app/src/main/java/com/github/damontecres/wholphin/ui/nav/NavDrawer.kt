@@ -59,7 +59,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -359,6 +358,27 @@ private suspend fun navigateAfterRetainingDrawerFocus(
     }
 }
 
+private fun Modifier.clickOnDirectionRight(
+    enabled: Boolean,
+    onClick: () -> Unit,
+): Modifier =
+    if (enabled) {
+        onPreviewKeyEvent {
+            if (
+                it.type == KeyEventType.KeyDown &&
+                it.nativeKeyEvent.repeatCount == 0 &&
+                it.key == Key.DirectionRight
+            ) {
+                onClick()
+                true
+            } else {
+                false
+            }
+        }
+    } else {
+        this
+    }
+
 /**
  * Display the left side navigation drawer with [DestinationContent] on the right
  */
@@ -399,18 +419,16 @@ fun NavDrawer(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val density = LocalDensity.current
-    val focusManager = LocalFocusManager.current
 
     val focusRequester = remember { FocusRequester() }
     var previewFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
     var activeDrawerFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
-    var enteringContent by remember { mutableStateOf(false) }
-    val retainOpenForPreview = keepOpenOnFocusNavigation && !enteringContent
+    val retainOpenForPreview = keepOpenOnFocusNavigation
     val restorePreviewFocus = {
         previewFocusRequester?.tryRequestFocus("nav_drawer_preview") == true
     }
     val retainPreviewFocus: (FocusRequester) -> Boolean = retain@{
-        if (enteringContent || !drawerState.isOpen || activeDrawerFocusRequester !== it) {
+        if (!drawerState.isOpen || activeDrawerFocusRequester !== it) {
             return@retain false
         }
         previewFocusRequester = it
@@ -424,7 +442,6 @@ fun NavDrawer(
         }
     }
     val closeForManualNavigation = {
-        enteringContent = false
         previewFocusRequester = null
         activeDrawerFocusRequester = null
         onManualNavigation()
@@ -445,27 +462,6 @@ fun NavDrawer(
                     closeForManualNavigation()
                 }
             }
-    }
-    val enterPreviewedContent = {
-        if (!enteringContent) {
-            enteringContent = true
-            previewFocusRequester = null
-            activeDrawerFocusRequester = null
-            onManualNavigation()
-            drawerState.setValue(DrawerValue.Closed)
-            scope.launch {
-                try {
-                    repeat(20) {
-                        delay(50)
-                        if (focusManager.moveFocus(FocusDirection.Right)) {
-                            return@launch
-                        }
-                    }
-                } finally {
-                    enteringContent = false
-                }
-            }
-        }
     }
     LaunchedEffect(Unit) {
         restartIdleCloseTimer()
@@ -518,16 +514,7 @@ fun NavDrawer(
                 if (it.type == KeyEventType.KeyDown && it.nativeKeyEvent.repeatCount == 0) {
                     restartIdleCloseTimer()
                 }
-                if (
-                    drawerState.isOpen &&
-                    it.type == KeyEventType.KeyDown &&
-                    it.key == Key.DirectionRight
-                ) {
-                    enterPreviewedContent()
-                    true
-                } else {
-                    false
-                }
+                false
         },
         drawerState = drawerState,
         retainOpenOnFocusLoss = retainOpenForPreview,
@@ -853,10 +840,13 @@ fun NavigationDrawerScope.ProfileIcon(
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
+    val currentOnClick by rememberUpdatedState(onClick)
+    val activate = { currentOnClick() }
+
     NavigationDrawerItem(
-        modifier = modifier,
+        modifier = modifier.clickOnDirectionRight(drawerOpen, activate),
         selected = false,
-        onClick = onClick,
+        onClick = activate,
         leadingContent = {
             UserIconCardImage(
                 id = user.id,
@@ -923,13 +913,17 @@ fun NavigationDrawerScope.IconNavItem(
             )
         }
     }
+    val activate = {
+        onManualNavigation()
+        currentOnClick()
+    }
     NavigationDrawerItem(
-        modifier = modifier.focusRequester(itemFocusRequester),
+        modifier =
+            modifier
+                .clickOnDirectionRight(drawerOpen, activate)
+                .focusRequester(itemFocusRequester),
         selected = false,
-        onClick = {
-            onManualNavigation()
-            onClick()
-        },
+        onClick = activate,
         leadingContent = {
             val color = navItemColor(selected, focused, drawerOpen)
             Icon(
@@ -1034,13 +1028,17 @@ fun NavigationDrawerScope.NavItem(
             )
         }
     }
+    val activate = {
+        onManualNavigation()
+        currentOnClick()
+    }
     NavigationDrawerItem(
-        modifier = modifier.focusRequester(itemFocusRequester),
+        modifier =
+            modifier
+                .clickOnDirectionRight(drawerOpen, activate)
+                .focusRequester(itemFocusRequester),
         selected = false,
-        onClick = {
-            onManualNavigation()
-            onClick()
-        },
+        onClick = activate,
         colors =
             NavigationDrawerItemDefaults.colors(
                 containerColor = containerColor,
