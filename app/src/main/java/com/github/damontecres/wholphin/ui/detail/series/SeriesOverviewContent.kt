@@ -62,7 +62,6 @@ import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.ifElse
 import com.github.damontecres.wholphin.ui.logTab
 import com.github.damontecres.wholphin.ui.playback.isPlayKeyUp
-import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.ui.util.rememberDelayedNestedScroll
 import kotlinx.coroutines.launch
@@ -223,8 +222,14 @@ fun SeriesOverviewContent(
                                 requestFocusAfterSeason = false
                             }
                         }
-                        val state = rememberLazyListState(position.episodeRowIndex)
-                        var epPosition by rememberInt(position.episodeRowIndex)
+                        val restoredEpisodeIndex =
+                            position.episodeRowIndex
+                                .takeIf { it in eps.episodes.indices }
+                                ?: 0
+                        val state = rememberLazyListState(restoredEpisodeIndex)
+                        LaunchedEffect(eps.seasonId) {
+                            state.scrollToItem(restoredEpisodeIndex)
+                        }
                         LazyRow(
                             state = state,
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -232,15 +237,17 @@ fun SeriesOverviewContent(
                             modifier =
                                 Modifier
                                     .focusRestorer(firstItemFocusRequester)
-//                                    .focusRequester(episodeRowFocusRequester)
                                     .onFocusChanged {
                                         cardRowHasFocus = it.hasFocus
                                     },
                         ) {
                             itemsIndexed(eps.episodes) { episodeIndex, episode ->
                                 val interactionSource = remember { MutableInteractionSource() }
-                                if (interactionSource.collectIsFocusedAsState().value) {
-                                    onFocusEpisode.invoke(episodeIndex)
+                                val focused by interactionSource.collectIsFocusedAsState()
+                                LaunchedEffect(focused, episodeIndex) {
+                                    if (focused) {
+                                        onFocusEpisode.invoke(episodeIndex)
+                                    }
                                 }
                                 BannerCard(
                                     name = episode?.name,
@@ -256,11 +263,11 @@ fun SeriesOverviewContent(
                                         episode?.data?.userData?.playedPercentage
                                             ?: 0.0,
                                     onClick = {
-                                        epPosition = episodeIndex
+                                        onFocusEpisode.invoke(episodeIndex)
                                         if (episode != null) onClick.invoke(episode)
                                     },
                                     onLongClick = {
-                                        epPosition = episodeIndex
+                                        onFocusEpisode.invoke(episodeIndex)
                                         if (episode != null) onLongClick.invoke(episode)
                                     },
                                     modifier =
@@ -268,10 +275,8 @@ fun SeriesOverviewContent(
                                             .ifElse(
                                                 episodeIndex == position.episodeRowIndex,
                                                 Modifier
-                                                    .focusRequester(firstItemFocusRequester),
-                                            ).ifElse(
-                                                episodeIndex == epPosition,
-                                                Modifier.focusRequester(episodeRowFocusRequester),
+                                                    .focusRequester(firstItemFocusRequester)
+                                                    .focusRequester(episodeRowFocusRequester),
                                             ).background(
                                                 if (episodeIndex != position.episodeRowIndex) {
                                                     Color.Black
@@ -294,6 +299,7 @@ fun SeriesOverviewContent(
                                                 }
                                             }.onKeyEvent {
                                                 if (episode != null && isPlayKeyUp(it)) {
+                                                    onFocusEpisode.invoke(episodeIndex)
                                                     onClick.invoke(episode)
                                                     return@onKeyEvent true
                                                 }

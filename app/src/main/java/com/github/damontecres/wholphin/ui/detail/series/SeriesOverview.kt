@@ -99,15 +99,8 @@ fun SeriesOverview(
     val peopleInEpisode by viewModel.peopleInEpisode.map { it.people }.observeAsState(emptyList())
     val episodeList = (episodes as? EpisodeList.Success)?.episodes
 
-    val position by viewModel.position.collectAsState(SeriesOverviewPosition(0, 0))
+    val position by viewModel.position.collectAsState()
     val currentPosition by rememberUpdatedState(position)
-    LaunchedEffect(Unit) {
-        if (seasons.isNotEmpty()) {
-            seasons.getOrNull(position.seasonTabIndex)?.let {
-                viewModel.loadEpisodes(it.id)
-            }
-        }
-    }
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }

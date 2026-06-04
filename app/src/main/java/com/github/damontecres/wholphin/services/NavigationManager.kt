@@ -24,6 +24,16 @@ class NavigationManager
             log()
         }
 
+        fun updateCurrentDestination(update: (Destination) -> Destination) {
+            synchronized(this) {
+                val index = backStack.lastIndex
+                if (index >= 0) {
+                    backStack[index] = update(backStack[index])
+                }
+            }
+            log()
+        }
+
         /**
          * Go to the specified [Destination], but reset the back stack to Home first
          */

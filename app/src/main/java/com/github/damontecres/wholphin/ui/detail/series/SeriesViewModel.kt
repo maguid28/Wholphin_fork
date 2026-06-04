@@ -509,8 +509,45 @@ class SeriesViewModel
         }
 
         fun navigateTo(destination: Destination) {
+            if (destination is Destination.Playback) {
+                rememberCurrentEpisodeForReturn(destination.itemId)
+            }
             release()
             navigationManager.navigateTo(destination)
+        }
+
+        private fun rememberCurrentEpisodeForReturn(playbackItemId: UUID) {
+            val episodeList = episodes.value as? EpisodeList.Success ?: return
+            val episodeIndex = position.value.episodeRowIndex
+            val episode =
+                episodeList.episodes
+                    .get(episodeIndex)
+                    ?.takeIf { it.id == playbackItemId }
+                    ?: return
+            val seasonId = episode.data.seasonId ?: episodeList.seasonId
+            val seasonNumber =
+                episode.data.parentIndexNumber
+                    ?: seasons.value
+                        .orEmpty()
+                        .getOrNull(position.value.seasonTabIndex)
+                        ?.data
+                        ?.indexNumber
+
+            navigationManager.updateCurrentDestination { current ->
+                if (current is Destination.SeriesOverview && current.itemId == seriesId) {
+                    current.copy(
+                        seasonEpisode =
+                            SeasonEpisodeIds(
+                                seasonId = seasonId,
+                                seasonNumber = seasonNumber,
+                                episodeId = episode.id,
+                                episodeNumber = episode.indexNumber,
+                            ),
+                    )
+                } else {
+                    current
+                }
+            }
         }
 
         val chosenStreams = MutableLiveData<ChosenStreams?>(null)
