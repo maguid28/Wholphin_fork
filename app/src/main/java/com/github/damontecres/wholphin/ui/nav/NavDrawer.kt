@@ -645,9 +645,7 @@ fun NavDrawer(
                                 interactionSource = interactionSource,
                                 onClick = {
                                     viewModel.setIndex(HOME_INDEX)
-                                    if (destination is Destination.Home) {
-                                        viewModel.navigationManager.reloadHome()
-                                    } else {
+                                    if (destination !is Destination.Home) {
                                         viewModel.navigationManager.goToHome()
                                     }
                                 },
