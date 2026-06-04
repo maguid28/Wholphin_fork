@@ -130,6 +130,7 @@ class SeriesViewModel
         val discoverSeries = MutableStateFlow<DiscoverItem?>(null)
 
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
+        private var focusedEpisodeRefreshJob: Job? = null
 
         init {
             viewModelScope.launch(
@@ -292,6 +293,12 @@ class SeriesViewModel
                             .appPreferences.interfacePreferences.playThemeSongs
                     themeSongPlayer.playThemeFor(seriesId, playThemeSongs)
                 }
+                focusedEpisodeRefreshJob?.cancel()
+                focusedEpisodeRefreshJob =
+                    viewModelScope.launchIO(ExceptionHandler()) {
+                        delay(500)
+                        refreshFocusedEpisode()
+                    }
             }
         }
 
@@ -466,19 +473,60 @@ class SeriesViewModel
                 this@SeriesViewModel.seasons.setValueOnMain(seasons)
             }
 
+        private suspend fun refreshFocusedEpisode() {
+            val eps = episodes.value as? EpisodeList.Success ?: return
+            val episodeIndex = position.value.episodeRowIndex
+            val episode = eps.episodes.getBlocking(episodeIndex) ?: return
+            refreshEpisodeInternal(episode.id, episodeIndex)
+        }
+
         fun refreshEpisode(
             itemId: UUID,
             listIndex: Int,
         ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
+            refreshEpisodeInternal(itemId, listIndex)
+            // Kind of hack to ensure the backdrop is reloaded if needed
+            item.value?.let { backdropService.submit(it) }
+        }
+
+        private suspend fun refreshEpisodeInternal(
+            itemId: UUID,
+            listIndex: Int,
+        ): BaseItem? {
             val eps = episodes.value
             if (eps is EpisodeList.Success) {
-                eps.episodes.refreshItem(listIndex, itemId)
+                val updated = eps.episodes.refreshItem(listIndex, itemId)
                 withContext(Dispatchers.Main) {
                     episodes.value = eps
                 }
+                return updated
             }
-            // Kind of hack to ensure the backdrop is reloaded if needed
-            item.value?.let { backdropService.submit(it) }
+            return null
+        }
+
+        fun navigateToEpisodePlayback(
+            item: BaseItem,
+            listIndex: Int,
+            fallbackPositionMs: Long,
+            useLatestResume: Boolean,
+        ) {
+            if (!useLatestResume) {
+                navigateTo(Destination.Playback(item.id, fallbackPositionMs))
+                return
+            }
+
+            viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
+                val positionMs =
+                    try {
+                        refreshEpisodeInternal(item.id, listIndex)?.resumeMs ?: fallbackPositionMs
+                    } catch (ex: Exception) {
+                        Timber.w(ex, "Could not refresh resume position for episode %s", item.id)
+                        fallbackPositionMs
+                    }
+                withContext(Dispatchers.Main) {
+                    navigateTo(Destination.Playback(item.id, positionMs))
+                }
+            }
         }
 
         /**

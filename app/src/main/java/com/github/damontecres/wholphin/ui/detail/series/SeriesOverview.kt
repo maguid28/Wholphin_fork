@@ -233,17 +233,13 @@ fun SeriesOverview(
                             it.copy(episodeRowIndex = episodeIndex)
                         }
                     },
-                    onClick = {
+                    onClick = { episodeIndex, episode ->
                         rowFocused = EPISODE_ROW
-                        val resumePosition =
-                            it.data.userData
-                                ?.playbackPositionTicks
-                                ?.ticks ?: Duration.ZERO
-                        viewModel.navigateTo(
-                            Destination.Playback(
-                                it.id,
-                                resumePosition.inWholeMilliseconds,
-                            ),
+                        viewModel.navigateToEpisodePlayback(
+                            item = episode,
+                            listIndex = episodeIndex,
+                            fallbackPositionMs = episode.resumeMs,
+                            useLatestResume = true,
                         )
                     },
                     onLongClick = { ep ->
@@ -262,13 +258,13 @@ fun SeriesOverview(
                     },
                     playOnClick = { resume ->
                         rowFocused = EPISODE_ROW
-                        episodeList?.getOrNull(position.episodeRowIndex)?.let {
-                            viewModel.release()
-                            viewModel.navigateTo(
-                                Destination.Playback(
-                                    it.id,
-                                    resume.inWholeMilliseconds,
-                                ),
+                        val episodeIndex = position.episodeRowIndex
+                        episodeList?.getOrNull(episodeIndex)?.let {
+                            viewModel.navigateToEpisodePlayback(
+                                item = it,
+                                listIndex = episodeIndex,
+                                fallbackPositionMs = resume.inWholeMilliseconds,
+                                useLatestResume = resume > Duration.ZERO || it.resumeMs <= 0L,
                             )
                         }
                     },

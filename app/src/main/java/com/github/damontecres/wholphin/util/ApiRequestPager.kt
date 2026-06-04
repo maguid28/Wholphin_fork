@@ -64,7 +64,7 @@ class ApiRequestPager<T>(
     suspend fun refreshItem(
         position: Int,
         itemId: UUID,
-    ) {
+    ): BaseItem? =
         mutex.withLock {
             val item =
                 api.userLibraryApi.getItem(itemId).content.let {
@@ -82,8 +82,8 @@ class ApiRequestPager<T>(
                 cachedPages.put(pageNumber, page)
                 items = ItemList(size, pageSize, cachedPages.asMap())
             }
+            item
         }
-    }
 
     /**
      * Dumps the cache for all the pages at or after the given position and fetches a new page

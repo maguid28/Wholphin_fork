@@ -84,6 +84,7 @@ sealed class Destination(
         val backend: PlayerBackend? = null,
         val trackPlayback: Boolean = true,
         val libraryTvChannelKey: String? = null,
+        val entryId: UUID = UUID.randomUUID(),
     ) : Destination(true) {
         constructor(item: BaseItem) : this(item.id, item.resumeMs)
     }
