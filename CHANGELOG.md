@@ -6,3 +6,4 @@
 - Fixed reopening the same episode after backing out of playback so the app creates a fresh playback entry instead of reusing a released player session and getting stuck loading.
 - Fixed reopening an episode from the series season list so it refreshes the episode resume position after playback and starts from the latest saved stop point.
 - Fixed the Home nav drawer item so selecting it after Home was already preview-loaded no longer forces an unnecessary Home reload.
+- Fixed nav drawer activation so pressing right or enter on a drawer item opens it instead of only closing the drawer.

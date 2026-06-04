@@ -59,6 +59,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -358,18 +359,29 @@ private suspend fun navigateAfterRetainingDrawerFocus(
     }
 }
 
-private fun Modifier.clickOnDirectionRight(
+private fun Modifier.activateOnDrawerItemKey(
     enabled: Boolean,
-    onClick: () -> Unit,
+    onActivate: () -> Unit,
 ): Modifier =
     if (enabled) {
-        onPreviewKeyEvent {
-            if (
-                it.type == KeyEventType.KeyDown &&
-                it.nativeKeyEvent.repeatCount == 0 &&
-                it.key == Key.DirectionRight
-            ) {
-                onClick()
+        onPreviewKeyEvent { event ->
+            val isActivationKey =
+                when (event.key) {
+                    Key.DirectionRight,
+                    Key.DirectionCenter,
+                    Key.Enter,
+                    Key.NumPadEnter,
+                    Key.ButtonSelect,
+                    Key.ButtonA,
+                    -> true
+
+                    else -> false
+                }
+
+            if (isActivationKey) {
+                if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
+                    onActivate()
+                }
                 true
             } else {
                 false
@@ -419,6 +431,7 @@ fun NavDrawer(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
 
     val focusRequester = remember { FocusRequester() }
     var previewFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
@@ -441,15 +454,27 @@ fun NavDrawer(
             previewFocusRequester = it
         }
     }
-    val closeForManualNavigation = {
+    fun closeDrawer() {
         previewFocusRequester = null
         activeDrawerFocusRequester = null
         onManualNavigation()
         drawerState.setValue(DrawerValue.Closed)
     }
+    fun focusCurrentDestinationAfterDrawerCloses() {
+        scope.launch {
+            // Let drawer state and any destination change settle before moving focus out of the drawer.
+            withFrameNanos { }
+            withFrameNanos { }
+            focusManager.moveFocus(FocusDirection.Right)
+        }
+    }
+    val closeForManualNavigation = {
+        closeDrawer()
+        focusCurrentDestinationAfterDrawerCloses()
+    }
     val closeForHomeBanner = {
         if (!retainOpenForPreview || !drawerState.isOpen) {
-            closeForManualNavigation()
+            closeDrawer()
         }
     }
     val idleCloseJob = remember { arrayOfNulls<Job>(1) }
@@ -459,7 +484,7 @@ fun NavDrawer(
             scope.launch {
                 delay(NavDrawerIdleCloseDelayMillis)
                 if (drawerState.isOpen) {
-                    closeForManualNavigation()
+                    closeDrawer()
                 }
             }
     }
@@ -842,7 +867,7 @@ fun NavigationDrawerScope.ProfileIcon(
     val activate = { currentOnClick() }
 
     NavigationDrawerItem(
-        modifier = modifier.clickOnDirectionRight(drawerOpen, activate),
+        modifier = modifier.activateOnDrawerItemKey(drawerOpen, activate),
         selected = false,
         onClick = activate,
         leadingContent = {
@@ -918,7 +943,7 @@ fun NavigationDrawerScope.IconNavItem(
     NavigationDrawerItem(
         modifier =
             modifier
-                .clickOnDirectionRight(drawerOpen, activate)
+                .activateOnDrawerItemKey(drawerOpen, activate)
                 .focusRequester(itemFocusRequester),
         selected = false,
         onClick = activate,
@@ -1033,7 +1058,7 @@ fun NavigationDrawerScope.NavItem(
     NavigationDrawerItem(
         modifier =
             modifier
-                .clickOnDirectionRight(drawerOpen, activate)
+                .activateOnDrawerItemKey(drawerOpen, activate)
                 .focusRequester(itemFocusRequester),
         selected = false,
         onClick = activate,
