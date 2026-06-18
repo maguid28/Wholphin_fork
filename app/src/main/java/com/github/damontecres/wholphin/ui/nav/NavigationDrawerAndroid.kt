@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -114,8 +115,11 @@ private fun DrawerSheet(
         }
         if (!retainOpenOnFocusLoss && drawerState.currentValue == DrawerValue.Open && focusState?.hasFocus != true) {
             // used to grab focus if the drawer state is set to Open on start or retained during focus navigation.
-            if (!restoreDrawerEntryFocus()) {
-                focusRequester.requestFocus()
+            repeat(3) {
+                if (restoreDrawerEntryFocus()) {
+                    return@LaunchedEffect
+                }
+                withFrameNanos { }
             }
         }
     }

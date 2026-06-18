@@ -1,5 +1,8 @@
 package com.github.damontecres.wholphin.ui.nav
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -111,6 +114,11 @@ fun ApplicationContent(
                 NavDisplay(
                     backStack = navigationManager.backStack,
                     onBack = { navigationManager.goBack() },
+                    // Drawer destinations must not overlap while focus is handed from the drawer
+                    // to content. The outgoing page can otherwise accept focus and then disappear,
+                    // which makes Compose fall back to the first focusable item (the profile).
+                    transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
+                    popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
                     entryDecorators =
                         listOf(
                             rememberSaveableStateHolderNavEntryDecorator(),

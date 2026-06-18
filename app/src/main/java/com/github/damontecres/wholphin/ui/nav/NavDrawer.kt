@@ -49,6 +49,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -351,11 +352,14 @@ private val NavDrawerSubLineHeight = 13.sp
 private suspend fun navigateAfterRetainingDrawerFocus(
     itemFocusRequester: FocusRequester,
     onFocusNavigation: (FocusRequester) -> Boolean,
+    isFocusNavigationActive: (FocusRequester) -> Boolean,
     onAutoNavigate: () -> Unit,
 ) {
     if (onFocusNavigation(itemFocusRequester)) {
         withFrameNanos { }
-        onAutoNavigate()
+        if (isFocusNavigationActive(itemFocusRequester)) {
+            onAutoNavigate()
+        }
     }
 }
 
@@ -433,20 +437,30 @@ fun NavDrawer(
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
 
-    val focusRequester = remember { FocusRequester() }
+    val drawerFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    fun drawerFocusRequester(key: String): FocusRequester =
+        drawerFocusRequesters.getOrPut(key) { FocusRequester() }
+    val searchFocusRequester = drawerFocusRequester("search")
+    val homeFocusRequester = drawerFocusRequester("home")
+    val nowPlayingFocusRequester = drawerFocusRequester("now_playing")
     var previewFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
     var activeDrawerFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
-    val retainOpenForPreview = keepOpenOnFocusNavigation
-    val restorePreviewFocus = {
-        previewFocusRequester?.tryRequestFocus("nav_drawer_preview") == true
-    }
+    var enteringContent by remember { mutableStateOf(false) }
+    var contentHasFocus by remember { mutableStateOf(false) }
+    val retainOpenForPreview = keepOpenOnFocusNavigation && !enteringContent
     val retainPreviewFocus: (FocusRequester) -> Boolean = retain@{
-        if (!drawerState.isOpen || activeDrawerFocusRequester !== it) {
+        if (enteringContent || !drawerState.isOpen || activeDrawerFocusRequester !== it) {
             return@retain false
         }
         previewFocusRequester = it
         onFocusNavigation()
         true
+    }
+    val isPreviewFocusActive: (FocusRequester) -> Boolean = {
+        !enteringContent &&
+            drawerState.isOpen &&
+            activeDrawerFocusRequester === it &&
+            previewFocusRequester === it
     }
     val updatePreviewFocus: (FocusRequester) -> Unit = {
         activeDrawerFocusRequester = it
@@ -454,23 +468,48 @@ fun NavDrawer(
             previewFocusRequester = it
         }
     }
+    val contentFocusJob = remember { arrayOfNulls<Job>(1) }
     fun closeDrawer() {
+        contentFocusJob[0]?.cancel()
+        enteringContent = false
         previewFocusRequester = null
         activeDrawerFocusRequester = null
         onManualNavigation()
         drawerState.setValue(DrawerValue.Closed)
     }
-    fun focusCurrentDestinationAfterDrawerCloses() {
-        scope.launch {
-            // Let drawer state and any destination change settle before moving focus out of the drawer.
-            withFrameNanos { }
-            withFrameNanos { }
-            focusManager.moveFocus(FocusDirection.Right)
-        }
-    }
     val closeForManualNavigation = {
-        closeDrawer()
-        focusCurrentDestinationAfterDrawerCloses()
+        if (!enteringContent) {
+            enteringContent = true
+            contentHasFocus = false
+            previewFocusRequester = null
+            activeDrawerFocusRequester = null
+            onManualNavigation()
+            drawerState.setValue(DrawerValue.Closed)
+            contentFocusJob[0] =
+                scope.launch {
+                    try {
+                        repeat(20) { attempt ->
+                            delay(50)
+                            if (contentHasFocus) {
+                                return@launch
+                            }
+                            val moved = focusManager.moveFocus(FocusDirection.Right)
+                            Timber.v(
+                                "Content focus handoff destination=%s, attempt=%s, moved=%s, contentHasFocus=%s",
+                                destination,
+                                attempt + 1,
+                                moved,
+                                contentHasFocus,
+                            )
+                        }
+                        if (!contentHasFocus) {
+                            Timber.w("Timed out handing drawer focus to content")
+                        }
+                    } finally {
+                        enteringContent = false
+                    }
+                }
+        }
     }
     val closeForHomeBanner = {
         if (!retainOpenForPreview || !drawerState.isOpen) {
@@ -494,23 +533,38 @@ fun NavDrawer(
     DisposableEffect(Unit) {
         onDispose {
             idleCloseJob[0]?.cancel()
+            contentFocusJob[0]?.cancel()
         }
     }
 
-    // If the user presses back while on the home page, open the nav drawer, another back press will quit the app
-    BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination is Destination.Home)) {
-        drawerState.setValue(DrawerValue.Open)
-        restartIdleCloseTimer()
-        focusRequester.requestFocus()
-    }
     val state by viewModel.state.collectAsState()
     val moreExpanded by viewModel.moreExpanded.observeAsState(false)
     // A negative index is a built-in page, >=0 is a library
     val selectedIndex by viewModel.selectedIndex.observeAsState(-1)
-    val attachSelectedFocusRequester =
-        !retainOpenForPreview ||
-            !drawerState.isOpen ||
-            previewFocusRequester == null
+    val selectedDrawerFocusRequester =
+        when (selectedIndex) {
+            NOW_PLAYING_INDEX -> nowPlayingFocusRequester
+            SEARCH_INDEX -> searchFocusRequester
+            HOME_INDEX -> homeFocusRequester
+            in state.items.indices -> drawerFocusRequester(state.items[selectedIndex].id)
+            state.items.size -> drawerFocusRequester("more")
+            else -> {
+                val moreIndex = selectedIndex - state.items.size - 1
+                state.moreItems.getOrNull(moreIndex)?.let {
+                    drawerFocusRequester("more_${it.id}")
+                }
+            }
+        }
+
+    // If the user presses back while on the home page, open the nav drawer, another back press will quit the app
+    BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination is Destination.Home)) {
+        scope.launch {
+            drawerState.setValue(DrawerValue.Open)
+            restartIdleCloseTimer()
+            withFrameNanos { }
+            (selectedDrawerFocusRequester ?: homeFocusRequester).requestFocus()
+        }
+    }
     BackHandler(enabled = moreExpanded && drawerState.currentValue == DrawerValue.Open) {
         viewModel.setShowMore(false)
     }
@@ -544,15 +598,13 @@ fun NavDrawer(
         drawerState = drawerState,
         retainOpenOnFocusLoss = retainOpenForPreview,
         drawerEntryFocusRequester =
-            if (attachSelectedFocusRequester) {
-                focusRequester
-            } else {
-                previewFocusRequester
-            },
+            previewFocusRequester
+                ?: selectedDrawerFocusRequester
+                ?: activeDrawerFocusRequester
+                ?: homeFocusRequester,
         drawerContent = { drawerValue ->
             val isOpen = drawerValue.isOpen
             val spacedBy = 2.dp
-            val searchFocusRequester = remember { FocusRequester() }
 
             ProvideTextStyle(
                 MaterialTheme.typography.labelMedium.copy(
@@ -603,15 +655,12 @@ fun NavDrawer(
                                 viewModel.setIndex(NOW_PLAYING_INDEX)
                                 viewModel.navigationManager.navigateTo(Destination.NowPlaying)
                             },
+                            itemFocusRequester = nowPlayingFocusRequester,
                             onFocused = updatePreviewFocus,
                             onFocusNavigation = retainPreviewFocus,
+                            isFocusNavigationActive = isPreviewFocusActive,
                             onManualNavigation = closeForManualNavigation,
-                            modifier =
-                                Modifier
-                                    .ifElse(
-                                        selectedIndex == NOW_PLAYING_INDEX && attachSelectedFocusRequester,
-                                        Modifier.focusRequester(focusRequester),
-                                    ),
+                            modifier = Modifier,
                         )
                     }
                     LazyColumn(
@@ -622,17 +671,23 @@ fun NavDrawer(
                         modifier =
                             Modifier
                                 .focusGroup()
+                                .focusRestorer(searchFocusRequester)
                                 .focusProperties {
                                     onEnter = {
                                         if (requestedFocusDirection == FocusDirection.Down) {
                                             searchFocusRequester.tryRequestFocus()
                                         } else {
-                                            focusRequester.tryRequestFocus()
+                                            (
+                                                    previewFocusRequester
+                                                    ?: selectedDrawerFocusRequester
+                                                    ?: activeDrawerFocusRequester
+                                                    ?: homeFocusRequester
+                                            ).tryRequestFocus("nav_drawer_list_entry")
                                         }
                                     }
                                 }.fillMaxHeight(),
                     ) {
-                        item {
+                        item(key = "search") {
                             val interactionSource = remember { MutableInteractionSource() }
                             IconNavItem(
                                 text = stringResource(R.string.search),
@@ -648,19 +703,15 @@ fun NavDrawer(
                                     viewModel.setIndex(SEARCH_INDEX)
                                     viewModel.navigationManager.navigateToFromDrawer(Destination.Search)
                                 },
+                                itemFocusRequester = searchFocusRequester,
                                 onFocused = updatePreviewFocus,
                                 onFocusNavigation = retainPreviewFocus,
+                                isFocusNavigationActive = isPreviewFocusActive,
                                 onManualNavigation = closeForManualNavigation,
-                                modifier =
-                                    Modifier
-                                        .focusRequester(searchFocusRequester)
-                                        .ifElse(
-                                            selectedIndex == SEARCH_INDEX && attachSelectedFocusRequester,
-                                            Modifier.focusRequester(focusRequester),
-                                        ),
+                                modifier = Modifier,
                             )
                         }
-                        item {
+                        item(key = "home") {
                             val interactionSource = remember { MutableInteractionSource() }
                             IconNavItem(
                                 text = stringResource(R.string.home),
@@ -680,18 +731,18 @@ fun NavDrawer(
                                         viewModel.navigationManager.goToHome()
                                     }
                                 },
+                                itemFocusRequester = homeFocusRequester,
                                 onFocused = updatePreviewFocus,
                                 onFocusNavigation = retainPreviewFocus,
+                                isFocusNavigationActive = isPreviewFocusActive,
                                 onManualNavigation = closeForManualNavigation,
-                                modifier =
-                                    Modifier
-                                        .ifElse(
-                                            selectedIndex == HOME_INDEX && attachSelectedFocusRequester,
-                                            Modifier.focusRequester(focusRequester),
-                                        ),
+                                modifier = Modifier,
                             )
                         }
-                        itemsIndexed(state.items) { index, it ->
+                        itemsIndexed(
+                            items = state.items,
+                            key = { _, item -> item.id },
+                        ) { index, it ->
                             if (it !is NavDrawerItem.Discover || state.discoverEnabled) {
                                 val interactionSource = remember { MutableInteractionSource() }
                                 NavItem(
@@ -706,20 +757,17 @@ fun NavDrawer(
                                     onAutoNavigate = {
                                         viewModel.onPreviewDrawerItem(index, it)
                                     },
+                                    itemFocusRequester = drawerFocusRequester(it.id),
                                     onFocused = updatePreviewFocus,
                                     onFocusNavigation = retainPreviewFocus,
+                                    isFocusNavigationActive = isPreviewFocusActive,
                                     onManualNavigation = closeForManualNavigation,
-                                    modifier =
-                                        Modifier
-                                            .ifElse(
-                                                selectedIndex == index && attachSelectedFocusRequester,
-                                                Modifier.focusRequester(focusRequester),
-                                            ),
+                                    modifier = Modifier,
                                 )
                             }
                         }
                         if (state.moreItems.isNotEmpty()) {
-                            item {
+                            item(key = "more") {
                                 val index = state.items.size
                                 val interactionSource = remember { MutableInteractionSource() }
                                 NavItem(
@@ -732,18 +780,17 @@ fun NavDrawer(
                                         viewModel.onClickDrawerItem(index, NavDrawerItem.More)
                                     },
                                     autoNavigateOnFocus = false,
+                                    itemFocusRequester = drawerFocusRequester("more"),
                                     onFocused = updatePreviewFocus,
-                                    modifier =
-                                        Modifier
-                                            .ifElse(
-                                                selectedIndex == index && attachSelectedFocusRequester,
-                                                Modifier.focusRequester(focusRequester),
-                                            ),
+                                    modifier = Modifier,
                                 )
                             }
                         }
                         if (moreExpanded) {
-                            itemsIndexed(state.moreItems) { index, it ->
+                            itemsIndexed(
+                                items = state.moreItems,
+                                key = { _, item -> "more_${item.id}" },
+                            ) { index, it ->
                                 val adjustedIndex =
                                     remember(state) { (index + state.items.size + 1) }
                                 if (it !is NavDrawerItem.Discover || state.discoverEnabled) {
@@ -762,8 +809,10 @@ fun NavDrawer(
                                         onAutoNavigate = {
                                             viewModel.onPreviewDrawerItem(adjustedIndex, it)
                                         },
+                                        itemFocusRequester = drawerFocusRequester("more_${it.id}"),
                                         onFocused = updatePreviewFocus,
                                         onFocusNavigation = retainPreviewFocus,
+                                        isFocusNavigationActive = isPreviewFocusActive,
                                         onManualNavigation = closeForManualNavigation,
                                         containerColor =
                                             if (isOpen) {
@@ -772,17 +821,12 @@ fun NavDrawer(
                                                 Color.Unspecified
                                             },
                                         interactionSource = interactionSource,
-                                        modifier =
-                                            Modifier
-                                                .ifElse(
-                                                    selectedIndex == adjustedIndex && attachSelectedFocusRequester,
-                                                    Modifier.focusRequester(focusRequester),
-                                                ),
+                                        modifier = Modifier,
                                     )
                                 }
                             }
                         }
-                        item {
+                        item(key = "settings") {
                             val interactionSource = remember { MutableInteractionSource() }
                             IconNavItem(
                                 text = stringResource(R.string.settings),
@@ -804,8 +848,10 @@ fun NavDrawer(
                                         ),
                                     )
                                 },
+                                itemFocusRequester = drawerFocusRequester("settings"),
                                 onFocused = updatePreviewFocus,
                                 onFocusNavigation = retainPreviewFocus,
+                                isFocusNavigationActive = isPreviewFocusActive,
                                 autoNavigateOnFocus = false,
                                 onManualNavigation = closeForManualNavigation,
                                 modifier = Modifier,
@@ -826,20 +872,19 @@ fun NavDrawer(
                         .fillMaxSize()
                         .offset { offset }
                         .padding(start = closedDrawerWidth + 8.dp, end = 16.dp)
+                        .onFocusChanged {
+                            contentHasFocus = it.hasFocus
+                        }
                         .ifElse(
                             retainOpenForPreview && drawerState.isOpen,
                             Modifier
                                 .focusProperties {
                                     canFocus = false
                                     onEnter = {
-                                        restorePreviewFocus()
-                                    }
-                                }.onFocusChanged {
-                                    if (it.hasFocus) {
-                                        restorePreviewFocus()
+                                        cancelFocusChange()
                                     }
                                 },
-                        ),
+                        ).focusGroup(),
             ) {
                 content(
                     closeForHomeBanner,
@@ -912,15 +957,16 @@ fun NavigationDrawerScope.IconNavItem(
     subtext: String? = null,
     autoNavigateOnFocus: Boolean = true,
     onAutoNavigate: (() -> Unit)? = null,
+    itemFocusRequester: FocusRequester = remember { FocusRequester() },
     onFocused: (FocusRequester) -> Unit = {},
     onFocusNavigation: (FocusRequester) -> Boolean = { true },
+    isFocusNavigationActive: (FocusRequester) -> Boolean = { true },
     onManualNavigation: () -> Unit = {},
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val focused by interactionSource.collectIsFocusedAsState()
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnAutoNavigate by rememberUpdatedState(onAutoNavigate ?: onClick)
-    val itemFocusRequester = remember { FocusRequester() }
     LaunchedEffect(focused, drawerOpen) {
         if (drawerOpen && focused) {
             onFocused(itemFocusRequester)
@@ -932,6 +978,7 @@ fun NavigationDrawerScope.IconNavItem(
             navigateAfterRetainingDrawerFocus(
                 itemFocusRequester = itemFocusRequester,
                 onFocusNavigation = onFocusNavigation,
+                isFocusNavigationActive = isFocusNavigationActive,
                 onAutoNavigate = currentOnAutoNavigate,
             )
         }
@@ -993,8 +1040,10 @@ fun NavigationDrawerScope.NavItem(
     containerColor: Color = Color.Unspecified,
     autoNavigateOnFocus: Boolean = true,
     onAutoNavigate: (() -> Unit)? = null,
+    itemFocusRequester: FocusRequester = remember { FocusRequester() },
     onFocused: (FocusRequester) -> Unit = {},
     onFocusNavigation: (FocusRequester) -> Boolean = { true },
+    isFocusNavigationActive: (FocusRequester) -> Boolean = { true },
     onManualNavigation: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -1035,7 +1084,6 @@ fun NavigationDrawerScope.NavItem(
     val focused by interactionSource.collectIsFocusedAsState()
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnAutoNavigate by rememberUpdatedState(onAutoNavigate ?: onClick)
-    val itemFocusRequester = remember { FocusRequester() }
     LaunchedEffect(focused, drawerOpen) {
         if (drawerOpen && focused) {
             onFocused(itemFocusRequester)
@@ -1047,6 +1095,7 @@ fun NavigationDrawerScope.NavItem(
             navigateAfterRetainingDrawerFocus(
                 itemFocusRequester = itemFocusRequester,
                 onFocusNavigation = onFocusNavigation,
+                isFocusNavigationActive = isFocusNavigationActive,
                 onAutoNavigate = currentOnAutoNavigate,
             )
         }

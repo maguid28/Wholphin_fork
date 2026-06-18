@@ -38,6 +38,10 @@ class NavigationManager
          * Go to the specified [Destination], but reset the back stack to Home first
          */
         fun navigateToFromDrawer(destination: Destination) {
+            if (backStack.lastOrNull() == destination) {
+                Timber.v("Already at drawer destination: %s", destination)
+                return
+            }
             goToHome()
             backStack.add(destination)
             log()
