@@ -1,7 +1,9 @@
 package com.github.damontecres.wholphin.test
 
+import com.github.damontecres.wholphin.data.model.HomeCategory
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.data.model.SeasonalCategory
 import com.github.damontecres.wholphin.preferences.PrefContentScale
 import com.github.damontecres.wholphin.services.HomeSettingsService
 import com.github.damontecres.wholphin.ui.AspectRatio
@@ -77,6 +79,8 @@ class TestHomeRowSamples {
                 HomeRowConfig.TvPrograms(),
                 HomeRowConfig.TvChannels(),
                 HomeRowConfig.Suggestions(parentId = UUID.randomUUID()),
+                HomeRowConfig.Category(HomeCategory.TOP_RATED_MOVIES),
+                HomeRowConfig.Seasonal(SeasonalCategory.HALLOWEEN),
             )
     }
 
@@ -93,6 +97,7 @@ class TestHomeRowSamples {
                 is HomeRowConfig.RecentlyAdded -> foundTypes.add(it::class)
                 is HomeRowConfig.RecentlyReleased -> foundTypes.add(it::class)
                 is HomeRowConfig.ByParent -> foundTypes.add(it::class)
+                is HomeRowConfig.Category -> foundTypes.add(it::class)
                 is HomeRowConfig.GetItems -> foundTypes.add(it::class)
                 is HomeRowConfig.Favorite -> foundTypes.add(it::class)
                 is HomeRowConfig.Recordings -> foundTypes.add(it::class)
@@ -100,6 +105,7 @@ class TestHomeRowSamples {
                 is HomeRowConfig.Suggestions -> foundTypes.add(it::class)
                 is HomeRowConfig.TvChannels -> foundTypes.add(it::class)
                 is HomeRowConfig.Studios -> foundTypes.add(it::class)
+                is HomeRowConfig.Seasonal -> foundTypes.add(it::class)
             }
         }
         Assert.assertEquals(HomeRowConfig::class.sealedSubclasses.size, foundTypes.size)

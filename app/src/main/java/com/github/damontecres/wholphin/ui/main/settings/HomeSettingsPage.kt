@@ -145,11 +145,29 @@ fun HomeSettingsPage(
                                     libraries = state.libraries,
                                     showDiscover = discoverEnabled,
                                     onClick = { backStack.add(ChooseRowType(it)) },
+                                    onClickGenres = { library ->
+                                        addRow {
+                                            viewModel.addRow(
+                                                library,
+                                                LibraryRowType.GENRES,
+                                            )
+                                        }
+                                    },
                                     onClickMeta = {
                                         when (it) {
                                             MetaRowType.CONTINUE_WATCHING,
                                             MetaRowType.NEXT_UP,
                                             MetaRowType.COMBINED_CONTINUE_WATCHING,
+                                            MetaRowType.TOP_RATED_MOVIES,
+                                            MetaRowType.TOP_RATED_TV,
+                                            MetaRowType.POPULAR_MOVIES,
+                                            MetaRowType.POPULAR_TV,
+                                            MetaRowType.RECENTLY_RELEASED_MOVIES,
+                                            MetaRowType.RECENTLY_RELEASED_TV,
+                                            MetaRowType.UNWATCHED_MOVIES,
+                                            MetaRowType.UNWATCHED_TV,
+                                            MetaRowType.HALLOWEEN,
+                                            MetaRowType.CHRISTMAS,
                                             -> {
                                                 addRow { viewModel.addRow(it) }
                                             }

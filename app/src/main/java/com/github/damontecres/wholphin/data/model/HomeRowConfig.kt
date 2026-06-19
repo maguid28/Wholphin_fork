@@ -11,8 +11,12 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.serializer.UUIDSerializer
+import java.time.LocalDate
+import java.time.Month
 import java.util.UUID
 
 @Serializable
@@ -168,6 +172,30 @@ sealed interface HomeRowConfig {
     }
 
     /**
+     * A category that is only shown on the home page during its configured season.
+     */
+    @Serializable
+    @SerialName("Seasonal")
+    data class Seasonal(
+        val category: SeasonalCategory,
+        override val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
+    ) : HomeRowConfig {
+        override fun updateViewOptions(viewOptions: HomeRowViewOptions): Seasonal = this.copy(viewOptions = viewOptions)
+    }
+
+    /**
+     * A built-in media category spanning all compatible user libraries.
+     */
+    @Serializable
+    @SerialName("Category")
+    data class Category(
+        val category: HomeCategory,
+        override val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
+    ) : HomeRowConfig {
+        override fun updateViewOptions(viewOptions: HomeRowViewOptions): Category = this.copy(viewOptions = viewOptions)
+    }
+
+    /**
      * Fetch by parent ID such as a library, collection, or playlist with optional simple sorting
      */
     @Serializable
@@ -193,6 +221,75 @@ sealed interface HomeRowConfig {
     ) : HomeRowConfig {
         override fun updateViewOptions(viewOptions: HomeRowViewOptions): GetItems = this.copy(viewOptions = viewOptions)
     }
+}
+
+@Serializable
+enum class HomeCategory(
+    val itemKind: BaseItemKind,
+    val sortBy: ItemSortBy,
+    val sortOrder: SortOrder = SortOrder.DESCENDING,
+    val isPlayed: Boolean? = null,
+    val minCommunityRating: Double? = null,
+) {
+    TOP_RATED_MOVIES(
+        itemKind = BaseItemKind.MOVIE,
+        sortBy = ItemSortBy.COMMUNITY_RATING,
+        minCommunityRating = 1.0,
+    ),
+    TOP_RATED_TV(
+        itemKind = BaseItemKind.SERIES,
+        sortBy = ItemSortBy.COMMUNITY_RATING,
+        minCommunityRating = 1.0,
+    ),
+    POPULAR_MOVIES(
+        itemKind = BaseItemKind.MOVIE,
+        sortBy = ItemSortBy.PLAY_COUNT,
+    ),
+    POPULAR_TV(
+        itemKind = BaseItemKind.SERIES,
+        sortBy = ItemSortBy.PLAY_COUNT,
+    ),
+    RECENTLY_RELEASED_MOVIES(
+        itemKind = BaseItemKind.MOVIE,
+        sortBy = ItemSortBy.PREMIERE_DATE,
+    ),
+    RECENTLY_RELEASED_TV(
+        itemKind = BaseItemKind.SERIES,
+        sortBy = ItemSortBy.PREMIERE_DATE,
+    ),
+    UNWATCHED_MOVIES(
+        itemKind = BaseItemKind.MOVIE,
+        sortBy = ItemSortBy.RANDOM,
+        sortOrder = SortOrder.ASCENDING,
+        isPlayed = false,
+    ),
+    UNWATCHED_TV(
+        itemKind = BaseItemKind.SERIES,
+        sortBy = ItemSortBy.RANDOM,
+        sortOrder = SortOrder.ASCENDING,
+        isPlayed = false,
+    ),
+}
+
+@Serializable
+enum class SeasonalCategory(
+    val activeMonth: Month,
+    val genres: List<String>,
+    val searchTerms: List<String>,
+) {
+    HALLOWEEN(
+        activeMonth = Month.OCTOBER,
+        genres = listOf("Horror"),
+        searchTerms = listOf("Halloween"),
+    ),
+    CHRISTMAS(
+        activeMonth = Month.DECEMBER,
+        genres = listOf("Holiday"),
+        searchTerms = listOf("Christmas", "Holiday", "Santa"),
+    ),
+    ;
+
+    fun isActive(month: Month = LocalDate.now().month): Boolean = month == activeMonth
 }
 
 /**

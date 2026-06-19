@@ -4,9 +4,11 @@ import android.content.Context
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.data.model.HomeCategory
 import com.github.damontecres.wholphin.data.model.HomePageSettings
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
+import com.github.damontecres.wholphin.data.model.SeasonalCategory
 import com.github.damontecres.wholphin.data.model.createGenreDestination
 import com.github.damontecres.wholphin.data.model.createStudioDestination
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
@@ -62,6 +64,7 @@ import org.jellyfin.sdk.model.api.request.GetRecordingsRequest
 import org.jellyfin.sdk.model.api.request.GetStudiosRequest
 import timber.log.Timber
 import java.io.File
+import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -485,6 +488,27 @@ class HomeSettingsService
                     HomeRowConfigDisplay(id, config.name, config)
                 }
 
+                is HomeRowConfig.Category -> {
+                    HomeRowConfigDisplay(
+                        id = id,
+                        title = getCategoryTitle(config.category),
+                        config = config,
+                    )
+                }
+
+                is HomeRowConfig.Seasonal -> {
+                    HomeRowConfigDisplay(
+                        id = id,
+                        title =
+                            context.getString(
+                                R.string.seasonal_row_settings_title,
+                                getSeasonalTitle(config.category),
+                                getSeasonalMonth(config.category),
+                            ),
+                        config = config,
+                    )
+                }
+
                 is HomeRowConfig.NextUp -> {
                     HomeRowConfigDisplay(
                         id,
@@ -649,6 +673,7 @@ class HomeSettingsService
             libraries: List<Library>,
             limit: Int = prefs.maxItemsPerRow,
             isRefresh: Boolean,
+            includeInactiveSeasonal: Boolean = false,
         ): HomeRowLoadingState =
             when (row) {
                 is HomeRowConfig.ContinueWatching -> {
@@ -715,6 +740,128 @@ class HomeSettingsService
                         viewOptions = row.viewOptions,
                         rowType = row,
                     )
+                }
+
+                is HomeRowConfig.Category -> {
+                    val request =
+                        GetItemsRequest(
+                            userId = userDto.id,
+                            recursive = true,
+                            includeItemTypes = listOf(row.category.itemKind),
+                            sortBy = listOf(row.category.sortBy),
+                            sortOrder = listOf(row.category.sortOrder),
+                            isPlayed = row.category.isPlayed,
+                            minCommunityRating = row.category.minCommunityRating,
+                            maxPremiereDate =
+                                LocalDateTime.now().takeIf {
+                                    row.category == HomeCategory.RECENTLY_RELEASED_MOVIES ||
+                                        row.category == HomeCategory.RECENTLY_RELEASED_TV
+                                },
+                            limit = limit,
+                            fields = DefaultItemFields,
+                            enableTotalRecordCount = false,
+                        )
+                    val items =
+                        GetItemsRequestHandler
+                            .execute(api, request)
+                            .content.items
+                            .map { BaseItem(it, row.viewOptions.useSeries) }
+
+                    Success(
+                        title = getCategoryTitle(row.category),
+                        items = items,
+                        viewOptions = row.viewOptions,
+                        rowType = row,
+                    )
+                }
+
+                is HomeRowConfig.Seasonal -> {
+                    val title = getSeasonalTitle(row.category)
+                    if (!includeInactiveSeasonal && !row.category.isActive()) {
+                        Success(
+                            title = title,
+                            items = emptyList(),
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                        )
+                    } else {
+                        val mediaLibraries =
+                            libraries.filter {
+                                it.collectionType == CollectionType.MOVIES ||
+                                    it.collectionType == CollectionType.TVSHOWS
+                            }
+                        val requests =
+                            mediaLibraries.flatMap { library ->
+                                val itemKind =
+                                    when (library.collectionType) {
+                                        CollectionType.MOVIES -> BaseItemKind.MOVIE
+                                        CollectionType.TVSHOWS -> BaseItemKind.SERIES
+                                        else -> return@flatMap emptyList()
+                                    }
+                                buildList {
+                                    if (row.category.genres.isNotEmpty()) {
+                                        add(
+                                            GetItemsRequest(
+                                                userId = userDto.id,
+                                                parentId = library.itemId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(itemKind),
+                                                genres = row.category.genres,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                fields = DefaultItemFields,
+                                                enableTotalRecordCount = false,
+                                            ),
+                                        )
+                                    }
+                                    row.category.searchTerms.forEach { searchTerm ->
+                                        add(
+                                            GetItemsRequest(
+                                                userId = userDto.id,
+                                                parentId = library.itemId,
+                                                recursive = true,
+                                                includeItemTypes = listOf(itemKind),
+                                                searchTerm = searchTerm,
+                                                sortBy = listOf(ItemSortBy.RANDOM),
+                                                fields = DefaultItemFields,
+                                                enableTotalRecordCount = false,
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
+                        val itemsPerRequest =
+                            if (requests.isEmpty()) {
+                                0
+                            } else {
+                                (limit * 2 / requests.size).coerceAtLeast(4)
+                            }
+                        val items =
+                            requests
+                                .flatMap { request ->
+                                    try {
+                                        GetItemsRequestHandler
+                                            .execute(api, request.copy(limit = itemsPerRequest))
+                                            .content.items
+                                            .map { BaseItem(it, row.viewOptions.useSeries) }
+                                    } catch (ex: Exception) {
+                                        Timber.w(
+                                            ex,
+                                            "Could not fetch %s seasonal items",
+                                            row.category,
+                                        )
+                                        emptyList()
+                                    }
+                                }.distinctBy { it.id }
+                                .shuffled()
+                                .take(limit)
+
+                        Success(
+                            title = title,
+                            items = items,
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                        )
+                    }
                 }
 
                 is HomeRowConfig.Genres -> {
@@ -1101,6 +1248,36 @@ class HomeSettingsService
                     }
                 }
             }
+
+        private fun getCategoryTitle(category: HomeCategory): String =
+            context.getString(
+                when (category) {
+                    HomeCategory.TOP_RATED_MOVIES -> R.string.top_rated_movies
+                    HomeCategory.TOP_RATED_TV -> R.string.top_rated_tv
+                    HomeCategory.POPULAR_MOVIES -> R.string.popular_movies
+                    HomeCategory.POPULAR_TV -> R.string.popular_tv
+                    HomeCategory.RECENTLY_RELEASED_MOVIES -> R.string.recently_released_movies
+                    HomeCategory.RECENTLY_RELEASED_TV -> R.string.recently_released_tv
+                    HomeCategory.UNWATCHED_MOVIES -> R.string.unwatched_movies
+                    HomeCategory.UNWATCHED_TV -> R.string.unwatched_tv
+                },
+            )
+
+        private fun getSeasonalTitle(category: SeasonalCategory): String =
+            context.getString(
+                when (category) {
+                    SeasonalCategory.HALLOWEEN -> R.string.halloween
+                    SeasonalCategory.CHRISTMAS -> R.string.christmas
+                },
+            )
+
+        private fun getSeasonalMonth(category: SeasonalCategory): String =
+            context.getString(
+                when (category) {
+                    SeasonalCategory.HALLOWEEN -> R.string.october
+                    SeasonalCategory.CHRISTMAS -> R.string.december
+                },
+            )
 
         companion object {
             const val CUSTOM_PREF_ID = "home_settings"

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.data.model.HomeCategory
 import com.github.damontecres.wholphin.data.model.HomePageSettings
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowConfig.ContinueWatching
@@ -21,6 +22,7 @@ import com.github.damontecres.wholphin.data.model.HomeRowConfig.Suggestions
 import com.github.damontecres.wholphin.data.model.HomeRowConfig.TvChannels
 import com.github.damontecres.wholphin.data.model.HomeRowConfig.TvPrograms
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.data.model.SeasonalCategory
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
@@ -135,6 +137,7 @@ class HomeSettingsViewModel
                                                     libraries = state.libraries,
                                                     limit = limit,
                                                     isRefresh = false,
+                                                    includeInactiveSeasonal = true,
                                                 )
                                             } catch (ex: Exception) {
                                                 Timber.e(ex, "Error on row %s", row)
@@ -240,6 +243,60 @@ class HomeSettingsViewModel
                                 id = id,
                                 title = context.getString(R.string.combine_continue_next),
                                 config = ContinueWatchingCombined(),
+                            )
+                        }
+
+                        MetaRowType.TOP_RATED_MOVIES,
+                        MetaRowType.TOP_RATED_TV,
+                        MetaRowType.POPULAR_MOVIES,
+                        MetaRowType.POPULAR_TV,
+                        MetaRowType.RECENTLY_RELEASED_MOVIES,
+                        MetaRowType.RECENTLY_RELEASED_TV,
+                        MetaRowType.UNWATCHED_MOVIES,
+                        MetaRowType.UNWATCHED_TV,
+                        -> {
+                            val category =
+                                when (type) {
+                                    MetaRowType.TOP_RATED_MOVIES -> HomeCategory.TOP_RATED_MOVIES
+                                    MetaRowType.TOP_RATED_TV -> HomeCategory.TOP_RATED_TV
+                                    MetaRowType.POPULAR_MOVIES -> HomeCategory.POPULAR_MOVIES
+                                    MetaRowType.POPULAR_TV -> HomeCategory.POPULAR_TV
+                                    MetaRowType.RECENTLY_RELEASED_MOVIES -> HomeCategory.RECENTLY_RELEASED_MOVIES
+                                    MetaRowType.RECENTLY_RELEASED_TV -> HomeCategory.RECENTLY_RELEASED_TV
+                                    MetaRowType.UNWATCHED_MOVIES -> HomeCategory.UNWATCHED_MOVIES
+                                    MetaRowType.UNWATCHED_TV -> HomeCategory.UNWATCHED_TV
+                                    else -> error("Unexpected category type $type")
+                                }
+                            HomeRowConfigDisplay(
+                                id = id,
+                                title = context.getString(type.stringId),
+                                config = HomeRowConfig.Category(category),
+                            )
+                        }
+
+                        MetaRowType.HALLOWEEN -> {
+                            HomeRowConfigDisplay(
+                                id = id,
+                                title =
+                                    context.getString(
+                                        R.string.seasonal_row_settings_title,
+                                        context.getString(R.string.halloween),
+                                        context.getString(R.string.october),
+                                    ),
+                                config = HomeRowConfig.Seasonal(SeasonalCategory.HALLOWEEN),
+                            )
+                        }
+
+                        MetaRowType.CHRISTMAS -> {
+                            HomeRowConfigDisplay(
+                                id = id,
+                                title =
+                                    context.getString(
+                                        R.string.seasonal_row_settings_title,
+                                        context.getString(R.string.christmas),
+                                        context.getString(R.string.december),
+                                    ),
+                                config = HomeRowConfig.Seasonal(SeasonalCategory.CHRISTMAS),
                             )
                         }
 
@@ -716,6 +773,20 @@ class HomeSettingsViewModel
 
                                 is HomeRowConfig.GetItems -> {
                                     it.config
+                                }
+
+                                is HomeRowConfig.Category -> {
+                                    val viewOptions =
+                                        if (it.config.category.itemKind == BaseItemKind.SERIES) {
+                                            preset.tvLibrary
+                                        } else {
+                                            preset.movieLibrary
+                                        }
+                                    it.config.updateViewOptions(viewOptions)
+                                }
+
+                                is HomeRowConfig.Seasonal -> {
+                                    it.config.updateViewOptions(preset.movieLibrary)
                                 }
 
                                 is RecentlyAdded -> {
