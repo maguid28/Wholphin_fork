@@ -29,15 +29,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.api.seerr.infrastructure.ClientException
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.DiscoverRating
 import com.github.damontecres.wholphin.data.model.SeerrItemType
+import com.github.damontecres.wholphin.preferences.SeerrPreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.SeerrService
+import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.listToDotString
@@ -51,7 +52,14 @@ import com.github.damontecres.wholphin.util.DiscoverRequestType
 import com.google.common.cache.CacheBuilder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import timber.log.Timber
 import javax.inject.Inject
@@ -64,6 +72,7 @@ class SeerrDiscoverViewModel
         private val seerrService: SeerrService,
         val navigationManager: NavigationManager,
         private val backdropService: BackdropService,
+        private val userPreferencesService: UserPreferencesService,
     ) : ViewModel() {
         val state = MutableStateFlow<DiscoverState>(DiscoverState())
         val rating = MutableStateFlow<Map<Int, DiscoverRating>>(mapOf())
@@ -71,79 +80,72 @@ class SeerrDiscoverViewModel
         init {
             viewModelScope.launchIO {
                 backdropService.clearBackdrop()
-            }
-            fetchAndUpdateState(seerrService::discoverMovies) {
-                this.copy(
-                    movies =
-                        DiscoverRowData(
-                            context.getString(R.string.movies),
-                            it,
-                            DiscoverRequestType.DISCOVER_MOVIES,
-                        ),
-                )
-            }
-            fetchAndUpdateState(seerrService::discoverTv) {
-                this.copy(
-                    tv =
-                        DiscoverRowData(
-                            context.getString(R.string.tv_shows),
-                            it,
-                            DiscoverRequestType.DISCOVER_TV,
-                        ),
-                )
-            }
-            fetchAndUpdateState(seerrService::trending) {
-                this.copy(
-                    trending =
-                        DiscoverRowData(
-                            context.getString(R.string.trending),
-                            it,
-                            DiscoverRequestType.TRENDING,
-                        ),
-                )
-            }
-            fetchAndUpdateState(seerrService::upcomingMovies) {
-                this.copy(
-                    upcomingMovies =
-                        DiscoverRowData(
-                            context.getString(R.string.upcoming_movies),
-                            it,
-                            DiscoverRequestType.UPCOMING_MOVIES,
-                        ),
-                )
-            }
-            fetchAndUpdateState(seerrService::upcomingTv) {
-                this.copy(
-                    upcomingTv =
-                        DiscoverRowData(
-                            context.getString(R.string.upcoming_tv),
-                            it,
-                            DiscoverRequestType.UPCOMING_TV,
-                        ),
-                )
+                userPreferencesService.flow
+                    .map { it.appPreferences.seerrPreferences }
+                    .distinctUntilChanged()
+                    .collectLatest(::loadCategories)
             }
         }
 
-        private fun fetchAndUpdateState(
-            getData: suspend () -> List<DiscoverItem>,
-            copyFunc: DiscoverState.(DataLoadingState<List<DiscoverItem>>) -> DiscoverState,
-        ) {
-            viewModelScope.launchIO {
-                state.update {
-                    copyFunc.invoke(it, DataLoadingState.Loading)
-                }
-                try {
-                    val results = getData.invoke()
-                    state.update {
-                        copyFunc.invoke(it, DataLoadingState.Success(results))
-                    }
-                } catch (ex: Exception) {
-                    state.update {
-                        copyFunc.invoke(it, DataLoadingState.Error(ex))
-                    }
-                }
+        private suspend fun loadCategories(preferences: SeerrPreferences) {
+            val categories =
+                enabledDiscoverCategories(
+                    discoverCategories(seerrService.discoverGenres()),
+                    preferences,
+                )
+            state.value =
+                DiscoverState(
+                    rows = categories.map { it.toRow(DataLoadingState.Loading) },
+                )
+            coroutineScope {
+                categories
+                    .map { category ->
+                        async {
+                            val result =
+                                try {
+                                    DataLoadingState.Success(fetchCategory(category))
+                                } catch (ex: CancellationException) {
+                                    throw ex
+                                } catch (ex: Exception) {
+                                    DataLoadingState.Error(ex)
+                                }
+                            state.update { current ->
+                                current.copy(
+                                    rows =
+                                        current.rows.map { row ->
+                                            if (row.key == category.key) {
+                                                category.toRow(result)
+                                            } else {
+                                                row
+                                            }
+                                        },
+                                )
+                            }
+                        }
+                    }.awaitAll()
             }
         }
+
+        private suspend fun fetchCategory(category: DiscoverCategory): List<DiscoverItem> =
+            when (category.requestType) {
+                DiscoverRequestType.DISCOVER_TV -> seerrService.discoverTv()
+                DiscoverRequestType.DISCOVER_MOVIES -> seerrService.discoverMovies()
+                DiscoverRequestType.TRENDING -> seerrService.trending()
+                DiscoverRequestType.UPCOMING_TV -> seerrService.upcomingTv()
+                DiscoverRequestType.UPCOMING_MOVIES -> seerrService.upcomingMovies()
+                DiscoverRequestType.UNKNOWN ->
+                    category.genre
+                        ?.let { seerrService.discoverGenreItems(listOf(it)).firstOrNull()?.items }
+                        .orEmpty()
+            }
+
+        private fun DiscoverCategory.toRow(items: DataLoadingState<List<DiscoverItem>>) =
+            DiscoverRowData(
+                key = key,
+                title = title(context),
+                items = items,
+                type = requestType,
+            )
 
         fun updateBackdrop(item: DiscoverItem?) {
             viewModelScope.launchIO {
@@ -216,6 +218,7 @@ data class DiscoverRowData(
     val title: String,
     val items: DataLoadingState<List<DiscoverItem>>,
     val type: DiscoverRequestType,
+    val key: String = title,
 ) {
     companion object {
         val EMPTY = DiscoverRowData("", DataLoadingState.Pending, DiscoverRequestType.UNKNOWN)
@@ -223,11 +226,7 @@ data class DiscoverRowData(
 }
 
 data class DiscoverState(
-    val movies: DiscoverRowData = DiscoverRowData.EMPTY,
-    val tv: DiscoverRowData = DiscoverRowData.EMPTY,
-    val trending: DiscoverRowData = DiscoverRowData.EMPTY,
-    val upcomingMovies: DiscoverRowData = DiscoverRowData.EMPTY,
-    val upcomingTv: DiscoverRowData = DiscoverRowData.EMPTY,
+    val rows: List<DiscoverRowData> = emptyList(),
 )
 
 private fun DiscoverRowData.loadedItems(): List<DiscoverItem>? =
@@ -244,8 +243,7 @@ fun SeerrDiscoverPage(
     viewModel: SeerrDiscoverViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val rows =
-        listOf(state.trending, state.movies, state.tv, state.upcomingMovies, state.upcomingTv)
+    val rows = state.rows
     val ratingMap by viewModel.rating.collectAsState()
 
     val focusRequesters = remember(rows.size) { List(rows.size) { FocusRequester() } }

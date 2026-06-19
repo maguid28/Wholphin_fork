@@ -1077,6 +1077,14 @@ sealed interface AppPreference<Pref, T> {
                 setter = { prefs, _ -> prefs },
             )
 
+        val SeerrDiscoverCategories =
+            AppClickablePreference<AppPreferences>(
+                title = R.string.seerr_discover_categories,
+                summary = R.string.seerr_discover_categories_summary,
+                getter = { },
+                setter = { prefs, _ -> prefs },
+            )
+
         val QuickConnect =
             AppClickablePreference<AppPreferences>(
                 title = R.string.quick_connect,
@@ -1200,17 +1208,23 @@ val basicPreferences =
                     }
                 },
         ),
+        if (BuildConfig.DISCOVER_ENABLED) {
+            PreferenceGroup(
+                title = R.string.seerr,
+                preferences =
+                    listOf(
+                        AppPreference.SeerrIntegration,
+                        AppPreference.SeerrDiscoverCategories,
+                    ),
+            )
+        } else {
+            null
+        },
         PreferenceGroup(
             title = R.string.more,
-            preferences =
-                buildList {
-                    if (BuildConfig.DISCOVER_ENABLED) {
-                        add(AppPreference.SeerrIntegration)
-                    }
-                    add(AppPreference.AdvancedSettings)
-                },
+            preferences = listOf(AppPreference.AdvancedSettings),
         ),
-    )
+    ).filterNotNull()
 
 private val ExoPlayerSettings =
     listOf(

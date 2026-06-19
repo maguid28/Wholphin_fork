@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added customizable Seerr Discover categories in Settings, including enable/disable controls, ordering, and server-provided movie and TV genres.
+- Updated Seerr Discover to hide titles already available in the Jellyfin library and apply category changes immediately.
 - Fixed rapid nav drawer navigation causing focus to jump to the profile item instead of entering the selected page.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.
 - Fixed reopening the same episode after backing out of playback so the app creates a fresh playback entry instead of reusing a released player session and getting stuck loading.

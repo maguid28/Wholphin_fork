@@ -510,6 +510,15 @@ fun PreferencesContent(
                                     )
                                 }
 
+                                AppPreference.SeerrDiscoverCategories -> {
+                                    SeerrCategoriesPreference(
+                                        title = stringResource(pref.title),
+                                        summary = pref.summary(context, null),
+                                        preferences = preferences,
+                                        interactionSource = interactionSource,
+                                    )
+                                }
+
                                 AppPreference.QuickConnect -> {
                                     ClickPreference(
                                         title = stringResource(pref.title),

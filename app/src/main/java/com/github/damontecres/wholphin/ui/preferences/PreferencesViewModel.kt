@@ -17,14 +17,18 @@ import com.github.damontecres.wholphin.data.model.JellyfinUser
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.resetSubtitles
 import com.github.damontecres.wholphin.preferences.updateInterfacePreferences
+import com.github.damontecres.wholphin.preferences.updateSeerrPreferences
 import com.github.damontecres.wholphin.preferences.updateSubtitlePreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.Release
 import com.github.damontecres.wholphin.services.ScreensaverService
 import com.github.damontecres.wholphin.services.SeerrServerRepository
+import com.github.damontecres.wholphin.services.SeerrService
 import com.github.damontecres.wholphin.services.UpdateChecker
 import com.github.damontecres.wholphin.ui.detail.DebugViewModel.Companion.sendAppLogs
+import com.github.damontecres.wholphin.ui.discover.DiscoverCategory
+import com.github.damontecres.wholphin.ui.discover.discoverCategories
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.util.DataLoadingState
 import com.github.damontecres.wholphin.util.ExceptionHandler
@@ -54,6 +58,7 @@ class PreferencesViewModel
         private val rememberTabManager: RememberTabManager,
         private val serverRepository: ServerRepository,
         private val seerrServerRepository: SeerrServerRepository,
+        private val seerrService: SeerrService,
         private val deviceInfo: DeviceInfo,
         private val clientInfo: ClientInfo,
         private val updateChecker: UpdateChecker,
@@ -69,6 +74,8 @@ class PreferencesViewModel
         val releaseNotes = MutableStateFlow<DataLoadingState<Release>>(DataLoadingState.Pending)
 
         val externalPlayers = MutableStateFlow<List<ExternalPlayerApp>>(emptyList())
+        val seerrCategories =
+            MutableStateFlow<DataLoadingState<List<DiscoverCategory>>>(DataLoadingState.Pending)
 
         init {
             viewModelScope.launchIO {
@@ -111,6 +118,36 @@ class PreferencesViewModel
                             clearTvLibraryTabOrder()
                             addAllTvLibraryTabOrder(tabIds)
                         }
+                    }
+                }
+            }
+        }
+
+        fun loadSeerrCategories() {
+            viewModelScope.launchIO {
+                seerrCategories.value = DataLoadingState.Loading
+                seerrCategories.value =
+                    try {
+                        DataLoadingState.Success(
+                            discoverCategories(seerrService.discoverGenres()),
+                        )
+                    } catch (ex: Exception) {
+                        DataLoadingState.Error(ex)
+                    }
+            }
+        }
+
+        fun saveSeerrCategories(items: List<SeerrCategorySetting>) {
+            viewModelScope.launchIO(ExceptionHandler(autoToast = true)) {
+                preferenceDataStore.updateData { preferences ->
+                    preferences.updateSeerrPreferences {
+                        clearDiscoverCategoryOrder()
+                        addAllDiscoverCategoryOrder(items.map { it.category.key })
+                        clearDisabledDiscoverCategoryKeys()
+                        addAllDisabledDiscoverCategoryKeys(
+                            items.filterNot { it.enabled }.map { it.category.key },
+                        )
+                        discoverCategoriesCustomized = true
                     }
                 }
             }

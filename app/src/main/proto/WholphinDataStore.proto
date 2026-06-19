@@ -243,6 +243,12 @@ message MusicPreferences {
   bool show_backdrop = 4;
 }
 
+message SeerrPreferences {
+  repeated string discover_category_order = 1;
+  repeated string disabled_discover_category_keys = 2;
+  bool discover_categories_customized = 3;
+}
+
 message AppPreferences {
   // The currently signed in server and user IDs, mostly for restoring a session
   string current_server_id = 1;
@@ -260,4 +266,5 @@ message AppPreferences {
   bool sign_in_automatically = 11;
   PhotoPreferences photo_preferences = 12;
   MusicPreferences music_preferences = 13;
+  SeerrPreferences seerr_preferences = 14;
 }

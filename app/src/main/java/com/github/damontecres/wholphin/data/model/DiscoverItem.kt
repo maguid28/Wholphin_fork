@@ -90,6 +90,12 @@ data class DiscoverItem(
     override val playable: Boolean = false
     override val sortName: String get() = title ?: ""
 
+    val isInLibrary: Boolean
+        get() =
+            jellyfinItemId != null ||
+                availability == SeerrAvailability.PARTIALLY_AVAILABLE ||
+                availability == SeerrAvailability.AVAILABLE
+
     val destination: Destination
         get() {
             val jfType =

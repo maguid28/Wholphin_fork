@@ -241,6 +241,11 @@ inline fun AppPreferences.updateMusicPreferences(block: MusicPreferences.Builder
         musicPreferences = musicPreferences.toBuilder().apply(block).build()
     }
 
+inline fun AppPreferences.updateSeerrPreferences(block: SeerrPreferences.Builder.() -> Unit): AppPreferences =
+    update {
+        seerrPreferences = seerrPreferences.toBuilder().apply(block).build()
+    }
+
 fun SubtitlePreferences.Builder.resetSubtitles() {
     fontSize = SubtitleSettings.FontSize.defaultValue.toInt()
     fontColor = SubtitleSettings.FontColor.defaultValue.toArgb()

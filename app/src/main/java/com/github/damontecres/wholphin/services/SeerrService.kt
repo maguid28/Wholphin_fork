@@ -13,17 +13,41 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.SeerrAvailability
 import com.github.damontecres.wholphin.data.model.SeerrItemType
-import com.github.damontecres.wholphin.ui.isNotNullOrBlank
 import com.github.damontecres.wholphin.ui.toLocalDate
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 typealias SeerrSearchResult = SearchGet200ResponseResultsInner
+
+data class DiscoverGenreItems(
+    val name: String,
+    val type: SeerrItemType,
+    val items: List<DiscoverItem>,
+)
+
+data class DiscoverGenre(
+    val id: Int,
+    val name: String,
+    val type: SeerrItemType,
+) {
+    val key: String
+        get() =
+            when (type) {
+                SeerrItemType.MOVIE -> "movie_genre_$id"
+                SeerrItemType.TV -> "tv_genre_$id"
+                else -> "genre_$id"
+            }
+}
 
 /**
  * Main access for the current Seerr server (if any)
@@ -56,6 +80,7 @@ class SeerrService
                 .discoverTvGet(page = page)
                 .results
                 ?.map { createDiscoverItem(it) }
+                ?.withoutLibraryItems()
                 .orEmpty()
 
         suspend fun discoverMovies(page: Int = 1): List<DiscoverItem> =
@@ -63,6 +88,7 @@ class SeerrService
                 .discoverMoviesGet(page = page)
                 .results
                 ?.map { createDiscoverItem(it) }
+                ?.withoutLibraryItems()
                 .orEmpty()
 
         suspend fun trending(page: Int = 1): List<DiscoverItem> =
@@ -70,6 +96,7 @@ class SeerrService
                 .discoverTrendingGet(page = page)
                 .results
                 ?.map { createDiscoverItem(it) }
+                ?.withoutLibraryItems()
                 .orEmpty()
 
         suspend fun upcomingMovies(page: Int = 1): List<DiscoverItem> =
@@ -77,6 +104,7 @@ class SeerrService
                 .discoverMoviesUpcomingGet(page = page)
                 .results
                 ?.map { createDiscoverItem(it) }
+                ?.withoutLibraryItems()
                 .orEmpty()
 
         suspend fun upcomingTv(page: Int = 1): List<DiscoverItem> =
@@ -84,7 +112,70 @@ class SeerrService
                 .discoverTvUpcomingGet(page = page)
                 .results
                 ?.map { createDiscoverItem(it) }
+                ?.withoutLibraryItems()
                 .orEmpty()
+
+        suspend fun discoverGenres(): List<DiscoverGenre> =
+            coroutineScope {
+                val movieGenres =
+                    async {
+                        optionalRequest { api.searchApi.discoverGenresliderMovieGet() }
+                            .orEmpty()
+                            .mapNotNull { genre ->
+                                val id = genre.id ?: return@mapNotNull null
+                                val name = genre.name?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                                DiscoverGenre(id, name, SeerrItemType.MOVIE)
+                            }
+                    }
+                val tvGenres =
+                    async {
+                        optionalRequest { api.searchApi.discoverGenresliderTvGet() }
+                            .orEmpty()
+                            .mapNotNull { genre ->
+                                val id = genre.id ?: return@mapNotNull null
+                                val name = genre.name?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                                DiscoverGenre(id, name, SeerrItemType.TV)
+                            }
+                    }
+                interleave(movieGenres.await(), tvGenres.await())
+            }
+
+        suspend fun discoverGenreItems(genres: List<DiscoverGenre>): List<DiscoverGenreItems> {
+            return coroutineScope {
+                genres
+                    .map { genre ->
+                        async {
+                            optionalRequest {
+                                val items =
+                                    when (genre.type) {
+                                        SeerrItemType.MOVIE ->
+                                            api.searchApi
+                                                .discoverMoviesGenreGenreIdGet(genreId = genre.id.toString())
+                                                .results
+                                                ?.map { createDiscoverItem(it) }
+
+                                        SeerrItemType.TV ->
+                                            api.searchApi
+                                                .discoverTvGenreGenreIdGet(genreId = genre.id.toString())
+                                                .results
+                                                ?.map { createDiscoverItem(it) }
+
+                                        else -> emptyList()
+                                    }.orEmpty()
+                                        .withoutLibraryItems()
+
+                                DiscoverGenreItems(
+                                    name = genre.name,
+                                    type = genre.type,
+                                    items = items,
+                                )
+                            }
+                        }
+                    }.awaitAll()
+                    .filterNotNull()
+                    .filter { it.items.isNotEmpty() }
+            }
+        }
 
         /**
          * Get [DiscoverItem]s similar to the JF items such as movies, series, or people
@@ -158,21 +249,12 @@ class SeerrService
             path: String?,
             mediaInfo: MediaInfo?,
         ): String? {
-            if (mediaInfo != null) {
-                val itemId =
-                    if (mediaInfo.jellyfinMediaId.isNotNullOrBlank()) {
-                        mediaInfo.jellyfinMediaId.toUUIDOrNull()
-                    } else if (mediaInfo.jellyfinMediaId4k.isNotNullOrBlank()) {
-                        mediaInfo.jellyfinMediaId4k.toUUIDOrNull()
-                    } else {
-                        null
-                    }
-                if (itemId != null) {
-                    return imageUrlService.getItemImageUrl(
-                        itemId = itemId,
-                        imageType = imageType,
-                    )
-                }
+            val itemId = mediaInfo.jellyfinItemId()
+            if (itemId != null) {
+                return imageUrlService.getItemImageUrl(
+                    itemId = itemId,
+                    imageType = imageType,
+                )
             }
             val current = seerrServerRepository.current.firstOrNull() ?: return null
             val cacheImages = current.serverConfig.cacheImages == true
@@ -216,7 +298,7 @@ class SeerrService
                 releaseDate = toLocalDate(movie.releaseDate),
                 posterUrl = createImageUrl(ImageType.PRIMARY, movie.posterPath, movie.mediaInfo),
                 backDropUrl = createImageUrl(ImageType.BACKDROP, movie.backdropPath, movie.mediaInfo),
-                jellyfinItemId = movie.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = movie.mediaInfo.jellyfinItemId(),
             )
 
         suspend fun createDiscoverItem(movie: MovieDetails): DiscoverItem =
@@ -232,7 +314,7 @@ class SeerrService
                 releaseDate = toLocalDate(movie.releaseDate),
                 posterUrl = createImageUrl(ImageType.PRIMARY, movie.posterPath, movie.mediaInfo),
                 backDropUrl = createImageUrl(ImageType.BACKDROP, movie.backdropPath, movie.mediaInfo),
-                jellyfinItemId = movie.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = movie.mediaInfo.jellyfinItemId(),
             )
 
         suspend fun createDiscoverItem(tv: TvResult): DiscoverItem =
@@ -248,7 +330,7 @@ class SeerrService
                 releaseDate = toLocalDate(tv.firstAirDate),
                 posterUrl = createImageUrl(ImageType.PRIMARY, tv.posterPath, tv.mediaInfo),
                 backDropUrl = createImageUrl(ImageType.BACKDROP, tv.backdropPath, tv.mediaInfo),
-                jellyfinItemId = tv.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = tv.mediaInfo.jellyfinItemId(),
             )
 
         suspend fun createDiscoverItem(tv: TvDetails): DiscoverItem =
@@ -264,7 +346,7 @@ class SeerrService
                 releaseDate = toLocalDate(tv.firstAirDate),
                 posterUrl = createImageUrl(ImageType.PRIMARY, tv.posterPath, tv.mediaInfo),
                 backDropUrl = createImageUrl(ImageType.BACKDROP, tv.backdropPath, tv.mediaInfo),
-                jellyfinItemId = tv.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = tv.mediaInfo.jellyfinItemId(),
             )
 
         suspend fun createDiscoverItem(search: SeerrSearchResult): DiscoverItem =
@@ -280,7 +362,7 @@ class SeerrService
                 releaseDate = toLocalDate(search.releaseDate ?: search.firstAirDate),
                 posterUrl = createImageUrl(ImageType.PRIMARY, search.posterPath, search.mediaInfo),
                 backDropUrl = createImageUrl(ImageType.BACKDROP, search.backdropPath, search.mediaInfo),
-                jellyfinItemId = search.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = search.mediaInfo.jellyfinItemId(),
             )
 
         suspend fun createDiscoverItem(credit: CreditCast): DiscoverItem =
@@ -306,7 +388,7 @@ class SeerrService
                         credit.backdropPath,
                         credit.mediaInfo,
                     ),
-                jellyfinItemId = credit.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = credit.mediaInfo.jellyfinItemId(),
             )
 
         suspend fun createDiscoverItem(credit: CreditCrew): DiscoverItem =
@@ -332,6 +414,39 @@ class SeerrService
                         credit.backdropPath,
                         credit.mediaInfo,
                     ),
-                jellyfinItemId = credit.mediaInfo?.jellyfinMediaId?.toUUIDOrNull(),
+                jellyfinItemId = credit.mediaInfo.jellyfinItemId(),
             )
     }
+
+private fun <T> interleave(
+    first: List<T>,
+    second: List<T>,
+): List<T> =
+    buildList {
+        repeat(maxOf(first.size, second.size)) { index ->
+            first.getOrNull(index)?.let(::add)
+            second.getOrNull(index)?.let(::add)
+        }
+    }
+
+private fun List<DiscoverItem>.withoutLibraryItems(): List<DiscoverItem> =
+    filterNot { it.isInLibrary }
+        .distinctBy { it.type to it.id }
+
+private suspend fun <T> optionalRequest(block: suspend () -> T): T? =
+    try {
+        block()
+    } catch (ex: CancellationException) {
+        throw ex
+    } catch (_: Exception) {
+        null
+    }
+
+private fun MediaInfo?.jellyfinItemId(): UUID? =
+    this?.jellyfinMediaId
+        ?.takeIf(String::isNotBlank)
+        ?.toUUIDOrNull()
+        ?: this
+            ?.jellyfinMediaId4k
+            ?.takeIf(String::isNotBlank)
+            ?.toUUIDOrNull()
