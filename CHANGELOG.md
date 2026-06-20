@@ -5,6 +5,7 @@
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
 - Added optional seasonal Home rows for Halloween in October and Christmas in December.
 - Added customizable Seerr Discover categories in Settings, including enable/disable controls, ordering, and server-provided movie and TV genres.
+- Added a dedicated Seerr movie and TV search tab to Discover.
 - Updated Seerr Discover to hide titles already available in the Jellyfin library and apply category changes immediately.
 - Fixed rapid nav drawer navigation causing focus to jump to the profile item instead of entering the selected page.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.
