@@ -2,11 +2,13 @@ package com.github.damontecres.wholphin.ui.detail.librarytv
 
 import android.os.SystemClock
 import android.text.format.DateUtils
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -36,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +66,9 @@ import androidx.datastore.core.DataStore
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.compose.PlayerSurface
+import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -90,12 +96,16 @@ import com.github.damontecres.wholphin.ui.components.networkLogoAsset
 import com.github.damontecres.wholphin.ui.components.networkLogoAssetForKey
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.nav.Destination
+import com.github.damontecres.wholphin.ui.playback.LibraryTvPlaybackInfo
+import com.github.damontecres.wholphin.ui.playback.PlaybackViewModel
+import com.github.damontecres.wholphin.ui.playback.PlayerState
 import com.github.damontecres.wholphin.ui.preferences.SwitchPreference
 import com.github.damontecres.wholphin.ui.toBaseItems
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.util.DataLoadingState
 import com.github.damontecres.wholphin.util.GetEpisodesRequestHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
+import com.github.damontecres.wholphin.util.LoadingState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -1126,6 +1136,7 @@ class LibraryTvViewModel
 fun LibraryTvPage(
     preferences: UserPreferences,
     modifier: Modifier = Modifier,
+    pipPlaybackViewModel: PlaybackViewModel? = null,
     viewModel: LibraryTvViewModel = hiltViewModel(),
 ) {
     val loading by viewModel.loading.collectAsState()
@@ -1151,16 +1162,107 @@ fun LibraryTvPage(
                     modifier = modifier,
                 )
             } else {
-                LibraryTvGuide(
-                    state = guideState,
-                    showHeader = showHeader,
-                    onProgramClick = viewModel::play,
-                    onProgramFocus = viewModel::rememberFocusedProgram,
-                    onChannelFocus = viewModel::rememberFocusedChannel,
-                    preferredFocusKey = viewModel.lastFocusedProgramKey,
-                    preferredChannelKey = viewModel.lastFocusedChannelKey,
-                    modifier = modifier,
-                )
+                Box(modifier = modifier) {
+                    LibraryTvGuide(
+                        state = guideState,
+                        showHeader = showHeader,
+                        showPictureInPicture = pipPlaybackViewModel != null,
+                        onProgramClick = viewModel::play,
+                        onProgramFocus = viewModel::rememberFocusedProgram,
+                        onChannelFocus = viewModel::rememberFocusedChannel,
+                        preferredFocusKey = viewModel.lastFocusedProgramKey,
+                        preferredChannelKey = viewModel.lastFocusedChannelKey,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    LibraryTvPictureInPicture(
+                        viewModel = pipPlaybackViewModel,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun LibraryTvPictureInPicture(
+    viewModel: PlaybackViewModel?,
+    modifier: Modifier = Modifier,
+) {
+    if (viewModel == null) return
+    val loading by viewModel.loading.observeAsState()
+    val playerState by viewModel.currentPlayer.collectAsState()
+    val info by viewModel.libraryTvPlayback.collectAsState()
+    if (loading != LoadingState.Success || playerState == null) return
+
+    BoxWithConstraints(modifier = modifier) {
+        val width = minOf(maxWidth * 0.3f, 360.dp).coerceAtLeast(240.dp)
+        LibraryTvPictureInPictureSurface(
+            playerState = playerState!!,
+            info = info,
+            modifier =
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 20.dp, end = 28.dp)
+                    .width(width)
+                    .aspectRatio(16f / 9f),
+        )
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun LibraryTvPictureInPictureSurface(
+    playerState: PlayerState,
+    info: LibraryTvPlaybackInfo?,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier =
+            modifier
+                .clip(shape)
+                .background(Color.Black, shape)
+                .border(1.dp, Color.White.copy(alpha = 0.28f), shape),
+    ) {
+        PlayerSurface(
+            player = playerState.player,
+            surfaceType = SURFACE_TYPE_SURFACE_VIEW,
+            modifier = Modifier.fillMaxSize(),
+        )
+        info?.let {
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.78f),
+                                ),
+                            ),
+                        ).padding(start = 10.dp, end = 10.dp, top = 22.dp, bottom = 8.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = "${it.channelNumber}  ${it.channelName}",
+                        color = Color.White.copy(alpha = 0.82f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = it.title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -1274,6 +1376,7 @@ fun LibraryTvChannelSettingsPage(
 private fun LibraryTvGuide(
     state: LibraryTvGuideState,
     showHeader: Boolean,
+    showPictureInPicture: Boolean,
     onProgramClick: (LibraryTvProgram) -> Unit,
     onProgramFocus: (LibraryTvProgram) -> Unit,
     onChannelFocus: (String, LibraryTvProgram?) -> Unit,
@@ -1299,6 +1402,7 @@ private fun LibraryTvGuide(
         if (showHeader) {
             LibraryTvHeader(
                 program = focusedProgram,
+                reservePictureInPictureSpace = showPictureInPicture,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -1329,6 +1433,7 @@ private fun LibraryTvGuide(
 @Composable
 private fun LibraryTvHeader(
     program: LibraryTvProgram?,
+    reservePictureInPictureSpace: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1367,9 +1472,13 @@ private fun LibraryTvHeader(
                     ),
                 ).padding(start = 28.dp, top = 18.dp, end = 32.dp, bottom = 12.dp),
     ) {
+        val textWidthFraction = if (reservePictureInPictureSpace) 0.62f else 0.84f
         Column(
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.align(Alignment.CenterStart),
+            modifier =
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth(textWidthFraction),
         ) {
             logoRequest?.let {
                 AsyncImage(
@@ -1400,7 +1509,6 @@ private fun LibraryTvHeader(
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(.84f),
                 )
             }
         }

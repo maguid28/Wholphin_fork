@@ -891,7 +891,7 @@ fun NavDrawer(
                     !drawerState.isOpen,
                 )
             }
-            if (preferences.appPreferences.interfacePreferences.showClock) {
+            if (preferences.appPreferences.interfacePreferences.showClock && destination != Destination.LibraryTv) {
                 TimeDisplay()
             }
         }

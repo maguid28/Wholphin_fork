@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -28,6 +31,7 @@ import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.launchIO
+import com.github.damontecres.wholphin.ui.playback.PlaybackViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -64,6 +68,37 @@ fun ApplicationContent(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     var keepDrawerOpenForPreview by remember { mutableStateOf(false) }
     val currentDestination = navigationManager.backStack.lastOrNull() ?: Destination.Home()
+    val libraryTvPlaybackDestination =
+        (currentDestination as? Destination.Playback)
+            ?.takeIf { it.libraryTvChannelKey != null }
+    val activeLibraryTvPlaybackViewModel =
+        libraryTvPlaybackDestination?.let { destination ->
+            hiltViewModel<PlaybackViewModel, PlaybackViewModel.Factory>(
+                key = "library-tv-playback-${server.id}-${user.id}",
+                creationCallback = { it.create(destination) },
+            )
+        }
+    var libraryTvPipViewModel by remember(server.id, user.id) { mutableStateOf<PlaybackViewModel?>(null) }
+    LaunchedEffect(activeLibraryTvPlaybackViewModel) {
+        activeLibraryTvPlaybackViewModel?.let { nextViewModel ->
+            if (libraryTvPipViewModel !== nextViewModel) {
+                libraryTvPipViewModel?.release()
+                libraryTvPipViewModel = nextViewModel
+            }
+        }
+    }
+    val keepLibraryTvPlayback =
+        currentDestination == Destination.LibraryTv || libraryTvPlaybackDestination != null
+    LaunchedEffect(keepLibraryTvPlayback) {
+        if (!keepLibraryTvPlayback) {
+            libraryTvPipViewModel?.release()
+            libraryTvPipViewModel = null
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        (activeLibraryTvPlaybackViewModel ?: libraryTvPipViewModel)?.release()
+        libraryTvPipViewModel = null
+    }
     Box(
         modifier = modifier,
     ) {
@@ -85,13 +120,13 @@ fun ApplicationContent(
                         rememberViewModelStoreNavEntryDecorator(),
                     ),
                 entryProvider = { key ->
-                    key as Destination
                     val contentKey = "${key}_${server.id}_${user.id}"
                     NavEntry(key, contentKey = contentKey) {
                         DestinationContent(
                             destination = key,
                             preferences = preferences,
                             onClearBackdrop = viewModel::clearBackdrop,
+                            libraryTvPlaybackViewModel = activeLibraryTvPlaybackViewModel,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -125,7 +160,6 @@ fun ApplicationContent(
                             rememberViewModelStoreNavEntryDecorator(),
                         ),
                     entryProvider = { key ->
-                        key as Destination
                         val contentKey = "${key}_${server.id}_${user.id}"
                         NavEntry(key, contentKey = contentKey) {
                             if (key.fullScreen) {
@@ -137,6 +171,7 @@ fun ApplicationContent(
                                     onClearBackdrop = viewModel::clearBackdrop,
                                     onHomeBannerShown = onHomeBannerShown,
                                     takeHomeFocus = takeHomeFocus,
+                                    libraryTvPlaybackViewModel = libraryTvPipViewModel,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

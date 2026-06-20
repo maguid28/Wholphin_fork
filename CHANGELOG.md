@@ -8,6 +8,7 @@
 - Added a dedicated Seerr movie and TV search tab to Discover.
 - Updated Seerr Discover to hide titles already available in the Jellyfin library and apply category changes immediately.
 - Fixed rapid nav drawer navigation causing focus to jump to the profile item instead of entering the selected page.
+- Fixed Library TV so the last opened channel continues in a top-right picture-in-picture view when returning to the guide, without the clock or long descriptions overlapping it.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.
 - Fixed reopening the same episode after backing out of playback so the app creates a fresh playback entry instead of reusing a released player session and getting stuck loading.
 - Fixed reopening an episode from the series season list so it refreshes the episode resume position after playback and starts from the latest saved stop point.

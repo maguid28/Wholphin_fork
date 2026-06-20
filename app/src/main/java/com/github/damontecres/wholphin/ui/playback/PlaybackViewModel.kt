@@ -228,6 +228,7 @@ class PlaybackViewModel
         private val trackPlayback = (destination as? Destination.Playback)?.trackPlayback ?: true
         private val initialLibraryTvChannelKey = (destination as? Destination.Playback)?.libraryTvChannelKey
         private val isLibraryTvPlayback = initialLibraryTvChannelKey != null
+        private var appliedLibraryTvDestinationEntryId = (destination as? Destination.Playback)?.entryId
         private var currentLibraryTvChannelKey = initialLibraryTvChannelKey
         private var currentLibraryTvProgram: LibraryTvProgram? = null
         private var pendingLibraryTvChannelIndex: Int? = null
@@ -261,11 +262,15 @@ class PlaybackViewModel
                 }
                 player.release()
                 mediaSession?.release()
+                mediaSession = null
             }
             libraryTvTuneJob?.cancel()
+            libraryTvTuneJob = null
             pendingLibraryTvChannelIndex = null
             libraryTvWatchedJob?.cancel()
+            libraryTvWatchedJob = null
             jobs.forEach { it.cancel() }
+            jobs.clear()
         }
 
         private suspend fun createPlayer(
@@ -1338,6 +1343,38 @@ class PlaybackViewModel
             }
         }
 
+        fun playLibraryTvDestination(destination: Destination.Playback) {
+            val channelKey = destination.libraryTvChannelKey ?: return
+            if (!isLibraryTvPlayback || appliedLibraryTvDestinationEntryId == destination.entryId) return
+            appliedLibraryTvDestinationEntryId = destination.entryId
+            viewModelScope.launchDefault {
+                try {
+                    if (!::preferences.isInitialized) {
+                        preferences = userPreferencesService.getCurrent()
+                        controllerViewState.hideMilliseconds =
+                            preferences.appPreferences.playbackPreferences.controllerTimeoutMs
+                    }
+                    forceTranscoding = destination.forceTranscoding
+                    val channel =
+                        ensureCurrentLibraryTvChannels()
+                            .firstOrNull { it.key == channelKey }
+                            ?: return@launchDefault
+                    val now = Instant.now()
+                    val program =
+                        channel.programs.firstOrNull { it.item.id == destination.itemId }
+                            ?: channel.programAt(now)
+                            ?: channel.programs.firstOrNull()
+                            ?: return@launchDefault
+                    playLibraryTvProgram(channel, program, destination.positionMs)
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Could not start Library TV playback")
+                    loading.setValueOnMain(LoadingState.Error("Could not start Library TV playback", ex))
+                }
+            }
+        }
+
         private fun updateLibraryTvPlaybackPreview(channel: LibraryTvChannel) {
             val now = Instant.now()
             val program = channel.programAt(now) ?: channel.programs.firstOrNull() ?: return
@@ -1662,6 +1699,10 @@ class PlaybackViewModel
             Timber.v("release")
             disconnectPlayer()
             activityListener = null
+            screensaverService.keepScreenOn(false)
+            loading.value = LoadingState.Loading
+            currentPlayback.update { null }
+            currentPlayer.update { null }
         }
 
         fun subscribe(): Job =

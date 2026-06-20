@@ -89,7 +89,6 @@ import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.LoadingPage
-import com.github.damontecres.wholphin.ui.components.TimeDisplay
 import com.github.damontecres.wholphin.ui.ifElse
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.playback.overlay.PauseIndicator
@@ -128,14 +127,23 @@ fun PlaybackPage(
     preferences: UserPreferences,
     destination: Destination,
     modifier: Modifier = Modifier,
+    releaseOnStopOrDispose: Boolean = true,
     viewModel: PlaybackViewModel =
         hiltViewModel<PlaybackViewModel, PlaybackViewModel.Factory>(
             creationCallback = { it.create(destination) },
         ),
 ) {
-    LifecycleStartEffect(destination) {
-        onStopOrDispose {
-            viewModel.release()
+    val libraryTvDestination =
+        (destination as? Destination.Playback)
+            ?.takeIf { it.libraryTvChannelKey != null }
+    LaunchedEffect(libraryTvDestination) {
+        libraryTvDestination?.let(viewModel::playLibraryTvDestination)
+    }
+    if (releaseOnStopOrDispose) {
+        LifecycleStartEffect(destination) {
+            onStopOrDispose {
+                viewModel.release()
+            }
         }
     }
 
@@ -168,7 +176,6 @@ fun PlaybackPage(
 private fun LibraryTvPlaybackOverlay(
     info: LibraryTvPlaybackInfo?,
     visible: Boolean,
-    showClock: Boolean,
     captionsEnabled: Boolean,
     audioEnabled: Boolean,
     onClickCaptions: () -> Unit,
@@ -206,6 +213,7 @@ private fun LibraryTvPlaybackOverlay(
                         Modifier
                             .padding(start = 48.dp, end = 48.dp, bottom = 44.dp)
                             .widthIn(max = 1040.dp)
+                            .heightIn(max = 156.dp)
                             .clip(shape)
                             .background(Color.Black.copy(alpha = 0.78f), shape)
                             .border(
@@ -239,7 +247,10 @@ private fun LibraryTvPlaybackOverlay(
                                 .background(Color.White.copy(alpha = 0.18f)),
                     )
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .heightIn(max = 120.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Text(
@@ -299,10 +310,6 @@ private fun LibraryTvPlaybackOverlay(
                     }
                 }
             }
-        }
-
-        if (showClock && visible) {
-            TimeDisplay()
         }
     }
 }
@@ -617,7 +624,6 @@ fun PlaybackPageContent(
                 LibraryTvPlaybackOverlay(
                     info = libraryTvPlayback,
                     visible = controllerViewState.controlsVisible,
-                    showClock = preferences.appPreferences.interfacePreferences.showClock,
                     captionsEnabled = mediaInfo?.subtitleStreams.orEmpty().isNotEmpty() || hasSubtitleDownloadPermission,
                     audioEnabled = mediaInfo?.audioStreams.orEmpty().size > 1,
                     onClickCaptions = {

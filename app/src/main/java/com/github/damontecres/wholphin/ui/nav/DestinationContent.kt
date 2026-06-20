@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.ui.nav
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.data.filter.DefaultForGenresFilterOptions
@@ -45,6 +46,7 @@ import com.github.damontecres.wholphin.ui.main.SearchPage
 import com.github.damontecres.wholphin.ui.main.settings.HomeSettingsPage
 import com.github.damontecres.wholphin.ui.playback.PlayExternalPage
 import com.github.damontecres.wholphin.ui.playback.PlaybackPage
+import com.github.damontecres.wholphin.ui.playback.PlaybackViewModel
 import com.github.damontecres.wholphin.ui.preferences.PreferencesPage
 import com.github.damontecres.wholphin.ui.preferences.subtitle.SubtitleStylePage
 import com.github.damontecres.wholphin.ui.setup.InstallUpdatePage
@@ -64,6 +66,7 @@ fun DestinationContent(
     modifier: Modifier = Modifier,
     onHomeBannerShown: () -> Unit = {},
     takeHomeFocus: Boolean = true,
+    libraryTvPlaybackViewModel: PlaybackViewModel? = null,
 ) {
     if (destination.fullScreen) {
         LaunchedEffect(Unit) { onClearBackdrop.invoke() }
@@ -86,6 +89,7 @@ fun DestinationContent(
         is Destination.Playback,
         -> {
             val libraryTvPlayback = (destination as? Destination.Playback)?.libraryTvChannelKey != null
+            val sharedPlaybackViewModel = libraryTvPlaybackViewModel.takeIf { libraryTvPlayback }
             if (preferences.appPreferences.playbackPreferences.playerBackend == PlayerBackend.EXTERNAL_PLAYER && !libraryTvPlayback) {
                 PlayExternalPage(
                     preferences = preferences,
@@ -93,9 +97,16 @@ fun DestinationContent(
                     modifier = modifier,
                 )
             } else {
+                val playbackViewModel =
+                    sharedPlaybackViewModel
+                        ?: hiltViewModel<PlaybackViewModel, PlaybackViewModel.Factory>(
+                            creationCallback = { it.create(destination) },
+                        )
                 PlaybackPage(
                     preferences = preferences,
                     destination = destination,
+                    viewModel = playbackViewModel,
+                    releaseOnStopOrDispose = sharedPlaybackViewModel == null,
                     modifier = modifier,
                 )
             }
@@ -347,6 +358,7 @@ fun DestinationContent(
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             LibraryTvPage(
                 preferences = preferences,
+                pipPlaybackViewModel = libraryTvPlaybackViewModel,
                 modifier = modifier,
             )
         }
