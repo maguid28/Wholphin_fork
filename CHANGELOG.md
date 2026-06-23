@@ -7,6 +7,7 @@
 - Added customizable Seerr Discover categories in Settings, including enable/disable controls, ordering, and server-provided movie and TV genres.
 - Added a dedicated Seerr movie and TV search tab to Discover.
 - Updated Seerr Discover to hide titles already available in the Jellyfin library and apply category changes immediately.
+- Fixed Seerr setup and login reliability, including preserving session cookies and autofilling the Seerr URL from the current Jellyfin server with port 5055.
 - Fixed rapid nav drawer navigation causing focus to jump to the profile item instead of entering the selected page.
 - Fixed Library TV so the last opened channel continues in a top-right picture-in-picture view when returning to the guide, without the clock or long descriptions overlapping it.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.

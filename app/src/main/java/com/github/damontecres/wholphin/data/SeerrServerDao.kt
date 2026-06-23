@@ -40,6 +40,9 @@ interface SeerrServerDao {
     @Query("SELECT * FROM seerr_users WHERE jellyfinUserRowId = :jellyfinUserRowId")
     suspend fun getUsersByJellyfinUser(jellyfinUserRowId: Int): List<SeerrUser>
 
+    @Query("SELECT * FROM seerr_users WHERE jellyfinUserRowId = :jellyfinUserRowId ORDER BY serverId DESC")
+    suspend fun getUsersByJellyfinUserNewestFirst(jellyfinUserRowId: Int): List<SeerrUser>
+
     @Query("DELETE FROM seerr_servers WHERE id = :serverId")
     suspend fun deleteServer(serverId: Int)
 
@@ -50,6 +53,21 @@ interface SeerrServerDao {
     ): Int
 
     suspend fun deleteUser(user: SeerrUser) = deleteUser(user.serverId, user.jellyfinUserRowId)
+
+    @Query("DELETE FROM seerr_users WHERE jellyfinUserRowId = :jellyfinUserRowId")
+    suspend fun deleteUsersByJellyfinUser(jellyfinUserRowId: Int): Int
+
+    @Query("DELETE FROM seerr_users WHERE jellyfinUserRowId = :jellyfinUserRowId AND serverId != :serverId")
+    suspend fun deleteUsersByJellyfinUserExcept(
+        jellyfinUserRowId: Int,
+        serverId: Int,
+    ): Int
+
+    @Transaction
+    suspend fun replaceUserForJellyfinUser(user: SeerrUser) {
+        deleteUsersByJellyfinUser(user.jellyfinUserRowId)
+        addUser(user)
+    }
 
     @Transaction
     @Query("SELECT * FROM seerr_servers")

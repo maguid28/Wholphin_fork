@@ -43,6 +43,7 @@ import com.github.damontecres.wholphin.util.LoadingState
 fun AddSeerrServerApiKey(
     onSubmit: (url: String, apiKey: String) -> Unit,
     status: LoadingState,
+    initialUrl: String = "",
     modifier: Modifier = Modifier,
 ) {
     var error by remember(status) { mutableStateOf((status as? LoadingState.Error)?.localizedMessage) }
@@ -54,12 +55,18 @@ fun AddSeerrServerApiKey(
                 .padding(16.dp)
                 .wrapContentSize(),
     ) {
-        var url by remember { mutableStateOf("") }
+        var url by remember(initialUrl) { mutableStateOf(initialUrl) }
         var apiKey by remember { mutableStateOf("") }
 
         val focusRequester = remember { FocusRequester() }
         val passwordFocusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focusRequester.tryRequestFocus() }
+        LaunchedEffect(Unit) {
+            if (url.isNotBlank()) {
+                passwordFocusRequester.tryRequestFocus()
+            } else {
+                focusRequester.tryRequestFocus()
+            }
+        }
         Text(
             text = stringResource(R.string.enter_url_api_key),
             style = MaterialTheme.typography.titleMedium,
@@ -155,6 +162,7 @@ fun AddSeerrServerUsername(
     onSubmit: (url: String, username: String, password: String) -> Unit,
     username: String,
     status: LoadingState,
+    initialUrl: String = "",
     modifier: Modifier = Modifier,
 ) {
     var error by remember(status) { mutableStateOf((status as? LoadingState.Error)?.localizedMessage) }
@@ -166,14 +174,20 @@ fun AddSeerrServerUsername(
                 .padding(16.dp)
                 .wrapContentSize(),
     ) {
-        var url by remember { mutableStateOf("") }
+        var url by remember(initialUrl) { mutableStateOf(initialUrl) }
         var username by remember { mutableStateOf(username) }
         var password by remember { mutableStateOf("") }
 
         val focusRequester = remember { FocusRequester() }
         val usernameFocusRequester = remember { FocusRequester() }
         val passwordFocusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focusRequester.tryRequestFocus() }
+        LaunchedEffect(Unit) {
+            when {
+                url.isBlank() -> focusRequester.tryRequestFocus()
+                username.isBlank() -> usernameFocusRequester.tryRequestFocus()
+                else -> passwordFocusRequester.tryRequestFocus()
+            }
+        }
         Text(
             text = stringResource(R.string.username_or_password),
             style = MaterialTheme.typography.titleMedium,
@@ -320,6 +334,7 @@ private fun AddSeerrServerUsernamePreview() {
             onSubmit = { string: String, string1: String, string2: String -> },
             username = "test",
             status = LoadingState.Pending,
+            initialUrl = "http://10.0.0.2:5055/",
             modifier = Modifier,
         )
     }

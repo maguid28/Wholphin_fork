@@ -6,6 +6,7 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import com.github.damontecres.wholphin.BuildConfig
 import com.github.damontecres.wholphin.api.seerr.SeerrApiClient
+import com.github.damontecres.wholphin.api.seerr.infrastructure.ClientException
 import com.github.damontecres.wholphin.api.seerr.model.AuthJellyfinPostRequest
 import com.github.damontecres.wholphin.api.seerr.model.AuthLocalPostRequest
 import com.github.damontecres.wholphin.api.seerr.model.PublicSettings
@@ -116,7 +117,7 @@ class SeerrServerRepository
                             password = null,
                             credential = apiKey,
                         )
-                    seerrServerDao.addUser(user)
+                    seerrServerDao.replaceUserForJellyfinUser(user)
 
                     seerrApi.update(server.url, apiKey)
                     val userConfig = seerrApi.api.usersApi.authMeGet()
@@ -149,9 +150,9 @@ class SeerrServerRepository
                             authMethod = authMethod,
                             username = username,
                             password = password,
-                            credential = null,
+                            credential = seerrApi.api.sessionCookie,
                         )
-                    seerrServerDao.addUser(user)
+                    seerrServerDao.replaceUserForJellyfinUser(user)
                     set(server, user, userConfig)
                 }
             }
@@ -174,6 +175,7 @@ class SeerrServerRepository
                         .readTimeout(6.seconds)
                         .build(),
                 )
+            api.settingsApi.settingsPublicGet()
             login(api, authMethod, username, passwordOrApiKey)
             return LoadingState.Success
         }
@@ -296,46 +298,90 @@ class UserSwitchListener
                 if (BuildConfig.DISCOVER_ENABLED) {
                     // Check for seerr server
                     launchIO {
-                        seerrServerDao
-                            .getUsersByJellyfinUser(user.rowId)
-                            .lastOrNull()
-                            ?.let { seerrUser ->
-                                val server =
-                                    seerrServerDao.getServer(seerrUser.serverId)?.server
-                                if (server != null) {
-                                    Timber.i("Found a seerr user & server")
-                                    try {
-                                        seerrApi.update(server.url, seerrUser.credential)
-                                        val userConfig =
-                                            if (seerrUser.authMethod != SeerrAuthMethod.API_KEY) {
-                                                login(
-                                                    seerrApi.api,
-                                                    seerrUser.authMethod,
-                                                    seerrUser.username,
-                                                    seerrUser.password,
-                                                )
-                                            } else {
-                                                seerrApi.api.usersApi.authMeGet()
-                                            }
-                                        seerrServerRepository.set(
-                                            server,
-                                            seerrUser,
-                                            userConfig,
-                                        )
-                                    } catch (ex: Exception) {
-                                        Timber.w(
-                                            ex,
-                                            "Error logging into %s",
-                                            server.url,
-                                        )
-                                        seerrServerRepository.error(server, seerrUser, ex)
-                                    }
-                                }
+                        val seerrUsers =
+                            seerrServerDao.getUsersByJellyfinUserNewestFirst(user.rowId)
+                        var firstFailure: Triple<SeerrServer, SeerrUser, Exception>? = null
+                        seerrUsers.forEach { seerrUser ->
+                            val server = seerrServerDao.getServer(seerrUser.serverId)?.server
+                            if (server == null) {
+                                Timber.w(
+                                    "Ignoring Seerr user with missing server id=%s",
+                                    seerrUser.serverId,
+                                )
+                                return@forEach
                             }
+                            Timber.i("Found a Seerr user & server")
+                            try {
+                                seerrApi.update(
+                                    server.url,
+                                    apiKey =
+                                        seerrUser.credential
+                                            .takeIf { seerrUser.authMethod == SeerrAuthMethod.API_KEY },
+                                    sessionCookie =
+                                        seerrUser.credential
+                                            .takeUnless { seerrUser.authMethod == SeerrAuthMethod.API_KEY },
+                                )
+                                val userConfig =
+                                    restoreLogin(seerrApi.api, seerrUser)
+                                val activeUser =
+                                    seerrUser.copy(
+                                        credential =
+                                            if (seerrUser.authMethod == SeerrAuthMethod.API_KEY) {
+                                                seerrUser.credential
+                                            } else {
+                                                seerrApi.api.sessionCookie ?: seerrUser.credential
+                                            },
+                                    )
+                                seerrServerRepository.set(
+                                    server,
+                                    activeUser,
+                                    userConfig,
+                                )
+                                seerrServerDao.replaceUserForJellyfinUser(activeUser)
+                                return@launchIO
+                            } catch (ex: Exception) {
+                                Timber.w(
+                                    ex,
+                                    "Error logging into %s",
+                                    server.url,
+                                )
+                                if (firstFailure == null) {
+                                    firstFailure = Triple(server, seerrUser, ex)
+                                }
+                                seerrServerRepository.clear()
+                            }
+                        }
+                        firstFailure?.let { (server, seerrUser, ex) ->
+                            seerrServerRepository.error(server, seerrUser, ex)
+                        }
                     }
                 }
-            }
     }
+}
+
+private suspend fun restoreLogin(
+    client: SeerrApiClient,
+    seerrUser: SeerrUser,
+): User {
+    if (seerrUser.authMethod == SeerrAuthMethod.API_KEY) {
+        return client.usersApi.authMeGet()
+    }
+
+    if (client.hasValidCredentials) {
+        try {
+            return client.usersApi.authMeGet()
+        } catch (ex: ClientException) {
+            Timber.w(ex, "Saved Seerr session cookie was rejected, trying saved login")
+        }
+    }
+
+    return login(
+        client,
+        seerrUser.authMethod,
+        seerrUser.username,
+        seerrUser.password,
+    )
+}
 
 fun CurrentSeerr?.imageUrlBuilder(
     imageType: ImageType,

@@ -30,6 +30,7 @@ class SwitchSeerrViewModel
         private val serverRepository: ServerRepository,
     ) : ViewModel() {
         val currentUser = serverRepository.currentUser
+        val currentJellyfinServer = serverRepository.currentServer
         val currentSeerrServer = seerrServerRepository.currentServer
 
         val serverConnectionStatus = MutableStateFlow<LoadingState>(LoadingState.Pending)
@@ -65,9 +66,11 @@ class SwitchSeerrViewModel
                         break
                     } catch (ex: ClientException) {
                         Timber.w(ex, "ClientException logging in %s", url)
-                        if (ex.statusCode == 401 || ex.statusCode == 403) {
-                            showToast(context, "Invalid credentials")
-                            results[url] = LoadingState.Error("Invalid credentials", ex)
+                        val authFailure = authFailureMessage(authMethod, ex)
+                        if (authFailure != null) {
+                            showToast(context, authFailure)
+                            results[url] = LoadingState.Error(authFailure, ex)
+                            break
                         } else {
                             results[url] = LoadingState.Error("Could not connect with URL")
                         }
@@ -126,25 +129,52 @@ class SwitchSeerrViewModel
         }
     }
 
+private const val SEERR_DEFAULT_PORT = 5055
+
+private fun authFailureMessage(
+    authMethod: SeerrAuthMethod,
+    ex: ClientException,
+): String? =
+    when {
+        ex.statusCode == 401 || ex.statusCode == 403 -> "Invalid credentials"
+        authMethod == SeerrAuthMethod.JELLYFIN && ex.statusCode == 404 -> "Jellyfin user not found in Seerr"
+        else -> null
+    }
+
+fun createDefaultSeerrUrl(jellyfinUrl: String?): String {
+    if (jellyfinUrl.isNullOrBlank()) return ""
+    val url =
+        runCatching {
+            jellyfinUrl.toHttpUrl()
+        }.getOrNull() ?: return ""
+    return HttpUrl
+        .Builder()
+        .scheme(url.scheme)
+        .host(url.host)
+        .port(SEERR_DEFAULT_PORT)
+        .build()
+        .toString()
+}
+
 fun createUrls(url: String): List<HttpUrl> {
     val urls = mutableListOf<HttpUrl>()
     if (url.startsWith("http://") || url.startsWith("https://")) {
         val httpUrl = url.toHttpUrl()
         urls.add(httpUrl)
         if (HttpUrl.defaultPort(httpUrl.scheme) == httpUrl.port) {
-            urls.add(httpUrl.newBuilder().port(5055).build())
+            urls.add(httpUrl.newBuilder().port(SEERR_DEFAULT_PORT).build())
         }
     } else {
         val httpUrl = "http://$url".toHttpUrl()
         urls.add(httpUrl)
         if (httpUrl.port == 80) {
             urls.add(httpUrl.newBuilder().scheme("https").build())
-            urls.add(httpUrl.newBuilder().port(5055).build())
+            urls.add(httpUrl.newBuilder().port(SEERR_DEFAULT_PORT).build())
             urls.add(
                 httpUrl
                     .newBuilder()
                     .scheme("https")
-                    .port(5055)
+                    .port(SEERR_DEFAULT_PORT)
                     .build(),
             )
         } else {

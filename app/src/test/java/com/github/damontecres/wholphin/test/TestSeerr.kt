@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.test
 
+import com.github.damontecres.wholphin.ui.setup.seerr.createDefaultSeerrUrl
 import com.github.damontecres.wholphin.ui.setup.seerr.createSeerrApiUrl
 import com.github.damontecres.wholphin.ui.setup.seerr.createUrls
 import com.github.damontecres.wholphin.ui.setup.seerr.migrateSeerrUrl
@@ -7,6 +8,24 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TestSeerr {
+    @Test
+    fun `Test create default Seerr URL from Jellyfin URL`() {
+        assertEquals(
+            "http://192.168.18.151:5055/",
+            createDefaultSeerrUrl("http://192.168.18.151:8096"),
+        )
+        assertEquals(
+            "https://jellyfin.example.com:5055/",
+            createDefaultSeerrUrl("https://jellyfin.example.com"),
+        )
+        assertEquals(
+            "https://jellyfin.example.com:5055/",
+            createDefaultSeerrUrl("https://jellyfin.example.com/jellyfin"),
+        )
+        assertEquals("", createDefaultSeerrUrl(""))
+        assertEquals("", createDefaultSeerrUrl("not a url"))
+    }
+
     @Test
     fun testCreateUrls() {
         val urls =

@@ -15,6 +15,15 @@ class SeerrApiClient(
     private val apiKey: String?,
     okHttpClient: OkHttpClient,
 ) {
+    constructor(
+        baseUrl: String,
+        apiKey: String?,
+        okHttpClient: OkHttpClient,
+        sessionCookie: String?,
+    ) : this(baseUrl, apiKey, okHttpClient) {
+        cookieJar.restore(baseUrl, sessionCookie)
+    }
+
     private val cookieJar = SeerrCookieJar()
 
     private val client =
@@ -37,6 +46,9 @@ class SeerrApiClient(
         get() =
             apiKey.isNotNullOrBlank() ||
                 cookieJar.hasValidCredentials(baseUrl)
+
+    val sessionCookie: String?
+        get() = cookieJar.sessionCookie(baseUrl)
 
     private fun <T : ApiClient> create(initializer: (String, Call.Factory) -> T): Lazy<T> =
         lazy {
@@ -66,6 +78,17 @@ class SeerrApiClient(
 private class SeerrCookieJar : CookieJar {
     private val cookies = mutableMapOf<String, List<Cookie>>()
 
+    fun restore(
+        baseUrl: String,
+        cookie: String?,
+    ) {
+        val url = baseUrl.toHttpUrlOrNull() ?: return
+        val parsedCookie = cookie?.let { Cookie.parse(url, it) } ?: return
+        if (parsedCookie.expiresAt > System.currentTimeMillis()) {
+            cookies[url.host] = listOf(parsedCookie)
+        }
+    }
+
     override fun saveFromResponse(
         url: HttpUrl,
         cookies: List<Cookie>,
@@ -84,4 +107,11 @@ private class SeerrCookieJar : CookieJar {
         baseUrl.toHttpUrlOrNull()?.host?.let { domain ->
             cookies[domain]?.any { it.expiresAt > System.currentTimeMillis() }
         } == true
+
+    fun sessionCookie(baseUrl: String): String? =
+        baseUrl.toHttpUrlOrNull()?.host?.let { domain ->
+            cookies[domain]
+                ?.firstOrNull { it.expiresAt > System.currentTimeMillis() }
+                ?.toString()
+        }
 }

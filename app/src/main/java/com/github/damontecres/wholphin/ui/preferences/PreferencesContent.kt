@@ -76,6 +76,7 @@ import com.github.damontecres.wholphin.ui.setup.ReleaseNotes
 import com.github.damontecres.wholphin.ui.setup.UpdateViewModel
 import com.github.damontecres.wholphin.ui.setup.seerr.AddSeerServerDialog
 import com.github.damontecres.wholphin.ui.setup.seerr.SwitchSeerrViewModel
+import com.github.damontecres.wholphin.ui.setup.seerr.createDefaultSeerrUrl
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.ui.theme.customThemeColorChoices
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -662,7 +663,12 @@ fun PreferencesContent(
 
             SeerrDialogMode.Add -> {
                 val currentUser by seerrVm.currentUser.observeAsState()
+                val currentJellyfinServer by seerrVm.currentJellyfinServer.observeAsState()
                 val status by seerrVm.serverConnectionStatus.collectAsState(LoadingState.Pending)
+                val initialSeerrUrl =
+                    remember(currentJellyfinServer?.url) {
+                        createDefaultSeerrUrl(currentJellyfinServer?.url)
+                    }
                 val serverAddedMessage = stringResource(R.string.seerr_server_added)
                 LaunchedEffect(status) {
                     if (status == LoadingState.Success) {
@@ -672,6 +678,7 @@ fun PreferencesContent(
                 }
                 AddSeerServerDialog(
                     currentUsername = currentUser?.name,
+                    initialUrl = initialSeerrUrl,
                     status = status,
                     onSubmit = seerrVm::submitServer,
                     onResetStatus = seerrVm::resetStatus,
