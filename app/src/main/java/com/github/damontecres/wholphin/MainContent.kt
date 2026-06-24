@@ -10,16 +10,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -95,34 +90,13 @@ fun MainContent(
                                 backdropService.clearBackdrop()
                             }
                             val current = key.current
-                            var showContent by remember {
-                                mutableStateOf(true)
-                            }
-                            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-                                if (!appPreferences.signInAutomatically) {
-                                    showContent = false
-                                }
-                            }
-
-                            if (showContent) {
-                                ApplicationContent(
-                                    user = current.user,
-                                    server = current.server,
-                                    navigationManager = navigationManager,
-                                    preferences = preferences,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier.size(200.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator(
-                                        color = MaterialTheme.colorScheme.border,
-                                        modifier = Modifier.align(Alignment.Center),
-                                    )
-                                }
-                            }
+                            ApplicationContent(
+                                user = current.user,
+                                server = current.server,
+                                navigationManager = navigationManager,
+                                preferences = preferences,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
                     }
                 }

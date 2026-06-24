@@ -144,12 +144,65 @@ class ServerRepository
                 } else {
                     val user = serverAndUsers.users.firstOrNull { it.id == userId }
                     if (user != null) {
-                        return changeUser(serverAndUsers.server, user)
+                        return restoreCachedSession(serverAndUsers.server, user)
                     }
                 }
             }
             return null
         }
+
+        private suspend fun restoreCachedSession(
+            server: JellyfinServer,
+            user: JellyfinUser,
+        ): CurrentUser =
+            withContext(ioDispatcher) {
+                Timber.v("Restoring cached session for ${user.name} on ${server.url}")
+                apiClient.update(baseUrl = server.url, accessToken = user.accessToken)
+
+                var restoredServer = server
+                var restoredUser = user
+                var restoredUserDto: UserDto? = null
+                try {
+                    val userDto by apiClient.userApi.getCurrentUser()
+                    restoredUserDto = userDto
+                    restoredUser =
+                        user.copy(
+                            id = userDto.id,
+                            name = userDto.name,
+                        )
+                    restoredServer =
+                        try {
+                            val sysInfo by apiClient.systemApi.getPublicSystemInfo()
+                            server.copy(name = sysInfo.serverName, version = sysInfo.version)
+                        } catch (ex: Exception) {
+                            Timber.w(ex, "Exception fetching public system info")
+                            server
+                        }
+                    serverDao.addOrUpdateServer(restoredServer)
+                    restoredUser = serverDao.addOrUpdateUser(restoredUser)
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Unable to refresh cached session during restore")
+                }
+
+                userPreferencesDataStore.updateData {
+                    it
+                        .toBuilder()
+                        .apply {
+                            currentServerId = restoredServer.id.toServerString()
+                            currentUserId = restoredUser.id.toServerString()
+                        }.build()
+                }
+                val current = CurrentUser(restoredServer, restoredUser)
+                withContext(Dispatchers.Main) {
+                    _current.value = current
+                    _currentUserDto.value = restoredUserDto
+                }
+                getServerSharedPreferences(context).edit(true) {
+                    putString(SERVER_URL_KEY, restoredServer.url)
+                    putString(ACCESS_TOKEN_KEY, restoredUser.accessToken)
+                }
+                current
+            }
 
         suspend fun fetchLastUsedServer(serverId: UUID?): JellyfinServer? =
             withContext(ioDispatcher) {

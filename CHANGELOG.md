@@ -14,5 +14,6 @@
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.
 - Fixed reopening the same episode after backing out of playback so the app creates a fresh playback entry instead of reusing a released player session and getting stuck loading.
 - Fixed reopening an episode from the series season list so it refreshes the episode resume position after playback and starts from the latest saved stop point.
+- Fixed app startup so it restores the last selected user from the cached session instead of opening the user selection screen when the Jellyfin refresh is unavailable.
 - Fixed the Home nav drawer item so selecting it after Home was already preview-loaded no longer forces an unnecessary Home reload.
 - Fixed nav drawer activation so pressing right or enter on a drawer item opens it instead of only closing the drawer.

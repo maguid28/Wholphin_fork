@@ -1147,7 +1147,6 @@ val basicPreferences =
             title = R.string.ui_interface,
             preferences =
                 listOf(
-                    AppPreference.SignInAuto,
                     AppPreference.PlayThemeMusic,
                     AppPreference.RememberSelectedTab,
                     AppPreference.SubtitleStyle,

@@ -138,8 +138,6 @@ class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var screensaverService: ScreensaverService
 
-    private var signInAuto = true
-
     private val json =
         Json {
             classDiscriminator = "_type"
@@ -217,9 +215,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             appPreferences?.let { appPreferences ->
-                LaunchedEffect(appPreferences.signInAutomatically) {
-                    signInAuto = appPreferences.signInAutomatically
-                }
                 CoilConfig(
                     prefs = appPreferences,
                     okHttpClient = okHttpClient,
@@ -417,7 +412,6 @@ class MainActivityViewModel
         val serverRepository: ServerRepository,
         private val navigationManager: SetupNavigationManager,
         private val deviceProfileService: DeviceProfileService,
-        private val backdropService: BackdropService,
         private val appUpgradeHandler: AppUpgradeHandler,
     ) : ViewModel() {
         fun appStart() {
@@ -437,34 +431,25 @@ class MainActivityViewModel
                     appUpgradeHandler.copySubfont(false)
                     val prefs =
                         preferences.data.firstOrNull() ?: AppPreferences.getDefaultInstance()
-                    val userHasPin = serverRepository.currentUser.value?.hasPin == true
                     val currentServerId = prefs.currentServerId?.toUUIDOrNull()
                     val currentUserId = prefs.currentUserId?.toUUIDOrNull()
-                    if (prefs.signInAutomatically && !userHasPin) {
-                        val current =
-                            try {
-                                serverRepository.restoreSession(
-                                    currentServerId,
-                                    currentUserId,
-                                )
-                            } catch (ex: Exception) {
-                                Timber.e(ex, "Error restoring session")
-                                null
-                            }
-                        if (current != null) {
-                            if (current.user.hasPin) {
-                                navigationManager.navigateTo(SetupDestination.UserList(current.server))
-                            } else {
-                                // Restored
-                                navigationManager.navigateTo(SetupDestination.AppContent(current))
-                            }
+                    val current =
+                        try {
+                            serverRepository.restoreSession(
+                                currentServerId,
+                                currentUserId,
+                            )
+                        } catch (ex: Exception) {
+                            Timber.e(ex, "Error restoring session")
+                            null
+                        }
+                    if (current != null) {
+                        if (current.user.hasPin) {
+                            navigationManager.navigateTo(SetupDestination.UserList(current.server))
                         } else {
-                            // Did not restore
-                            navigateToSavedServerOrServerList(currentServerId)
+                            navigationManager.navigateTo(SetupDestination.AppContent(current))
                         }
                     } else {
-                        navigationManager.navigateTo(SetupDestination.Loading)
-                        backdropService.clearBackdrop()
                         navigateToSavedServerOrServerList(currentServerId)
                     }
                 } catch (ex: Exception) {
