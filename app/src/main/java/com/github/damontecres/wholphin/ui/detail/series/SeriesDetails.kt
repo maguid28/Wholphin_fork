@@ -81,6 +81,7 @@ import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchDialog
 import com.github.damontecres.wholphin.ui.discover.DiscoverRow
 import com.github.damontecres.wholphin.ui.discover.DiscoverRowData
 import com.github.damontecres.wholphin.ui.dot
@@ -117,6 +118,7 @@ fun SeriesDetails(
     val focusManager = LocalFocusManager.current
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
 
+    val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
     val item by viewModel.item.observeAsState()
     val canDelete by viewModel.canDeleteSeries.collectAsState()
     val seasons by viewModel.seasons.observeAsState(listOf())
@@ -127,10 +129,12 @@ fun SeriesDetails(
     val discovered by viewModel.discovered.collectAsState()
     val discoverSeries by viewModel.discoverSeries.collectAsState()
     val rottenTomatoesAudienceScore by viewModel.rottenTomatoesAudienceScore.collectAsState()
+    val metadataRematchResults by viewModel.metadataRematchResults.collectAsState()
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
+    var showRematchDialog by remember { mutableStateOf(false) }
 
     var showWatchConfirmation by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
@@ -172,6 +176,7 @@ fun SeriesDetails(
                 },
                 onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
                 onClearChosenStreams = {},
+                onClickRematchMetadata = { showRematchDialog = true },
             )
         }
 
@@ -214,6 +219,7 @@ fun SeriesDetails(
                     played = played,
                     favorite = item.data.userData?.isFavorite ?: false,
                     canDelete = canDelete,
+                    canRematchMetadata = currentUserDto?.policy?.isAdministrator == true,
                     rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
                     modifier = modifier,
                     onClickItem = { index, item ->
@@ -261,6 +267,7 @@ fun SeriesDetails(
                         val favorite = item.data.userData?.isFavorite ?: false
                         viewModel.setFavorite(item.id, !favorite, null)
                     },
+                    rematchOnClick = { showRematchDialog = true },
                     trailerOnClick = {
                         TrailerService.onClick(context, it, viewModel::navigateTo)
                     },
@@ -314,6 +321,21 @@ fun SeriesDetails(
             onDismissRequest = { overviewDialog = null },
         )
     }
+    if (showRematchDialog) {
+        item?.let { series ->
+            MetadataRematchDialog(
+                itemTitle = series.title ?: "",
+                initialQuery = series.title ?: "",
+                results = metadataRematchResults,
+                onSearch = viewModel::searchMetadataMatches,
+                onApply = viewModel::applyMetadataMatch,
+                onDismissRequest = {
+                    showRematchDialog = false
+                    viewModel.resetMetadataRematch()
+                },
+            )
+        }
+    }
     showPlaylistDialog.compose { itemId ->
         PlaylistDialog(
             title = stringResource(R.string.add_to_playlist),
@@ -354,6 +376,7 @@ fun SeriesDetailsContent(
     played: Boolean,
     favorite: Boolean,
     canDelete: Boolean,
+    canRematchMetadata: Boolean,
     rottenTomatoesAudienceScore: Float?,
     onClickItem: (Int, BaseItem) -> Unit,
     onClickPerson: (Person) -> Unit,
@@ -362,6 +385,7 @@ fun SeriesDetailsContent(
     playOnClick: (Boolean) -> Unit,
     watchOnClick: () -> Unit,
     favoriteOnClick: () -> Unit,
+    rematchOnClick: () -> Unit,
     trailerOnClick: (Trailer) -> Unit,
     onClickExtra: (Int, ExtrasItem) -> Unit,
     onShowContextMenu: (ContextMenu) -> Unit,
@@ -490,6 +514,21 @@ fun SeriesDetailsContent(
                                     }
                                 },
                         )
+                        if (canRematchMetadata) {
+                            ExpandableFaButton(
+                                title = R.string.rematch_metadata,
+                                iconStringRes = R.string.fa_magnifying_glass_plus,
+                                onClick = rematchOnClick,
+                                modifier =
+                                    Modifier.onFocusChanged {
+                                        if (it.isFocused) {
+                                            scope.launch(ExceptionHandler()) {
+                                                bringIntoViewRequester.bringIntoView()
+                                            }
+                                        }
+                                    },
+                            )
+                        }
                         if (canDelete) {
                             DeleteButton(
                                 title = series.title ?: "",

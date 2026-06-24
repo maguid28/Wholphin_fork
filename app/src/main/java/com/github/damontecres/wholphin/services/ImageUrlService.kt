@@ -44,6 +44,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else {
                         getItemImageUrl(
@@ -51,6 +52,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     }
                 }
@@ -63,6 +65,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else if (backdropTags.isNotEmpty()) {
                         getItemImageUrl(
@@ -70,6 +73,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else {
                         null
@@ -86,6 +90,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else if (useSeriesForPrimary && parentBackdropId != null &&
                         (itemType == BaseItemKind.EPISODE || itemType == BaseItemKind.SEASON)
@@ -96,6 +101,7 @@ class ImageUrlService
                             imageType = ImageType.BACKDROP,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[ImageType.BACKDROP],
                         )
                     } else if (parentThumbId != null && itemType == BaseItemKind.SEASON && imageType !in imageTags) {
                         getItemImageUrl(
@@ -103,6 +109,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else if (useSeriesForPrimary &&
                         parentThumbId == null &&
@@ -115,6 +122,7 @@ class ImageUrlService
                             imageType = ImageType.PRIMARY,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[ImageType.PRIMARY],
                         )
                     } else if (imageType !in imageTags && backdropTags.isNotEmpty()) {
                         // If no thumb, use backdrop if available
@@ -123,6 +131,7 @@ class ImageUrlService
                             imageType = ImageType.BACKDROP,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[ImageType.BACKDROP],
                         )
                     } else {
                         getItemImageUrl(
@@ -130,6 +139,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     }
                 }
@@ -145,6 +155,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else if (seriesId != null && itemType == BaseItemKind.SEASON && imageType !in imageTags) {
                         getItemImageUrl(
@@ -152,6 +163,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     } else {
                         getItemImageUrl(
@@ -159,6 +171,7 @@ class ImageUrlService
                             imageType = imageType,
                             fillWidth = fillWidth,
                             fillHeight = fillHeight,
+                            tag = imageTags[imageType],
                         )
                     }
                 }
@@ -169,6 +182,7 @@ class ImageUrlService
                         imageType = imageType,
                         fillWidth = fillWidth,
                         fillHeight = fillHeight,
+                        tag = imageTags[imageType],
                     )
                 }
             }

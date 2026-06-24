@@ -42,6 +42,7 @@ sealed interface ContextMenu {
         val showGoTo: Boolean,
         val showStreamChoices: Boolean,
         val canDelete: Boolean,
+        val canRematchMetadata: Boolean = false,
         val canRemoveContinueWatching: Boolean,
         val canRemoveNextUp: Boolean,
         val actions: ContextMenuActions,
@@ -84,6 +85,7 @@ data class ContextMenuActions(
     val onClickGoTo: (BaseItem) -> Unit = { navigateTo(it.destination()) },
     val onClickRemoveFromNextUp: (BaseItem) -> Unit = {},
     val onClickAddToQueue: (BaseItem) -> Unit = {},
+    val onClickRematchMetadata: (BaseItem) -> Unit = {},
 )
 
 data class PersonContextActions(
@@ -187,7 +189,7 @@ fun ContextMenu(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     val dialogItems =
-        remember(context, item, chosenStreams) {
+        remember(context, item, chosenStreams, contextMenu.canRematchMetadata) {
             buildContextMenuItems(
                 context = context,
                 item = item,
@@ -199,6 +201,7 @@ fun ContextMenu(
                 showGoTo = contextMenu.showGoTo,
                 showStreamChoices = contextMenu.showStreamChoices,
                 canDelete = contextMenu.canDelete,
+                canRematchMetadata = contextMenu.canRematchMetadata,
                 canRemoveContinueWatching = contextMenu.canRemoveContinueWatching,
                 canRemoveNextUp = contextMenu.canRemoveNextUp,
                 actions = actions,
@@ -294,6 +297,7 @@ private fun buildContextMenuItems(
     showGoTo: Boolean,
     showStreamChoices: Boolean,
     canDelete: Boolean,
+    canRematchMetadata: Boolean,
     canRemoveContinueWatching: Boolean,
     canRemoveNextUp: Boolean,
     actions: ContextMenuActions,
@@ -446,6 +450,17 @@ private fun buildContextMenuItems(
                     dismissOnClick = false,
                 ) {
                     onClickDelete.invoke()
+                },
+            )
+        }
+        if (canRematchMetadata && item.type in listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)) {
+            add(
+                DialogItem(
+                    text = R.string.rematch_metadata,
+                    iconStringRes = R.string.fa_magnifying_glass_plus,
+                    dismissOnClick = true,
+                ) {
+                    actions.onClickRematchMetadata.invoke(item)
                 },
             )
         }

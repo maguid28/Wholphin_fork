@@ -59,6 +59,7 @@ import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchDialog
 import com.github.damontecres.wholphin.ui.discover.DiscoverRow
 import com.github.damontecres.wholphin.ui.discover.DiscoverRowData
 import com.github.damontecres.wholphin.ui.letNotEmpty
@@ -95,15 +96,12 @@ fun MovieDetails(
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
+    var showRematchDialog by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
-    val preferredSubtitleLanguage =
-        viewModel.serverRepository.currentUserDto
-            .observeAsState()
-            .value
-            ?.configuration
-            ?.subtitleLanguagePreference
+    val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
+    val preferredSubtitleLanguage = currentUserDto?.configuration?.subtitleLanguagePreference
 
     val contextActions =
         remember {
@@ -133,6 +131,7 @@ fun MovieDetails(
                 },
                 onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
                 onClearChosenStreams = { viewModel.clearChosenStreams(it) },
+                onClickRematchMetadata = { showRematchDialog = true },
             )
         }
 
@@ -196,6 +195,7 @@ fun MovieDetails(
                             showGoTo = false,
                             showStreamChoices = true,
                             canDelete = state.canDelete,
+                            canRematchMetadata = currentUserDto?.policy?.isAdministrator == true,
                             canRemoveContinueWatching = false,
                             canRemoveNextUp = false,
                             actions = contextActions,
@@ -265,6 +265,21 @@ fun MovieDetails(
                     ?.isAdministrator == true,
             onDismissRequest = { overviewDialog = null },
         )
+    }
+    if (showRematchDialog) {
+        state.movie?.let { movie ->
+            MetadataRematchDialog(
+                itemTitle = movie.title ?: "",
+                initialQuery = movie.title ?: "",
+                results = state.metadataRematchResults,
+                onSearch = viewModel::searchMetadataMatches,
+                onApply = viewModel::applyMetadataMatch,
+                onDismissRequest = {
+                    showRematchDialog = false
+                    viewModel.resetMetadataRematch()
+                },
+            )
+        }
     }
     showPlaylistDialog.compose { itemId ->
         PlaylistDialog(

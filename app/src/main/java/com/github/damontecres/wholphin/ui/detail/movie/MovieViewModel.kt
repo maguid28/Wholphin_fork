@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.ui.detail.movie
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ChosenStreams
 import com.github.damontecres.wholphin.data.ExtrasItem
 import com.github.damontecres.wholphin.data.ItemPlaybackRepository
@@ -19,6 +20,7 @@ import com.github.damontecres.wholphin.services.ExtrasService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
 import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
+import com.github.damontecres.wholphin.services.MetadataRematchService
 import com.github.damontecres.wholphin.services.MdbListRatingsService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.PeopleFavorites
@@ -49,6 +51,7 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.api.RemoteSearchResult
 import org.jellyfin.sdk.model.api.request.GetSimilarItemsRequest
 import timber.log.Timber
 import java.util.UUID
@@ -74,6 +77,7 @@ class MovieViewModel
         private val userPreferencesService: UserPreferencesService,
         private val backdropService: BackdropService,
         private val mediaManagementService: MediaManagementService,
+        private val metadataRematchService: MetadataRematchService,
         @Assisted val itemId: UUID,
     ) : ViewModel() {
         @AssistedFactory
@@ -83,6 +87,7 @@ class MovieViewModel
 
         private val _state = MutableStateFlow(MovieState())
         val state: StateFlow<MovieState> = _state
+        private var metadataSearchJob: Job? = null
 
         init {
             init()
@@ -314,6 +319,63 @@ class MovieViewModel
             }
         }
 
+        fun resetMetadataRematch() {
+            metadataSearchJob?.cancel()
+            _state.update { it.copy(metadataRematchResults = DataLoadingState.Pending) }
+        }
+
+        fun searchMetadataMatches(query: String) {
+            metadataSearchJob?.cancel()
+            val movie = state.value.movie
+            if (movie == null || query.isBlank()) {
+                _state.update { it.copy(metadataRematchResults = DataLoadingState.Pending) }
+                return
+            }
+            metadataSearchJob =
+                viewModelScope.launchIO {
+                    _state.update { it.copy(metadataRematchResults = DataLoadingState.Loading) }
+                    try {
+                        val results = metadataRematchService.search(movie, query)
+                        _state.update {
+                            it.copy(metadataRematchResults = DataLoadingState.Success(results))
+                        }
+                    } catch (ex: Exception) {
+                        Timber.e(ex, "Error searching metadata matches for movie %s", movie.id)
+                        _state.update {
+                            it.copy(
+                                metadataRematchResults =
+                                    DataLoadingState.Error(
+                                        "Error searching metadata matches",
+                                        ex,
+                                    ),
+                            )
+                        }
+                    }
+                }
+        }
+
+        fun applyMetadataMatch(result: RemoteSearchResult) {
+            val movie = state.value.movie ?: return
+            viewModelScope.launchIO {
+                try {
+                    metadataRematchService.apply(movie.id, result)
+                    val updatedMovie = metadataRematchService.waitForUpdatedItem(movie)
+                    _state.update {
+                        it.copy(
+                            loading = DataLoadingState.Success(updatedMovie),
+                            rottenTomatoesAudienceScore = null,
+                        )
+                    }
+                    backdropService.submit(updatedMovie)
+                    showToast(context, context.getString(R.string.metadata_rematch_complete))
+                    resetMetadataRematch()
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Error applying metadata match for movie %s", movie.id)
+                    showToast(context, context.getString(R.string.metadata_rematch_error))
+                }
+            }
+        }
+
         fun deleteItem(item: BaseItem) {
             deleteItem(context, mediaManagementService, item) {
                 navigationManager.goBack()
@@ -332,6 +394,8 @@ data class MovieState(
     val chosenStreams: ChosenStreams? = null,
     val rottenTomatoesAudienceScore: Float? = null,
     val canDelete: Boolean = false,
+    val metadataRematchResults: DataLoadingState<List<RemoteSearchResult>> =
+        DataLoadingState.Pending,
 ) {
     val movie: BaseItem? = (loading as? DataLoadingState.Success<BaseItem>)?.data
 }

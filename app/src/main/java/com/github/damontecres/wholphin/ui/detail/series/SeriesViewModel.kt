@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ChosenStreams
 import com.github.damontecres.wholphin.data.ExtrasItem
 import com.github.damontecres.wholphin.data.ItemPlaybackRepository
@@ -19,6 +20,7 @@ import com.github.damontecres.wholphin.services.ExtrasService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
 import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
+import com.github.damontecres.wholphin.services.MetadataRematchService
 import com.github.damontecres.wholphin.services.MdbListRatingsService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.PeopleFavorites
@@ -40,6 +42,7 @@ import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.setValueOnMain
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.util.ApiRequestPager
+import com.github.damontecres.wholphin.util.DataLoadingState
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.GetEpisodesRequestHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
@@ -73,6 +76,7 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.MediaStreamType
+import org.jellyfin.sdk.model.api.RemoteSearchResult
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetEpisodesRequest
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
@@ -101,6 +105,7 @@ class SeriesViewModel
         private val seerrService: SeerrService,
         private val mediaManagementService: MediaManagementService,
         private val mdbListRatingsService: MdbListRatingsService,
+        private val metadataRematchService: MetadataRematchService,
         @Assisted val seriesId: UUID,
         @Assisted val seasonEpisodeIds: SeasonEpisodeIds?,
         @Assisted val seriesPageType: SeriesPageType,
@@ -124,6 +129,8 @@ class SeriesViewModel
         val similar = MutableLiveData<List<BaseItem>>()
         val canDeleteSeries = MutableStateFlow(false)
         val rottenTomatoesAudienceScore = MutableStateFlow<Float?>(null)
+        val metadataRematchResults =
+            MutableStateFlow<DataLoadingState<List<RemoteSearchResult>>>(DataLoadingState.Pending)
 
         val peopleInEpisode = MutableLiveData<PeopleInItem>(PeopleInItem())
         val discovered = MutableStateFlow<List<DiscoverItem>>(listOf())
@@ -131,6 +138,7 @@ class SeriesViewModel
 
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
         private var focusedEpisodeRefreshJob: Job? = null
+        private var metadataSearchJob: Job? = null
 
         init {
             viewModelScope.launch(
@@ -306,6 +314,9 @@ class SeriesViewModel
             item.value?.let { item ->
                 if (loading.value == LoadingState.Success) {
                     viewModelScope.launchIO {
+                        val refreshed = fetchItem(seriesId)
+                        canDeleteSeries.update { mediaManagementService.canDelete(refreshed) }
+                        backdropService.submit(refreshed)
                         (seasons.value as? ApiRequestPager<*>)?.refresh()
                     }
                 }
@@ -704,6 +715,51 @@ class SeriesViewModel
             viewModelScope.launchIO {
                 itemPlaybackRepository.deleteChosenStreams(chosenStreams)
                 lookUpChosenTracks(item.id, item)
+            }
+        }
+
+        fun resetMetadataRematch() {
+            metadataSearchJob?.cancel()
+            metadataRematchResults.update { DataLoadingState.Pending }
+        }
+
+        fun searchMetadataMatches(query: String) {
+            metadataSearchJob?.cancel()
+            val series = item.value
+            if (series == null || query.isBlank()) {
+                metadataRematchResults.update { DataLoadingState.Pending }
+                return
+            }
+            metadataSearchJob =
+                viewModelScope.launchIO {
+                    metadataRematchResults.update { DataLoadingState.Loading }
+                    try {
+                        val results = metadataRematchService.search(series, query)
+                        metadataRematchResults.update { DataLoadingState.Success(results) }
+                    } catch (ex: Exception) {
+                        Timber.e(ex, "Error searching metadata matches for series %s", series.id)
+                        metadataRematchResults.update {
+                            DataLoadingState.Error("Error searching metadata matches", ex)
+                        }
+                    }
+                }
+        }
+
+        fun applyMetadataMatch(result: RemoteSearchResult) {
+            val series = item.value ?: return
+            viewModelScope.launchIO {
+                try {
+                    metadataRematchService.apply(series.id, result)
+                    val refreshed = metadataRematchService.waitForUpdatedItem(series)
+                    item.setValueOnMain(refreshed)
+                    canDeleteSeries.update { mediaManagementService.canDelete(refreshed) }
+                    backdropService.submit(refreshed)
+                    showToast(context, context.getString(R.string.metadata_rematch_complete))
+                    resetMetadataRematch()
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Error applying metadata match for series %s", series.id)
+                    showToast(context, context.getString(R.string.metadata_rematch_error))
+                }
             }
         }
 

@@ -113,6 +113,11 @@
     <string name="search_and_download"><![CDATA[Search & Download]]></string>
     <string name="search">Search</string>
     <string name="searching">Searching…</string>
+    <string name="rematch_metadata">Rematch metadata</string>
+    <string name="metadata_rematch_confirm">Replace the metadata and images with the selected match?</string>
+    <string name="metadata_rematch_complete">Metadata rematch applied</string>
+    <string name="metadata_rematch_error">Error rematching metadata</string>
+    <string name="metadata_rematch_search_error">Error searching metadata matches</string>
     <string name="voice_search">Voice search</string>
     <string name="voice_starting">Starting</string>
     <string name="voice_search_prompt">Speak to search</string>

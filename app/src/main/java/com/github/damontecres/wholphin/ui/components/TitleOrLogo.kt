@@ -96,13 +96,14 @@ fun rememberLogoUrl(
     maxHeight: Int? = null,
 ): String? {
     val imageUrlService = LocalImageUrlService.current
-    return remember(item?.id, maxWidth, maxHeight) {
+    return remember(item, maxWidth, maxHeight) {
         if (item?.type == BaseItemKind.EPISODE && item.data.seriesId != null && item.data.parentLogoImageTag != null) {
             imageUrlService.getItemImageUrl(
                 itemId = item.data.seriesId!!,
                 imageType = ImageType.LOGO,
                 fillWidth = maxWidth,
                 fillHeight = maxHeight,
+                tag = item.data.parentLogoImageTag,
             )
         } else if (ImageType.LOGO in item?.data?.imageTags.orEmpty()) {
             imageUrlService.getItemImageUrl(
