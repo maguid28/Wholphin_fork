@@ -443,6 +443,7 @@ fun NavDrawer(
     val searchFocusRequester = drawerFocusRequester("search")
     val homeFocusRequester = drawerFocusRequester("home")
     val nowPlayingFocusRequester = drawerFocusRequester("now_playing")
+    var initialHomeFocusRequested by remember { mutableStateOf(false) }
     var previewFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
     var activeDrawerFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
     var enteringContent by remember { mutableStateOf(false) }
@@ -530,6 +531,17 @@ fun NavDrawer(
     LaunchedEffect(Unit) {
         restartIdleCloseTimer()
     }
+    LaunchedEffect(destination) {
+        if (!initialHomeFocusRequested && destination is Destination.Home) {
+            initialHomeFocusRequested = true
+            repeat(5) {
+                withFrameNanos { }
+                if (homeFocusRequester.tryRequestFocus("nav_drawer_initial_home")) {
+                    return@LaunchedEffect
+                }
+            }
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             idleCloseJob[0]?.cancel()
@@ -555,6 +567,10 @@ fun NavDrawer(
                 }
             }
         }
+    val drawerListFallbackFocusRequester =
+        selectedDrawerFocusRequester
+            ?: activeDrawerFocusRequester
+            ?: homeFocusRequester
 
     // If the user presses back while on the home page, open the nav drawer, another back press will quit the app
     BackHandler(enabled = (drawerState.currentValue == DrawerValue.Closed && destination is Destination.Home)) {
@@ -562,7 +578,7 @@ fun NavDrawer(
             drawerState.setValue(DrawerValue.Open)
             restartIdleCloseTimer()
             withFrameNanos { }
-            (selectedDrawerFocusRequester ?: homeFocusRequester).requestFocus()
+            drawerListFallbackFocusRequester.requestFocus()
         }
     }
     BackHandler(enabled = moreExpanded && drawerState.currentValue == DrawerValue.Open) {
@@ -599,9 +615,7 @@ fun NavDrawer(
         retainOpenOnFocusLoss = retainOpenForPreview,
         drawerEntryFocusRequester =
             previewFocusRequester
-                ?: selectedDrawerFocusRequester
-                ?: activeDrawerFocusRequester
-                ?: homeFocusRequester,
+                ?: drawerListFallbackFocusRequester,
         drawerContent = { drawerValue ->
             val isOpen = drawerValue.isOpen
             val spacedBy = 2.dp
@@ -671,7 +685,7 @@ fun NavDrawer(
                         modifier =
                             Modifier
                                 .focusGroup()
-                                .focusRestorer(searchFocusRequester)
+                                .focusRestorer(drawerListFallbackFocusRequester)
                                 .focusProperties {
                                     onEnter = {
                                         if (requestedFocusDirection == FocusDirection.Down) {
@@ -679,9 +693,7 @@ fun NavDrawer(
                                         } else {
                                             (
                                                     previewFocusRequester
-                                                    ?: selectedDrawerFocusRequester
-                                                    ?: activeDrawerFocusRequester
-                                                    ?: homeFocusRequester
+                                                    ?: drawerListFallbackFocusRequester
                                             ).tryRequestFocus("nav_drawer_list_entry")
                                         }
                                     }

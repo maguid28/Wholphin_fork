@@ -33,7 +33,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -100,7 +99,7 @@ class HomeViewModel
                         )
                         _state.update {
                             it.copy(
-                                loadingState = if (refresh) LoadingState.Success else LoadingState.Loading,
+                                loadingState = LoadingState.Success,
                                 refreshState = LoadingState.Loading,
                                 settings = settings,
                                 mediaBannerItems = if (refresh) it.mediaBannerItems else emptyList(),
@@ -109,7 +108,7 @@ class HomeViewModel
                                     if (refresh) {
                                         it.homeRows
                                     } else {
-                                        List(settings.rows.size) { HomeRowLoadingState.Pending("") }
+                                        settings.rows.map { row -> HomeRowLoadingState.Loading(row.title) }
                                     },
                             )
                         }
@@ -117,10 +116,15 @@ class HomeViewModel
                         val semaphore = Semaphore(4)
                         val mediaBannerDeferred =
                             viewModelScope.async(Dispatchers.IO) {
-                                homeSettingsService.fetchMediaBannerItems(
-                                    userDto = userDto,
-                                    libraries = libraries,
-                                )
+                                try {
+                                    homeSettingsService.fetchMediaBannerItems(
+                                        userDto = userDto,
+                                        libraries = libraries,
+                                    )
+                                } catch (ex: Exception) {
+                                    Timber.w(ex, "Could not fetch home media banner")
+                                    null
+                                }
                             }
 
                         val deferred =
@@ -150,49 +154,43 @@ class HomeViewModel
                                     }
                                 }
 
-                        if (refresh) {
-                            // Replace rows as they complete
-                            val remaining = deferred.withIndex().toMutableList()
-                            while (remaining.isNotEmpty()) {
-                                val (rowIndex, rowData) =
-                                    select {
-                                        // "Return" the first remaining that is completed
-                                        remaining
-                                            .forEach { (rowIndex, deferred) ->
-                                                deferred.onAwait { rowIndex to it }
-                                            }
-                                    }
-                                Timber.v("Got row data index=%s", rowIndex)
-                                remaining.removeIf { it.index == rowIndex }
-                                _state.update { state ->
-                                    val newRows =
-                                        state.homeRows.toMutableList().apply {
+                        // Replace rows as they complete so the home page becomes usable as soon as
+                        // the first row is ready instead of waiting for every home section.
+                        val remaining = deferred.withIndex().toMutableList()
+                        while (remaining.isNotEmpty()) {
+                            val (rowIndex, rowData) =
+                                select {
+                                    // "Return" the first remaining that is completed
+                                    remaining
+                                        .forEach { (rowIndex, deferred) ->
+                                            deferred.onAwait { rowIndex to it }
+                                        }
+                                }
+                            Timber.v("Got row data index=%s", rowIndex)
+                            remaining.removeIf { it.index == rowIndex }
+                            _state.update { state ->
+                                val newRows =
+                                    state.homeRows.toMutableList().apply {
+                                        if (rowIndex in indices) {
                                             set(rowIndex, rowData)
                                         }
-                                    state.copy(
-                                        homeRows = newRows,
-                                    )
-                                }
-                            }
-                            val mediaBannerItems = mediaBannerDeferred.await()
-                            _state.update {
-                                it.copy(
-                                    loadingState = LoadingState.Success,
-                                    refreshState = LoadingState.Success,
-                                    mediaBannerItems = mediaBannerItems,
-                                    mediaBannerAudienceScores = emptyMap(),
+                                    }
+                                state.copy(
+                                    homeRows = newRows,
                                 )
                             }
-                            loadMediaBannerAudienceScores(mediaBannerItems)
-                        } else {
-                            val rows = deferred.awaitAll()
-                            val mediaBannerItems = mediaBannerDeferred.await()
-                            Timber.v("Got all rows")
+                        }
+                        Timber.v("Got all rows")
+                        _state.update {
+                            it.copy(
+                                loadingState = LoadingState.Success,
+                                refreshState = LoadingState.Success,
+                            )
+                        }
+
+                        mediaBannerDeferred.await()?.let { mediaBannerItems ->
                             _state.update {
                                 it.copy(
-                                    loadingState = LoadingState.Success,
-                                    refreshState = LoadingState.Success,
-                                    homeRows = rows,
                                     mediaBannerItems = mediaBannerItems,
                                     mediaBannerAudienceScores = emptyMap(),
                                 )
