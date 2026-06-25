@@ -29,11 +29,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -100,6 +102,7 @@ import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaType
@@ -147,6 +150,7 @@ fun HomePage(
     modifier: Modifier = Modifier,
     onBannerShown: () -> Unit = {},
     takeFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     viewModel: HomeViewModel = hiltViewModel(),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
 ) {
@@ -263,6 +267,7 @@ fun HomePage(
                 onBannerShown = onBannerShown,
                 modifier = modifier,
                 takeFocus = takeFocus,
+                suppressContentScroll = suppressContentScroll,
             )
             overviewDialog?.let { info ->
                 ItemDetailsDialog(
@@ -320,6 +325,7 @@ fun HomePageContent(
     loadingState: LoadingState? = null,
     listState: LazyListState = rememberLazyListState(),
     takeFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     showEmptyRows: Boolean = false,
     headerComposable: @Composable (focusedItem: BaseItem?) -> Unit = { focusedItem ->
         HomePageHeader(
@@ -370,11 +376,48 @@ fun HomePageContent(
         } ?: false
     }
     var firstFocused by remember { mutableStateOf(false) }
+    // The row that currently has focus within the content, updated synchronously as focus moves.
+    // Used to restore focus to the correct row when returning from the nav drawer (see below).
+    val liveFocusedRow = remember { mutableIntStateOf(-1) }
+    // Content-local re-anchor suppression. Set true when returning from the nav drawer and held until
+    // the user presses a key. While true the bring-into-view spec performs no scroll, so the restored
+    // row stays exactly where it was (no jump) even if Compose would otherwise re-anchor it. It is
+    // cleared on the first key event (see onPreviewKeyEvent below) - BEFORE that key moves focus - so
+    // the very first navigation scrolls normally instead of being swallowed.
+    var contentScrollSuppressed by remember { mutableStateOf(false) }
 
     LaunchedEffect(takeFocus) {
         if (!takeFocus) {
             firstFocused = false
         }
+    }
+
+    // When focus is handed back from the nav drawer it uses spatial navigation
+    // (moveFocus(Right)), which can land on whichever row happens to be adjacent to the drawer item
+    // rather than the row the user actually left. If that row is off-screen, Compose scrolls it into
+    // view and the content visibly jumps. To prevent this we observe the suppression flag (driven by
+    // the drawer handoff) via snapshotFlow - which sees the change even though NavDisplay caches this
+    // composition - then suppress re-anchoring and re-request focus on the row that was focused before
+    // the drawer took over. Because re-anchoring is suppressed, that row is still in its original
+    // place, so focus returns to it with no scroll.
+    LaunchedEffect(Unit) {
+        snapshotFlow { suppressContentScroll() }
+            .distinctUntilChanged()
+            .collect { suppressing ->
+                if (suppressing) {
+                    contentScrollSuppressed = true
+                    val targetRow = liveFocusedRow.intValue
+                    if (targetRow >= 0) {
+                        // Request focus on the row the user left immediately. The drawer's handoff
+                        // waits ~50ms before its first spatial moveFocus(Right) and skips it once the
+                        // content already has focus, so grabbing focus here both lands on the correct
+                        // row and prevents the wrong spatial landing.
+                        rowFocusRequesters
+                            .getOrNull(targetRow)
+                            ?.tryRequestFocus("drawer_return_row")
+                    }
+                }
+            }
     }
 
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
@@ -454,8 +497,14 @@ fun HomePageContent(
         modifier =
             modifier
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) {
-                        restartIdleBannerTimer()
+                    if (event.type == KeyEventType.KeyDown) {
+                        // The user is navigating again - stop suppressing re-anchor scrolls so this
+                        // (and subsequent) key presses scroll normally. Cleared before the event is
+                        // dispatched to focus, so the first navigation isn't swallowed.
+                        contentScrollSuppressed = false
+                        if (event.nativeKeyEvent.repeatCount == 0) {
+                            restartIdleBannerTimer()
+                        }
                     }
                     false
                 },
@@ -484,7 +533,8 @@ fun HomePageContent(
                     }
                 val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
                 CompositionLocalProvider(
-                    LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec(spaceAbovePx),
+                    LocalBringIntoViewSpec provides
+                        ScrollToTopBringIntoViewSpec(spaceAbovePx) { contentScrollSuppressed },
                 ) {
                     LazyColumn(
                         state = listState,
@@ -564,6 +614,7 @@ fun HomePageContent(
                                                         remember(rowIndex, index) {
                                                             { isFocused: Boolean ->
                                                             if (isFocused) {
+                                                                liveFocusedRow.intValue = rowIndex
                                                                 scheduleFocusedPosition(
                                                                     RowColumn(
                                                                         rowIndex,

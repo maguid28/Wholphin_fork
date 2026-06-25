@@ -19,3 +19,4 @@
 - Fixed app startup so it restores the last selected user from the cached session instead of opening the user selection screen when the Jellyfin refresh is unavailable.
 - Fixed the Home nav drawer item so selecting it after Home was already preview-loaded no longer forces an unnecessary Home reload.
 - Fixed nav drawer activation so pressing right or enter on a drawer item opens it instead of only closing the drawer.
+- Fixed returning from the nav drawer to Home so focus restores to the row you left without the content scrolling/jumping, and the first directional press after returning navigates normally instead of losing focus.

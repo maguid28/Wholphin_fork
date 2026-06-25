@@ -66,6 +66,7 @@ fun DestinationContent(
     modifier: Modifier = Modifier,
     onHomeBannerShown: () -> Unit = {},
     takeHomeFocus: Boolean = true,
+    suppressHomeContentScroll: () -> Boolean = { false },
     libraryTvPlaybackViewModel: PlaybackViewModel? = null,
 ) {
     if (destination.fullScreen) {
@@ -77,6 +78,7 @@ fun DestinationContent(
                 preferences = preferences,
                 onBannerShown = onHomeBannerShown,
                 takeFocus = takeHomeFocus,
+                suppressContentScroll = suppressHomeContentScroll,
                 modifier = modifier,
             )
         }

@@ -343,6 +343,12 @@ private const val HOME_INDEX = -1
 private const val SEARCH_INDEX = -2
 private const val NOW_PLAYING_INDEX = -3
 private const val NavDrawerFocusNavigationDelayMillis = 500L
+
+/**
+ * How long to keep suppressing the home content's bring-into-view scroll after the drawer hands
+ * focus back to content. Must outlast the bring-into-view animation so the list does not re-anchor.
+ */
+private const val ContentScrollSuppressLingerMillis = 400L
 private const val NavDrawerIdleCloseDelayMillis = 3 * 60 * 1_000L
 private val NavDrawerMainTextSize = 13.sp
 private val NavDrawerMainLineHeight = 16.sp
@@ -416,14 +422,19 @@ fun NavDrawer(
             LocalView.current.findViewTreeViewModelStoreOwner()!!,
             key = "${server.id}_${user.id}", // Keyed to the server & user to ensure its reset when switching either
         ),
-    content: @Composable (onHomeBannerShown: () -> Unit, takeHomeFocus: Boolean) -> Unit =
-        { onHomeBannerShown, takeHomeFocus ->
+    content: @Composable (
+        onHomeBannerShown: () -> Unit,
+        takeHomeFocus: Boolean,
+        suppressHomeContentScroll: () -> Boolean,
+    ) -> Unit =
+        { onHomeBannerShown, takeHomeFocus, suppressHomeContentScroll ->
             DestinationContent(
                 destination = destination,
                 preferences = preferences,
                 onClearBackdrop = onClearBackdrop,
                 onHomeBannerShown = onHomeBannerShown,
                 takeHomeFocus = takeHomeFocus,
+                suppressHomeContentScroll = suppressHomeContentScroll,
                 modifier =
                     Modifier
                         .fillMaxSize()
@@ -448,6 +459,16 @@ fun NavDrawer(
     var activeDrawerFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
     var enteringContent by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
+    // While focus is being handed from the drawer back to the content, the content's focused item
+    // triggers a bring-into-view that re-anchors (and visibly jumps) the list. Suppress that scroll
+    // for the duration of the handoff so the content stays exactly where the user left it.
+    //
+    // NavDisplay caches the content entry's composition, so a plain Boolean threaded down never
+    // recomposes the home screen. Instead we hoist the state here and pass a STABLE provider lambda
+    // that reads the live value; the bring-into-view spec calls it at scroll time so it always sees
+    // the current suppression state without requiring a recomposition.
+    val suppressContentScrollState = remember { mutableStateOf(false) }
+    val suppressContentScrollProvider = remember { { suppressContentScrollState.value } }
     val retainOpenForPreview = keepOpenOnFocusNavigation && !enteringContent
     val retainPreviewFocus: (FocusRequester) -> Boolean = retain@{
         if (enteringContent || !drawerState.isOpen || activeDrawerFocusRequester !== it) {
@@ -473,6 +494,7 @@ fun NavDrawer(
     fun closeDrawer() {
         contentFocusJob[0]?.cancel()
         enteringContent = false
+        suppressContentScrollState.value = false
         previewFocusRequester = null
         activeDrawerFocusRequester = null
         onManualNavigation()
@@ -482,6 +504,7 @@ fun NavDrawer(
         if (!enteringContent) {
             enteringContent = true
             contentHasFocus = false
+            suppressContentScrollState.value = true
             previewFocusRequester = null
             activeDrawerFocusRequester = null
             onManualNavigation()
@@ -508,6 +531,10 @@ fun NavDrawer(
                         }
                     } finally {
                         enteringContent = false
+                        // Keep suppressing briefly so the bring-into-view animation triggered by
+                        // the focus handoff completes without re-anchoring the content.
+                        delay(ContentScrollSuppressLingerMillis)
+                        suppressContentScrollState.value = false
                     }
                 }
         }
@@ -901,6 +928,7 @@ fun NavDrawer(
                 content(
                     closeForHomeBanner,
                     !drawerState.isOpen,
+                    suppressContentScrollProvider,
                 )
             }
             if (preferences.appPreferences.interfacePreferences.showClock && destination != Destination.LibraryTv) {
