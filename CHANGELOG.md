@@ -10,6 +10,7 @@
 - Updated Seerr Discover to hide titles already available in the Jellyfin library and apply category changes immediately.
 - Fixed Seerr setup and login reliability, including preserving session cookies and autofilling the Seerr URL from the current Jellyfin server with port 5055.
 - Fixed rapid nav drawer navigation causing focus to jump to the profile item instead of entering the selected page.
+- Fixed leaving a section with left so focus returns directly to its nav drawer item instead of briefly flashing to the profile item at the top-left (most visible in Search and Favourites).
 - Fixed app startup so the Home nav item receives initial focus instead of Search or the profile item.
 - Improved Home startup responsiveness by showing row placeholders immediately and filling rows as they load.
 - Fixed Library TV so the last opened channel continues in a top-right picture-in-picture view when returning to the guide, without the clock or long descriptions overlapping it.

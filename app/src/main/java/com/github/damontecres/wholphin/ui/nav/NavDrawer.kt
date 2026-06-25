@@ -667,6 +667,9 @@ fun NavDrawer(
                         imageUrl = userImageUrl,
                         serverName = server.name ?: server.url,
                         drawerOpen = isOpen,
+                        // Keep the profile icon out of the spatial "left" search while content is
+                        // focused so leaving a section never flashes focus to the top-left.
+                        allowFocus = !contentHasFocus,
                         interactionSource = interactionSource,
                         onClick = {
                             viewModel.navigateToSetup(
@@ -946,13 +949,22 @@ fun NavigationDrawerScope.ProfileIcon(
     drawerOpen: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    allowFocus: Boolean = true,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val currentOnClick by rememberUpdatedState(onClick)
     val activate = { currentOnClick() }
 
     NavigationDrawerItem(
-        modifier = modifier.activateOnDrawerItemKey(drawerOpen, activate),
+        // The profile icon is the only focusable that sits outside the nav-list focus group, so a
+        // spatial "left" search from top-aligned content (e.g. Search's bar or Favourites' tabs)
+        // would otherwise land here before focus is restored to the selected item, flashing the
+        // top-left. While content holds focus, decline focus so the left search is forced into the
+        // nav list, whose onEnter restores the selected item directly.
+        modifier =
+            modifier
+                .focusProperties { canFocus = allowFocus }
+                .activateOnDrawerItemKey(drawerOpen, activate),
         selected = false,
         onClick = activate,
         leadingContent = {
