@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -117,6 +118,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -1135,6 +1137,7 @@ class LibraryTvViewModel
 @Composable
 fun LibraryTvPage(
     preferences: UserPreferences,
+    restoreFocusOnDrawerReturn: () -> Boolean = { false },
     modifier: Modifier = Modifier,
     pipPlaybackViewModel: PlaybackViewModel? = null,
     viewModel: LibraryTvViewModel = hiltViewModel(),
@@ -1172,6 +1175,7 @@ fun LibraryTvPage(
                         onChannelFocus = viewModel::rememberFocusedChannel,
                         preferredFocusKey = viewModel.lastFocusedProgramKey,
                         preferredChannelKey = viewModel.lastFocusedChannelKey,
+                        restoreFocusOnDrawerReturn = restoreFocusOnDrawerReturn,
                         modifier = Modifier.fillMaxSize(),
                     )
                     LibraryTvPictureInPicture(
@@ -1382,6 +1386,7 @@ private fun LibraryTvGuide(
     onChannelFocus: (String, LibraryTvProgram?) -> Unit,
     preferredFocusKey: LibraryTvProgramFocusKey?,
     preferredChannelKey: String?,
+    restoreFocusOnDrawerReturn: () -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val now = remember(state) { Instant.now() }
@@ -1413,6 +1418,7 @@ private fun LibraryTvGuide(
             state = state,
             focusProgramKey = initialProgram?.focusKey().takeIf { preferredChannelKey == null },
             focusChannelKey = preferredChannelKey,
+            restoreFocusOnDrawerReturn = restoreFocusOnDrawerReturn,
             onProgramFocus = {
                 focusedProgram = it
                 onProgramFocus(it)
@@ -1520,13 +1526,13 @@ private fun LibraryTvGrid(
     state: LibraryTvGuideState,
     focusProgramKey: LibraryTvProgramFocusKey?,
     focusChannelKey: String?,
+    restoreFocusOnDrawerReturn: () -> Boolean,
     onProgramFocus: (LibraryTvProgram) -> Unit,
     onChannelFocus: (LibraryTvChannel, LibraryTvProgram?) -> Unit,
     onProgramClick: (LibraryTvProgram) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
-    val listState = rememberLazyListState()
     val scrollScope = rememberCoroutineScope()
     var rowScrollJob by remember { mutableStateOf<Job?>(null) }
     val programFocusRequesters =
@@ -1551,10 +1557,34 @@ private fun LibraryTvGrid(
                     channel.programs.any { it.focusKey() == focusProgramKey }
                 }.takeIf { it >= 0 }
         }
+    val listState =
+        rememberLazyListState(
+            initialFirstVisibleItemIndex = focusChannelIndex?.coerceAtLeast(0) ?: 0,
+        )
+    val initialPreferProgramFocus = focusProgramKey != null && focusChannelKey == null
+    // keepChannelRowReady scrolls to show one row above/below when focus is near the viewport edge.
+    // That fights programmatic scrollToItem on entry and drawer return (scroll then jump up). Hold it
+    // until the user presses a key, matching Home's contentScrollSuppressed pattern.
+    var allowRowScrollAdjustment by remember { mutableStateOf(false) }
+    var liveFocusedProgramKey by remember(focusProgramKey) { mutableStateOf(focusProgramKey) }
+    var liveFocusedChannelKey by remember(focusChannelKey) { mutableStateOf(focusChannelKey) }
+    var liveFocusedProgramCell by
+        remember(focusProgramKey, focusChannelKey) { mutableStateOf(initialPreferProgramFocus) }
     val channelRailWidth = 180.dp
     val timelineGap = 4.dp
     val rowHeight = 54.dp
+    suspend fun scrollToChannelIfNeeded(channelIndex: Int) {
+        val visibleRows = listState.layoutInfo.visibleItemsInfo
+        if (
+            visibleRows.isEmpty() ||
+                channelIndex !in visibleRows.first().index..visibleRows.last().index
+        ) {
+            listState.scrollToItem(channelIndex)
+        }
+    }
+
     fun keepChannelRowReady(channelIndex: Int) {
+        if (!allowRowScrollAdjustment) return
         val visibleRows = listState.layoutInfo.visibleItemsInfo
         if (visibleRows.isEmpty()) return
 
@@ -1578,15 +1608,55 @@ private fun LibraryTvGrid(
             }
     }
 
+    suspend fun restoreFocusedGuideEntry() {
+        val targetChannelKey = liveFocusedChannelKey ?: liveFocusedProgramKey?.channelKey
+        val targetChannelIndex =
+            targetChannelKey
+                ?.let { channelKey ->
+                    state.channels.indexOfFirst { it.key == channelKey }.takeIf { it >= 0 }
+                } ?: focusChannelIndex
+        targetChannelIndex?.let { scrollToChannelIfNeeded(it) }
+
+        val targetProgramRequester = liveFocusedProgramKey?.let(programFocusRequesters::get)
+        val targetChannelRequester = liveFocusedChannelKey?.let(channelFocusRequesters::get)
+        if (liveFocusedProgramCell) {
+            targetProgramRequester?.tryRequestFocus("library_tv_drawer_return_program")
+                ?: targetChannelRequester?.tryRequestFocus("library_tv_drawer_return_channel")
+                ?: initialProgramFocusRequester?.tryRequestFocus("library_tv_guide")
+                ?: initialChannelFocusRequester?.tryRequestFocus("library_tv_channel")
+        } else {
+            targetChannelRequester?.tryRequestFocus("library_tv_drawer_return_channel")
+                ?: targetProgramRequester?.tryRequestFocus("library_tv_drawer_return_program")
+                ?: initialChannelFocusRequester?.tryRequestFocus("library_tv_channel")
+                ?: initialProgramFocusRequester?.tryRequestFocus("library_tv_guide")
+        }
+    }
+
     LaunchedEffect(focusChannelIndex, initialChannelFocusRequester, initialProgramFocusRequester) {
-        focusChannelIndex?.let { listState.scrollToItem(it) }
+        focusChannelIndex?.let { scrollToChannelIfNeeded(it) }
         initialChannelFocusRequester?.tryRequestFocus("library_tv_channel")
             ?: initialProgramFocusRequester?.tryRequestFocus("library_tv_guide")
+    }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { restoreFocusOnDrawerReturn() }
+            .distinctUntilChanged()
+            .collect { returningFromDrawer ->
+                if (returningFromDrawer) {
+                    restoreFocusedGuideEntry()
+                }
+            }
     }
 
     BoxWithConstraints(
         modifier =
             modifier
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        allowRowScrollAdjustment = true
+                    }
+                    false
+                }
                 .fillMaxSize()
                 .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
     ) {
@@ -1641,10 +1711,16 @@ private fun LibraryTvGrid(
                         channelFocusRequester = channelFocusRequesters[channel.key],
                         programFocusRequesters = programFocusRequesters,
                         onChannelFocus = { focusedChannel, program ->
+                            liveFocusedChannelKey = focusedChannel.key
+                            liveFocusedProgramKey = program?.focusKey()
+                            liveFocusedProgramCell = false
                             keepChannelRowReady(channelIndex)
                             onChannelFocus(focusedChannel, program)
                         },
                         onProgramFocus = { program ->
+                            liveFocusedProgramKey = program.focusKey()
+                            liveFocusedChannelKey = program.channelKey
+                            liveFocusedProgramCell = true
                             keepChannelRowReady(channelIndex)
                             onProgramFocus(program)
                         },

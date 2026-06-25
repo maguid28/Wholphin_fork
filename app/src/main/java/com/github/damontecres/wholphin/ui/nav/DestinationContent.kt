@@ -360,6 +360,7 @@ fun DestinationContent(
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             LibraryTvPage(
                 preferences = preferences,
+                restoreFocusOnDrawerReturn = suppressHomeContentScroll,
                 pipPlaybackViewModel = libraryTvPlaybackViewModel,
                 modifier = modifier,
             )
