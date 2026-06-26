@@ -16,7 +16,7 @@
 - Improved Library TV guide load performance by reducing the scheduled window from 6 hours to 3 hours ahead.
 - Updated Library TV to use app theme colors for the top banner, channel list, program grid, and channel settings.
 - Fixed Library TV currently playing program labels so they stay white and readable on tinted cells.
-- Improved Library TV focused channel name readability with a dark text shadow.
+- Improved Library TV channel focus with an animated theme accent ring and soft glow, without changing the cell background or layout.
 - Fixed Library TV so the last opened channel continues in a top-right picture-in-picture view when returning to the guide, without the clock or long descriptions overlapping it.
 - Fixed Library TV guide focus when entering the guide and returning from the nav drawer so the channel list no longer jumps and focus restores to the channel or program cell you left.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.

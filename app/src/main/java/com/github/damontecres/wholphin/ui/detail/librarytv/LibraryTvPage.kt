@@ -3,6 +3,9 @@ package com.github.damontecres.wholphin.ui.detail.librarytv
 import android.os.SystemClock
 import android.text.format.DateUtils
 import androidx.annotation.OptIn
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,14 +46,13 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -1930,24 +1932,20 @@ private fun LibraryTvChannelCell(
     val context = LocalContext.current
     var focused by remember { mutableStateOf(false) }
     val colorScheme = MaterialTheme.colorScheme
-    val backgroundColor =
-        if (focused) {
-            colorScheme.inverseSurface
-        } else {
-            colorScheme.surfaceColorAtElevation(1.dp)
-        }
-    val textColor =
-        if (focused) {
-            colorScheme.inverseOnSurface
-        } else {
-            colorScheme.contentColorFor(backgroundColor)
-        }
-    val borderColor =
-        if (focused) {
-            colorScheme.inverseOnSurface.copy(alpha = .65f)
-        } else {
-            colorScheme.onSurface.copy(alpha = .08f)
-        }
+    val channelShape = RoundedCornerShape(8.dp)
+    val backgroundColor = colorScheme.surfaceColorAtElevation(1.dp)
+    val textColor = colorScheme.contentColorFor(backgroundColor)
+    val borderColor = colorScheme.onSurface.copy(alpha = .08f)
+    val focusBorderColor by animateColorAsState(
+        targetValue = if (focused) colorScheme.border else borderColor,
+        animationSpec = tween(durationMillis = 180),
+        label = "libraryTvChannelBorder",
+    )
+    val focusShadowElevation by animateDpAsState(
+        targetValue = if (focused) 12.dp else 0.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "libraryTvChannelShadow",
+    )
     val channelImage =
         remember(context, channel.imageUrl) {
             channel.imageUrl?.let {
@@ -1965,9 +1963,15 @@ private fun LibraryTvChannelCell(
         modifier =
             modifier
                 .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
-                .clip(RoundedCornerShape(8.dp))
+                .shadow(
+                    elevation = focusShadowElevation,
+                    shape = channelShape,
+                    ambientColor = colorScheme.border.copy(alpha = 0.45f),
+                    spotColor = colorScheme.border.copy(alpha = 0.75f),
+                )
+                .clip(channelShape)
                 .background(backgroundColor)
-                .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+                .border(2.dp, focusBorderColor, channelShape)
                 .onPreviewKeyEvent(::isStaleLibraryTvVerticalRepeat)
                 .onFocusChanged {
                     focused = it.isFocused
@@ -2000,14 +2004,12 @@ private fun LibraryTvChannelCell(
                     LibraryTvChannelName(
                         name = channel.name,
                         textColor = textColor,
-                        focused = focused,
                     )
                 },
                 error = {
                     LibraryTvChannelName(
                         name = channel.name,
                         textColor = textColor,
-                        focused = focused,
                     )
                 },
                 modifier =
@@ -2020,7 +2022,6 @@ private fun LibraryTvChannelCell(
             LibraryTvChannelName(
                 name = channel.name,
                 textColor = textColor,
-                focused = focused,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -2031,30 +2032,16 @@ private fun LibraryTvChannelCell(
 private fun LibraryTvChannelName(
     name: String,
     textColor: Color,
-    focused: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Text(
             text = name,
             color = textColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            style =
-                MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    shadow =
-                        if (focused) {
-                            Shadow(
-                                color = Color.Black.copy(alpha = 0.88f),
-                                offset = Offset.Zero,
-                                blurRadius = 10f,
-                            )
-                        } else {
-                            null
-                        },
-                ),
         )
     }
 }
