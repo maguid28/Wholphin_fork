@@ -13,6 +13,7 @@
 - Fixed leaving a section with left so focus returns directly to its nav drawer item instead of briefly flashing to the profile item at the top-left (most visible in Search and Favourites).
 - Fixed app startup so the Home nav item receives initial focus instead of Search or the profile item.
 - Improved Home startup responsiveness by showing row placeholders immediately and filling rows as they load.
+- Improved Library TV guide load performance by reducing the scheduled window from 6 hours to 3 hours ahead.
 - Fixed Library TV so the last opened channel continues in a top-right picture-in-picture view when returning to the guide, without the clock or long descriptions overlapping it.
 - Fixed Library TV guide focus when entering the guide and returning from the nav drawer so the channel list no longer jumps and focus restores to the channel or program cell you left.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.
