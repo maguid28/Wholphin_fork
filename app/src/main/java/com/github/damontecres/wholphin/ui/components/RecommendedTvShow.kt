@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.datastore.core.DataStore
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
@@ -324,6 +326,8 @@ fun RecommendedTvShow(
     modifier: Modifier = Modifier,
     viewModel: RecommendedTvShowViewModel =
         hiltViewModel<RecommendedTvShowViewModel, RecommendedTvShowViewModel.Factory>(
+            viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
+            key = "recommended_tvshow_$parentId",
             creationCallback = { it.create(parentId) },
         ),
 ) {

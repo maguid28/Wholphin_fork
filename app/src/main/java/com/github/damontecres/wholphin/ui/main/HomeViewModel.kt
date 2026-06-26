@@ -8,7 +8,6 @@ import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
-import com.github.damontecres.wholphin.services.DatePlayedService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
 import com.github.damontecres.wholphin.services.HomePageResolvedSettings
 import com.github.damontecres.wholphin.services.HomeSettingsService
@@ -58,7 +57,6 @@ class HomeViewModel
         private val navDrawerService: NavDrawerService,
         private val homeSettingsService: HomeSettingsService,
         private val favoriteWatchManager: FavoriteWatchManager,
-        private val datePlayedService: DatePlayedService,
         private val backdropService: BackdropService,
         private val userPreferencesService: UserPreferencesService,
         private val mediaManagementService: MediaManagementService,
@@ -68,11 +66,6 @@ class HomeViewModel
     ) : ViewModel() {
         private val _state = MutableStateFlow(HomeState.EMPTY)
         val state: StateFlow<HomeState> = _state
-
-        init {
-            datePlayedService.invalidateAll()
-//            init()
-        }
 
         fun init() {
             viewModelScope.launchIO {

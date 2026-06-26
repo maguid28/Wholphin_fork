@@ -10,11 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -66,53 +68,52 @@ class SeerrRequestsViewModel
             }
             seerrServerRepository.connection
                 .onEach { user ->
+                    if (state.value.requests is DataLoadingState.Success) return@onEach
                     state.update { it.copy(requests = DataLoadingState.Loading) }
-                    if (user != null) {
-                        val semaphore = Semaphore(3)
-                        val mediaRequests =
-                            seerrService.api.requestApi
-                                .requestGet()
-                                .results
-                                .orEmpty()
-                        val requests =
-                            mediaRequests.mapNotNull { request ->
-                                if (request.media?.tmdbId != null) {
-                                    viewModelScope.async(Dispatchers.IO) {
-                                        semaphore.withPermit {
-                                            val type = SeerrItemType.fromString(request.type)
-                                            when (type) {
-                                                SeerrItemType.MOVIE -> {
-                                                    seerrService.api.moviesApi
-                                                        .movieMovieIdGet(
-                                                            movieId = request.media.tmdbId,
-                                                        ).let { seerrService.createDiscoverItem(it) }
-                                                }
+                    val semaphore = Semaphore(3)
+                    val mediaRequests =
+                        seerrService.api.requestApi
+                            .requestGet()
+                            .results
+                            .orEmpty()
+                    val requests =
+                        mediaRequests.mapNotNull { request ->
+                            if (request.media?.tmdbId != null) {
+                                viewModelScope.async(Dispatchers.IO) {
+                                    semaphore.withPermit {
+                                        val type = SeerrItemType.fromString(request.type)
+                                        when (type) {
+                                            SeerrItemType.MOVIE -> {
+                                                seerrService.api.moviesApi
+                                                    .movieMovieIdGet(
+                                                        movieId = request.media.tmdbId,
+                                                    ).let { seerrService.createDiscoverItem(it) }
+                                            }
 
-                                                SeerrItemType.TV -> {
-                                                    seerrService.api.tvApi
-                                                        .tvTvIdGet(tvId = request.media.tmdbId)
-                                                        .let { seerrService.createDiscoverItem(it) }
-                                                }
+                                            SeerrItemType.TV -> {
+                                                seerrService.api.tvApi
+                                                    .tvTvIdGet(tvId = request.media.tmdbId)
+                                                    .let { seerrService.createDiscoverItem(it) }
+                                            }
 
-                                                SeerrItemType.PERSON -> {
-                                                    null
-                                                }
+                                            SeerrItemType.PERSON -> {
+                                                null
+                                            }
 
-                                                SeerrItemType.UNKNOWN -> {
-                                                    null
-                                                }
-                                            }?.let { RequestGridItem(request, it) }
-                                        }
+                                            SeerrItemType.UNKNOWN -> {
+                                                null
+                                            }
+                                        }?.let { RequestGridItem(request, it) }
                                     }
-                                } else {
-                                    Timber.v("No TMDB ID for request %s", request.id)
-                                    null
                                 }
+                            } else {
+                                Timber.v("No TMDB ID for request %s", request.id)
+                                null
                             }
-                        val results = requests.awaitAll().filterNotNull()
+                        }
+                    val results = requests.awaitAll().filterNotNull()
 
-                        state.update { it.copy(requests = DataLoadingState.Success(results)) }
-                    }
+                    state.update { it.copy(requests = DataLoadingState.Success(results)) }
                 }.catch { ex ->
                     Timber.e(ex, "Error fetching requests")
                     state.update { it.copy(requests = DataLoadingState.Error(ex)) }
@@ -149,7 +150,11 @@ data class RequestGridItem(
 fun SeerrRequestsPage(
     focusRequesterOnEmpty: FocusRequester?,
     modifier: Modifier = Modifier,
-    viewModel: SeerrRequestsViewModel = hiltViewModel(),
+    viewModel: SeerrRequestsViewModel =
+        hiltViewModel(
+            viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
+            key = "seerr_requests",
+        ),
 ) {
     val state by viewModel.state.collectAsState(SeerrRequestsState.EMPTY)
 

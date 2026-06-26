@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +47,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -872,7 +874,8 @@ fun CollectionFolderGrid(
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
     viewModel: CollectionFolderViewModel =
         hiltViewModel<CollectionFolderViewModel, CollectionFolderViewModel.Factory>(
-            key = viewModelKey,
+            viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
+            key = viewModelKey ?: itemId,
         ) {
             it.create(
                 itemId = itemId,
@@ -992,16 +995,13 @@ fun CollectionFolderGrid(
             )
         }
 
-    when (val state = loading) {
-        DataLoadingState.Loading,
-        DataLoadingState.Pending,
-        -> {
-            LoadingPage(modifier)
+    when {
+        loading is DataLoadingState.Error -> {
+            ErrorMessage(loading as DataLoadingState.Error, modifier)
         }
 
-        is DataLoadingState.Error,
-        is DataLoadingState.Success<*>,
-        -> {
+        loading is DataLoadingState.Success<*> -> {
+            val state = loading as DataLoadingState.Success<List<BaseItem?>>
             val title =
                 initialFilter.nameOverride
                     ?: item?.name
@@ -1020,7 +1020,7 @@ fun CollectionFolderGrid(
                     initialPosition = viewModel.position,
                     item = item,
                     title = title,
-                    loadingState = state as DataLoadingState<List<BaseItem?>>,
+                    loadingState = state,
                     sortAndDirection = sortAndDirection!!,
                     modifier = Modifier.fillMaxSize(),
                     focusRequesterOnEmpty = focusRequesterOnEmpty,
@@ -1070,6 +1070,10 @@ fun CollectionFolderGrid(
                     )
                 }
             }
+        }
+
+        else -> {
+            LoadingPage(modifier)
         }
     }
     overviewDialog?.let { info ->

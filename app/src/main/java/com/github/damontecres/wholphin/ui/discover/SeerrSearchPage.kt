@@ -31,11 +31,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -123,7 +125,11 @@ class SeerrSearchViewModel
 fun SeerrSearchPage(
     focusRequesterOnEmpty: FocusRequester?,
     modifier: Modifier = Modifier,
-    viewModel: SeerrSearchViewModel = hiltViewModel(),
+    viewModel: SeerrSearchViewModel =
+        hiltViewModel(
+            viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
+            key = "seerr_search",
+        ),
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current

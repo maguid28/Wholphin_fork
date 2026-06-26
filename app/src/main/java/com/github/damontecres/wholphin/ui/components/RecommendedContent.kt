@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -32,7 +33,6 @@ import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.deleteItem
-import com.github.damontecres.wholphin.ui.OneTimeLaunchedEffect
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.MediaType
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val RecommendedLibraryHeaderPadding =
     PaddingValues(
@@ -85,6 +86,14 @@ abstract class RecommendedViewModel(
     abstract val rows: MutableStateFlow<List<HomeRowLoadingState>>
 
     val loading = MutableLiveData<LoadingState>(LoadingState.Loading)
+
+    private val initStarted = AtomicBoolean(false)
+
+    fun initIfNeeded() {
+        if (loading.value == LoadingState.Success) return
+        if (!initStarted.compareAndSet(false, true)) return
+        init()
+    }
 
     fun refreshItem(
         position: RowColumn,
@@ -185,24 +194,23 @@ fun RecommendedContent(
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
-    OneTimeLaunchedEffect {
-        viewModel.init()
+    LaunchedEffect(Unit) {
+        viewModel.initIfNeeded()
     }
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
     val rows by viewModel.rows.collectAsState()
+    val showContent = loading == LoadingState.Success || rows.any { it.completed }
 
-    when (val state = loading) {
-        is LoadingState.Error -> {
-            ErrorMessage(state, modifier)
+    when {
+        loading is LoadingState.Error && !showContent -> {
+            ErrorMessage(loading as LoadingState.Error, modifier)
         }
 
-        LoadingState.Loading,
-        LoadingState.Pending,
-        -> {
+        !showContent -> {
             LoadingPage(modifier)
         }
 
-        LoadingState.Success -> {
+        else -> {
             var position by rememberPosition()
             val contextActions =
                 remember {

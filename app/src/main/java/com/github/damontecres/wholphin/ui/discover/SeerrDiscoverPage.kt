@@ -25,9 +25,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.api.seerr.infrastructure.ClientException
 import com.github.damontecres.wholphin.data.model.DiscoverItem
@@ -93,14 +95,34 @@ class SeerrDiscoverViewModel
                     discoverCategories(seerrService.discoverGenres()),
                     preferences,
                 )
+            val categoryKeys = categories.map { it.key }
+            val currentRows = state.value.rows
+            if (currentRows.isNotEmpty() &&
+                currentRows.map { it.key } == categoryKeys &&
+                currentRows.all {
+                    it.items is DataLoadingState.Success || it.items is DataLoadingState.Error
+                }
+            ) {
+                return
+            }
+
             state.value =
                 DiscoverState(
-                    rows = categories.map { it.toRow(DataLoadingState.Loading) },
+                    rows =
+                        categories.map { category ->
+                            currentRows.firstOrNull {
+                                it.key == category.key && it.items is DataLoadingState.Success
+                            } ?: category.toRow(DataLoadingState.Loading)
+                        },
                 )
             coroutineScope {
                 categories
                     .map { category ->
                         async {
+                            val existingRow = state.value.rows.firstOrNull { it.key == category.key }
+                            if (existingRow?.items is DataLoadingState.Success) {
+                                return@async
+                            }
                             val result =
                                 try {
                                     DataLoadingState.Success(fetchCategory(category))
@@ -240,7 +262,11 @@ private fun DiscoverRowData.loadedItems(): List<DiscoverItem>? =
 fun SeerrDiscoverPage(
     preferences: UserPreferences,
     modifier: Modifier = Modifier,
-    viewModel: SeerrDiscoverViewModel = hiltViewModel(),
+    viewModel: SeerrDiscoverViewModel =
+        hiltViewModel(
+            viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
+            key = "seerr_discover",
+        ),
 ) {
     val state by viewModel.state.collectAsState()
     val rows = state.rows
