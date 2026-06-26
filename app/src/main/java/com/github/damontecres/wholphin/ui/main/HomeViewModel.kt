@@ -92,8 +92,8 @@ class HomeViewModel
                         )
                         _state.update {
                             it.copy(
-                                loadingState = LoadingState.Success,
-                                refreshState = LoadingState.Loading,
+                                loadingState = if (refresh) LoadingState.Success else LoadingState.Loading,
+                                refreshState = if (refresh) LoadingState.Loading else LoadingState.Pending,
                                 settings = settings,
                                 mediaBannerItems = if (refresh) it.mediaBannerItems else emptyList(),
                                 mediaBannerAudienceScores = if (refresh) it.mediaBannerAudienceScores else emptyMap(),
