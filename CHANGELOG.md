@@ -14,6 +14,9 @@
 - Fixed app startup so the Home nav item receives initial focus instead of Search or the profile item.
 - Improved Home first load by showing a loading screen until all rows are ready; refreshes still update in place with a spinner.
 - Improved Library TV guide load performance by reducing the scheduled window from 6 hours to 3 hours ahead.
+- Updated Library TV to use app theme colors for the top banner, channel list, program grid, and channel settings.
+- Fixed Library TV currently playing program labels so they stay white and readable on tinted cells.
+- Improved Library TV focused channel name readability with a dark text shadow.
 - Fixed Library TV so the last opened channel continues in a top-right picture-in-picture view when returning to the guide, without the clock or long descriptions overlapping it.
 - Fixed Library TV guide focus when entering the guide and returning from the nav drawer so the channel list no longer jumps and focus restores to the channel or program cell you left.
 - Fixed returning from playback in the series season episode list so the screen no longer reloads the season from episode 1 and focus/highlight restores to the episode that was opened.
@@ -23,3 +26,4 @@
 - Fixed the Home nav drawer item so selecting it after Home was already preview-loaded no longer forces an unnecessary Home reload.
 - Fixed nav drawer activation so pressing right or enter on a drawer item opens it instead of only closing the drawer.
 - Fixed returning from the nav drawer to Home so focus restores to the row you left without the content scrolling/jumping, and the first directional press after returning navigates normally instead of losing focus.
+- Improved nav drawer navigation by keeping screen state across visits so Home, library, Discover, and grid pages avoid unnecessary reloads.

@@ -43,12 +43,15 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -72,6 +75,8 @@ import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.tv.material3.contentColorFor
+import androidx.tv.material3.surfaceColorAtElevation
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
@@ -185,9 +190,6 @@ private val LibraryTvScheduleAnchor =
         .of(2024, 1, 1, 0, 0, 0, 0, ZoneId.systemDefault())
         .toInstant()
 
-private val LibraryTvSurface = Color(0xFF0B1622)
-private val LibraryTvSurfaceElevated = Color(0xFF162338)
-private val LibraryTvOnSurfaceDim = Color(0xFFB5C0CC)
 private val LibraryTvItemFields =
     listOf(
         ItemFields.GENRES,
@@ -1332,7 +1334,7 @@ fun LibraryTvChannelSettingsPage(
         Text(
             text = stringResource(R.string.library_tv_channels),
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -1346,7 +1348,7 @@ fun LibraryTvChannelSettingsPage(
                 item {
                     Text(
                         text = stringResource(R.string.library_tv_channels_empty),
-                        color = LibraryTvOnSurfaceDim,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp),
                     )
                 }
@@ -1443,6 +1445,13 @@ private fun LibraryTvHeader(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
+    val bannerAccent =
+        lerp(
+            colorScheme.surfaceColorAtElevation(4.dp),
+            colorScheme.primaryContainer,
+            0.42f,
+        )
     val logoRequest =
         remember(context, program?.channelImageUrl) {
             program
@@ -1471,9 +1480,9 @@ private fun LibraryTvHeader(
                     Brush.horizontalGradient(
                         colors =
                             listOf(
-                                LibraryTvSurface,
-                                LibraryTvSurfaceElevated,
-                                MaterialTheme.colorScheme.background,
+                                bannerAccent,
+                                colorScheme.surfaceColorAtElevation(2.dp),
+                                colorScheme.background,
                             ),
                     ),
                 ).padding(start = 28.dp, top = 18.dp, end = 32.dp, bottom = 12.dp),
@@ -1496,14 +1505,14 @@ private fun LibraryTvHeader(
             }
             Text(
                 text = program?.title ?: stringResource(R.string.tv_guide),
-                color = Color.White,
+                color = colorScheme.onBackground,
                 style = MaterialTheme.typography.headlineSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = meta,
-                color = LibraryTvOnSurfaceDim,
+                color = colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1511,7 +1520,7 @@ private fun LibraryTvHeader(
             program?.item?.data?.overview?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = it,
-                    color = Color.White.copy(alpha = .72f),
+                    color = colorScheme.onBackground.copy(alpha = .72f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -1760,7 +1769,7 @@ private fun LibraryTvTimelineHeader(
     ) {
         Text(
             text = stringResource(R.string.channels),
-            color = LibraryTvOnSurfaceDim,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             modifier =
@@ -1788,7 +1797,7 @@ private fun LibraryTvTimelineHeader(
                             .coerceIn(0f, 1f)
                     Text(
                         text = marker.timeText(context),
-                        color = LibraryTvOnSurfaceDim,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         maxLines = 1,
                         modifier =
@@ -1920,7 +1929,25 @@ private fun LibraryTvChannelCell(
 ) {
     val context = LocalContext.current
     var focused by remember { mutableStateOf(false) }
-    val borderColor = if (focused) MaterialTheme.colorScheme.border else Color.White.copy(alpha = .08f)
+    val colorScheme = MaterialTheme.colorScheme
+    val backgroundColor =
+        if (focused) {
+            colorScheme.inverseSurface
+        } else {
+            colorScheme.surfaceColorAtElevation(1.dp)
+        }
+    val textColor =
+        if (focused) {
+            colorScheme.inverseOnSurface
+        } else {
+            colorScheme.contentColorFor(backgroundColor)
+        }
+    val borderColor =
+        if (focused) {
+            colorScheme.inverseOnSurface.copy(alpha = .65f)
+        } else {
+            colorScheme.onSurface.copy(alpha = .08f)
+        }
     val channelImage =
         remember(context, channel.imageUrl) {
             channel.imageUrl?.let {
@@ -1939,7 +1966,7 @@ private fun LibraryTvChannelCell(
             modifier
                 .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (focused) LibraryTvSurfaceElevated else LibraryTvSurface)
+                .background(backgroundColor)
                 .border(1.dp, borderColor, RoundedCornerShape(8.dp))
                 .onPreviewKeyEvent(::isStaleLibraryTvVerticalRepeat)
                 .onFocusChanged {
@@ -1953,12 +1980,12 @@ private fun LibraryTvChannelCell(
                 Modifier
                     .size(28.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.border.copy(alpha = .18f)),
+                    .background(colorScheme.border.copy(alpha = .18f)),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = channel.number.toString().padStart(2, '0'),
-                color = Color.White,
+                color = textColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1970,10 +1997,18 @@ private fun LibraryTvChannelCell(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 loading = {
-                    LibraryTvChannelName(channel.name)
+                    LibraryTvChannelName(
+                        name = channel.name,
+                        textColor = textColor,
+                        focused = focused,
+                    )
                 },
                 error = {
-                    LibraryTvChannelName(channel.name)
+                    LibraryTvChannelName(
+                        name = channel.name,
+                        textColor = textColor,
+                        focused = focused,
+                    )
                 },
                 modifier =
                     Modifier
@@ -1984,6 +2019,8 @@ private fun LibraryTvChannelCell(
         } ?: run {
             LibraryTvChannelName(
                 name = channel.name,
+                textColor = textColor,
+                focused = focused,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1993,16 +2030,31 @@ private fun LibraryTvChannelCell(
 @Composable
 private fun LibraryTvChannelName(
     name: String,
+    textColor: Color,
+    focused: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Text(
             text = name,
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            style =
+                MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    shadow =
+                        if (focused) {
+                            Shadow(
+                                color = Color.Black.copy(alpha = 0.88f),
+                                offset = Offset.Zero,
+                                blurRadius = 10f,
+                            )
+                        } else {
+                            null
+                        },
+                ),
         )
     }
 }
@@ -2060,13 +2112,25 @@ private fun LibraryTvProgramCell(
             }
         }
     var focused by remember { mutableStateOf(false) }
+    val colorScheme = MaterialTheme.colorScheme
     val backgroundColor =
         when {
-            focused -> MaterialTheme.colorScheme.border
-            currentlyPlaying -> MaterialTheme.colorScheme.border.copy(alpha = .24f)
-            else -> LibraryTvSurfaceElevated
+            focused -> colorScheme.inverseSurface
+            currentlyPlaying -> colorScheme.border.copy(alpha = .24f)
+            else -> colorScheme.surfaceColorAtElevation(1.dp)
         }
-    val contentColor = Color.White
+    val contentColor =
+        when {
+            focused -> colorScheme.inverseOnSurface
+            currentlyPlaying -> Color.White
+            else -> colorScheme.contentColorFor(backgroundColor)
+        }
+    val borderColor =
+        if (focused) {
+            colorScheme.inverseOnSurface.copy(alpha = .65f)
+        } else {
+            colorScheme.onSurface.copy(alpha = .10f)
+        }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -2087,7 +2151,7 @@ private fun LibraryTvProgramCell(
                 .background(backgroundColor)
                 .border(
                     width = if (focused) 2.dp else 1.dp,
-                    color = if (focused) Color.White.copy(alpha = .65f) else Color.White.copy(alpha = .10f),
+                    color = borderColor,
                     shape = RoundedCornerShape(8.dp),
                 ).onFocusChanged {
                     focused = it.isFocused
