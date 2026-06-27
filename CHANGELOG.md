@@ -4,6 +4,7 @@
 
 - Added admin metadata rematching for movies and series, with in-place refresh after Jellyfin applies the new match.
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
+- Updated Home recently added and recently released rows to combine movies and TV shows in a single row, including migration of existing home settings.
 - Added optional seasonal Home rows for Halloween in October and Christmas in December.
 - Added customizable Seerr Discover categories in Settings, including enable/disable controls, ordering, and server-provided movie and TV genres.
 - Added a dedicated Seerr movie and TV search tab to Discover.
