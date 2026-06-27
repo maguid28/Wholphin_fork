@@ -79,7 +79,6 @@ fun CollectionRows(
                 onClickItem = onClickItem,
                 onLongClickItem = onLongClickItem,
                 onClickPlay = onClickPlay,
-                showClock = false,
                 onUpdateBackdrop = {},
                 headerComposable = {},
                 takeFocus = false,

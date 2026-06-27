@@ -230,16 +230,19 @@ enum class HomeCategory(
     val sortOrder: SortOrder = SortOrder.DESCENDING,
     val isPlayed: Boolean? = null,
     val minCommunityRating: Double? = null,
+    val rotatesSelection: Boolean = false,
 ) {
     TOP_RATED_MOVIES(
         itemKind = BaseItemKind.MOVIE,
         sortBy = ItemSortBy.COMMUNITY_RATING,
         minCommunityRating = 1.0,
+        rotatesSelection = true,
     ),
     TOP_RATED_TV(
         itemKind = BaseItemKind.SERIES,
         sortBy = ItemSortBy.COMMUNITY_RATING,
         minCommunityRating = 1.0,
+        rotatesSelection = true,
     ),
     POPULAR_MOVIES(
         itemKind = BaseItemKind.MOVIE,

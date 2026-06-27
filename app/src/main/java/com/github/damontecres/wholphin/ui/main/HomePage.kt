@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -36,7 +35,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -71,7 +69,6 @@ import com.github.damontecres.wholphin.ui.cards.BannerCardWithTitle
 import com.github.damontecres.wholphin.ui.cards.GenreCard
 import com.github.damontecres.wholphin.ui.cards.ItemRow
 import com.github.damontecres.wholphin.ui.cards.StudioCard
-import com.github.damontecres.wholphin.ui.components.CircularProgress
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
@@ -160,7 +157,6 @@ fun HomePage(
     }
     val state by viewModel.state.collectAsState()
     val loading = state.loadingState
-    val refreshing = state.refreshState
     val homeRows = state.homeRows
     val mediaBannerItems = state.mediaBannerItems
     val mediaBannerAudienceScores = state.mediaBannerAudienceScores
@@ -260,8 +256,6 @@ fun HomePage(
                 onLongClickItem = onLongClickItem,
                 onClickPlay = onClickPlay,
                 onHoldBannerItem = { viewModel.playFirstTrailer(context, it) },
-                loadingState = refreshing,
-                showClock = preferences.appPreferences.interfacePreferences.showClock,
                 onUpdateBackdrop = viewModel::updateBackdrop,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 onBannerShown = onBannerShown,
@@ -317,12 +311,10 @@ fun HomePageContent(
     onLongClickItem: (RowColumn, BaseItem) -> Unit,
     onClickPlay: (RowColumn, BaseItem) -> Unit,
     onHoldBannerItem: (BaseItem) -> Unit = {},
-    showClock: Boolean,
     onUpdateBackdrop: (BaseItem) -> Unit,
     showLogo: Boolean,
     onBannerShown: () -> Unit = {},
     modifier: Modifier = Modifier,
-    loadingState: LoadingState? = null,
     listState: LazyListState = rememberLazyListState(),
     takeFocus: Boolean = true,
     suppressContentScroll: () -> Boolean = { false },
@@ -703,23 +695,6 @@ fun HomePageContent(
                         .fillMaxHeight()
                         .homeBannerHeroBounds(bannerTransitionProgress),
             )
-        }
-        when (loadingState) {
-            LoadingState.Pending,
-            LoadingState.Loading,
-            -> {
-                Box(
-                    modifier =
-                        Modifier
-                            .padding(if (showClock) 40.dp else 20.dp)
-                            .size(40.dp)
-                            .align(Alignment.TopEnd),
-                ) {
-                    CircularProgress(Modifier.fillMaxSize())
-                }
-            }
-
-            else -> {}
         }
     }
 }

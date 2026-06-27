@@ -12,7 +12,9 @@
 - Fixed rapid nav drawer navigation causing focus to jump to the profile item instead of entering the selected page.
 - Fixed leaving a section with left so focus returns directly to its nav drawer item instead of briefly flashing to the profile item at the top-left (most visible in Search and Favourites).
 - Fixed app startup so the Home nav item receives initial focus instead of Search or the profile item.
-- Improved Home first load by showing a loading screen until all rows are ready; refreshes still update in place with a spinner.
+- Improved Home first load by showing a loading screen until all rows are ready; refreshes still update in place.
+- Fixed Home so background refreshes no longer show a loading spinner in the top-right corner.
+- Improved Top Rated Movies and Top Rated TV home rows to rotate through a shuffled selection on each refresh.
 - Improved Library TV guide load performance by reducing the scheduled window from 6 hours to 3 hours ahead.
 - Updated Library TV to use app theme colors for the top banner, channel list, program grid, and channel settings.
 - Fixed Library TV currently playing program labels so they stay white and readable on tinted cells.

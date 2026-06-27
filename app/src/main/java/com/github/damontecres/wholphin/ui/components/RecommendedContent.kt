@@ -279,7 +279,6 @@ fun RecommendedContent(
                         ),
                     )
                 },
-                showClock = preferences.appPreferences.interfacePreferences.showClock,
                 onUpdateBackdrop = viewModel::updateBackdrop,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 modifier = modifier,

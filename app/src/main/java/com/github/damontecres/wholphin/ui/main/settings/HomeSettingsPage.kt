@@ -323,14 +323,12 @@ fun HomeSettingsPage(
             )
         }
         HomePageContent(
-            loadingState = state.loading,
             homeRows = state.rowData,
             position = position,
             onFocusPosition = { position = it },
             onClickItem = { _, _ -> },
             onLongClickItem = { _, _ -> },
             onClickPlay = { _, _ -> },
-            showClock = false,
             onUpdateBackdrop = viewModel::updateBackdrop,
             listState = listState,
             takeFocus = false,

@@ -743,6 +743,13 @@ class HomeSettingsService
                 }
 
                 is HomeRowConfig.Category -> {
+                    val fetchLimit =
+                        if (row.category.rotatesSelection) {
+                            (limit * ROTATING_CATEGORY_POOL_MULTIPLIER)
+                                .coerceAtLeast(ROTATING_CATEGORY_MIN_POOL_SIZE)
+                        } else {
+                            limit
+                        }
                     val request =
                         GetItemsRequest(
                             userId = userDto.id,
@@ -757,7 +764,7 @@ class HomeSettingsService
                                     row.category == HomeCategory.RECENTLY_RELEASED_MOVIES ||
                                         row.category == HomeCategory.RECENTLY_RELEASED_TV
                                 },
-                            limit = limit,
+                            limit = fetchLimit,
                             fields = DefaultItemFields,
                             enableTotalRecordCount = false,
                         )
@@ -766,6 +773,13 @@ class HomeSettingsService
                             .execute(api, request)
                             .content.items
                             .map { BaseItem(it, row.viewOptions.useSeries) }
+                            .let { fetched ->
+                                if (row.category.rotatesSelection) {
+                                    fetched.shuffled().take(limit)
+                                } else {
+                                    fetched
+                                }
+                            }
 
                     Success(
                         title = getCategoryTitle(row.category),
@@ -1281,6 +1295,8 @@ class HomeSettingsService
 
         companion object {
             const val CUSTOM_PREF_ID = "home_settings"
+            private const val ROTATING_CATEGORY_POOL_MULTIPLIER = 5
+            private const val ROTATING_CATEGORY_MIN_POOL_SIZE = 50
         }
     }
 
