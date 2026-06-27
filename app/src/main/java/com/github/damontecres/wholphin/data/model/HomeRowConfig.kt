@@ -225,7 +225,7 @@ sealed interface HomeRowConfig {
 
 @Serializable
 enum class HomeCategory(
-    val itemKind: BaseItemKind,
+    val itemKinds: List<BaseItemKind>,
     val sortBy: ItemSortBy,
     val sortOrder: SortOrder = SortOrder.DESCENDING,
     val isPlayed: Boolean? = null,
@@ -233,41 +233,49 @@ enum class HomeCategory(
     val rotatesSelection: Boolean = false,
 ) {
     TOP_RATED_MOVIES(
-        itemKind = BaseItemKind.MOVIE,
+        itemKinds = listOf(BaseItemKind.MOVIE),
         sortBy = ItemSortBy.COMMUNITY_RATING,
         minCommunityRating = 1.0,
         rotatesSelection = true,
     ),
     TOP_RATED_TV(
-        itemKind = BaseItemKind.SERIES,
+        itemKinds = listOf(BaseItemKind.SERIES),
         sortBy = ItemSortBy.COMMUNITY_RATING,
         minCommunityRating = 1.0,
         rotatesSelection = true,
     ),
     POPULAR_MOVIES(
-        itemKind = BaseItemKind.MOVIE,
+        itemKinds = listOf(BaseItemKind.MOVIE),
         sortBy = ItemSortBy.PLAY_COUNT,
     ),
     POPULAR_TV(
-        itemKind = BaseItemKind.SERIES,
+        itemKinds = listOf(BaseItemKind.SERIES),
         sortBy = ItemSortBy.PLAY_COUNT,
     ),
+    RECENTLY_ADDED(
+        itemKinds = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+        sortBy = ItemSortBy.DATE_CREATED,
+    ),
+    RECENTLY_RELEASED(
+        itemKinds = listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
+        sortBy = ItemSortBy.PREMIERE_DATE,
+    ),
     RECENTLY_RELEASED_MOVIES(
-        itemKind = BaseItemKind.MOVIE,
+        itemKinds = listOf(BaseItemKind.MOVIE),
         sortBy = ItemSortBy.PREMIERE_DATE,
     ),
     RECENTLY_RELEASED_TV(
-        itemKind = BaseItemKind.SERIES,
+        itemKinds = listOf(BaseItemKind.SERIES),
         sortBy = ItemSortBy.PREMIERE_DATE,
     ),
     UNWATCHED_MOVIES(
-        itemKind = BaseItemKind.MOVIE,
+        itemKinds = listOf(BaseItemKind.MOVIE),
         sortBy = ItemSortBy.RANDOM,
         sortOrder = SortOrder.ASCENDING,
         isPlayed = false,
     ),
     UNWATCHED_TV(
-        itemKind = BaseItemKind.SERIES,
+        itemKinds = listOf(BaseItemKind.SERIES),
         sortBy = ItemSortBy.RANDOM,
         sortOrder = SortOrder.ASCENDING,
         isPlayed = false,

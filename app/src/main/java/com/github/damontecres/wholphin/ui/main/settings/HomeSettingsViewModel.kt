@@ -250,8 +250,8 @@ class HomeSettingsViewModel
                         MetaRowType.TOP_RATED_TV,
                         MetaRowType.POPULAR_MOVIES,
                         MetaRowType.POPULAR_TV,
-                        MetaRowType.RECENTLY_RELEASED_MOVIES,
-                        MetaRowType.RECENTLY_RELEASED_TV,
+                        MetaRowType.RECENTLY_ADDED,
+                        MetaRowType.RECENTLY_RELEASED,
                         MetaRowType.UNWATCHED_MOVIES,
                         MetaRowType.UNWATCHED_TV,
                         -> {
@@ -261,8 +261,8 @@ class HomeSettingsViewModel
                                     MetaRowType.TOP_RATED_TV -> HomeCategory.TOP_RATED_TV
                                     MetaRowType.POPULAR_MOVIES -> HomeCategory.POPULAR_MOVIES
                                     MetaRowType.POPULAR_TV -> HomeCategory.POPULAR_TV
-                                    MetaRowType.RECENTLY_RELEASED_MOVIES -> HomeCategory.RECENTLY_RELEASED_MOVIES
-                                    MetaRowType.RECENTLY_RELEASED_TV -> HomeCategory.RECENTLY_RELEASED_TV
+                                    MetaRowType.RECENTLY_ADDED -> HomeCategory.RECENTLY_ADDED
+                                    MetaRowType.RECENTLY_RELEASED -> HomeCategory.RECENTLY_RELEASED
                                     MetaRowType.UNWATCHED_MOVIES -> HomeCategory.UNWATCHED_MOVIES
                                     MetaRowType.UNWATCHED_TV -> HomeCategory.UNWATCHED_TV
                                     else -> error("Unexpected category type $type")
@@ -777,7 +777,9 @@ class HomeSettingsViewModel
 
                                 is HomeRowConfig.Category -> {
                                     val viewOptions =
-                                        if (it.config.category.itemKind == BaseItemKind.SERIES) {
+                                        if (it.config.category.itemKinds.contains(BaseItemKind.SERIES) &&
+                                            it.config.category.itemKinds.size == 1
+                                        ) {
                                             preset.tvLibrary
                                         } else {
                                             preset.movieLibrary

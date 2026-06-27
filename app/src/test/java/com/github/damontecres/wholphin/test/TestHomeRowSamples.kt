@@ -80,6 +80,8 @@ class TestHomeRowSamples {
                 HomeRowConfig.TvChannels(),
                 HomeRowConfig.Suggestions(parentId = UUID.randomUUID()),
                 HomeRowConfig.Category(HomeCategory.TOP_RATED_MOVIES),
+                HomeRowConfig.Category(HomeCategory.RECENTLY_ADDED),
+                HomeRowConfig.Category(HomeCategory.RECENTLY_RELEASED),
                 HomeRowConfig.Seasonal(SeasonalCategory.HALLOWEEN),
             )
     }

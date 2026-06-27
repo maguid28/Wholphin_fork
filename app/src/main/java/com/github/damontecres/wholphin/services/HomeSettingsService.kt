@@ -227,12 +227,22 @@ class HomeSettingsService
                     Timber.w(ex, "Error loading remote settings")
                     null
                 }
+            val migratedSettings =
+                settings?.let { migrateCombinedMediaRows(userId, it) }
+            if (migratedSettings != null && migratedSettings != settings) {
+                Timber.i("Migrated home settings to combined recently added/released rows")
+                try {
+                    saveToLocal(userId, migratedSettings)
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Error saving migrated home settings")
+                }
+            }
             val resolvedSettings =
-                if (settings != null) {
+                if (migratedSettings != null) {
                     Timber.v("Found settings")
                     // Resolve
                     val resolvedRows =
-                        settings.rows.mapIndexed { index, config ->
+                        migratedSettings.rows.mapIndexed { index, config ->
                             resolve(index, config)
                         }
                     HomePageResolvedSettings(resolvedRows)
@@ -241,6 +251,126 @@ class HomeSettingsService
                 }
 
             currentSettings.update { resolvedSettings }
+        }
+
+        /**
+         * Replaces split movie/TV recently added and recently released rows with combined rows.
+         */
+        suspend fun migrateCombinedMediaRows(
+            userId: UUID,
+            settings: HomePageSettings,
+        ): HomePageSettings {
+            val newRows = settings.rows.toMutableList()
+            var changed = false
+
+            val splitReleasedIndices =
+                newRows.mapIndexedNotNull { index, row ->
+                    if (row is HomeRowConfig.Category &&
+                        (
+                            row.category == HomeCategory.RECENTLY_RELEASED_MOVIES ||
+                                row.category == HomeCategory.RECENTLY_RELEASED_TV
+                        )
+                    ) {
+                        index
+                    } else {
+                        null
+                    }
+                }
+            if (splitReleasedIndices.isNotEmpty() &&
+                newRows.none {
+                    it is HomeRowConfig.Category &&
+                        it.category == HomeCategory.RECENTLY_RELEASED
+                }
+            ) {
+                val insertAt = splitReleasedIndices.min()
+                splitReleasedIndices.reversed().forEach { newRows.removeAt(it) }
+                newRows.add(insertAt, HomeRowConfig.Category(HomeCategory.RECENTLY_RELEASED))
+                changed = true
+            }
+
+            val userDto = serverRepository.currentUserDto.value?.takeIf { it.id == userId }
+            val libraries =
+                try {
+                    navDrawerService.getAllUserLibraries(userId, userDto?.tvAccess ?: false)
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not load libraries for home settings migration")
+                    emptyList()
+                }
+            val mediaLibraryIds =
+                libraries
+                    .filter {
+                        it.collectionType == CollectionType.MOVIES ||
+                            it.collectionType == CollectionType.TVSHOWS
+                    }.map { it.itemId }
+                    .toSet()
+
+            val recentlyAddedIndices =
+                newRows.mapIndexedNotNull { index, row ->
+                    if (row is HomeRowConfig.RecentlyAdded) index else null
+                }
+            if (recentlyAddedIndices.isNotEmpty() &&
+                newRows.none {
+                    it is HomeRowConfig.Category &&
+                        it.category == HomeCategory.RECENTLY_ADDED
+                }
+            ) {
+                val mediaRecentlyAddedIndices =
+                    recentlyAddedIndices.filter { newRows[it] is HomeRowConfig.RecentlyAdded &&
+                        (newRows[it] as HomeRowConfig.RecentlyAdded).parentId in mediaLibraryIds
+                    }
+                val indicesToMerge =
+                    when {
+                        mediaRecentlyAddedIndices.isNotEmpty() -> mediaRecentlyAddedIndices
+                        recentlyAddedIndices.size > 1 -> recentlyAddedIndices
+                        else -> emptyList()
+                    }
+                if (indicesToMerge.isNotEmpty()) {
+                    val insertAt = indicesToMerge.min()
+                    indicesToMerge.reversed().forEach { newRows.removeAt(it) }
+                    newRows.add(insertAt, HomeRowConfig.Category(HomeCategory.RECENTLY_ADDED))
+                    changed = true
+                }
+            }
+
+            if (mediaLibraryIds.isNotEmpty()) {
+                changed =
+                    mergeMediaRows(
+                        newRows,
+                        mediaLibraryIds,
+                        ::isMediaRecentlyReleased,
+                        HomeRowConfig.Category(HomeCategory.RECENTLY_RELEASED),
+                    ) || changed
+            }
+
+            return if (changed) settings.copy(rows = newRows) else settings
+        }
+
+        private fun isMediaRecentlyReleased(
+            row: HomeRowConfig,
+            mediaLibraryIds: Set<UUID>,
+        ): Boolean = row is HomeRowConfig.RecentlyReleased && row.parentId in mediaLibraryIds
+
+        private inline fun mergeMediaRows(
+            rows: MutableList<HomeRowConfig>,
+            mediaLibraryIds: Set<UUID>,
+            matches: (HomeRowConfig, Set<UUID>) -> Boolean,
+            combinedRow: HomeRowConfig.Category,
+        ): Boolean {
+            val indices =
+                rows.mapIndexedNotNull { index, row ->
+                    if (matches(row, mediaLibraryIds)) index else null
+                }
+            if (indices.isEmpty() ||
+                rows.any {
+                    it is HomeRowConfig.Category && it.category == combinedRow.category
+                }
+            ) {
+                return false
+            }
+            val insertAt = indices.min()
+            indices.reversed().forEach { rows.removeAt(it) }
+            rows.add(insertAt, combinedRow)
+            return true
         }
 
         /**
@@ -272,23 +402,50 @@ class HomeSettingsService
             val prefs =
                 userPreferencesService.getCurrent().appPreferences.homePagePreferences
 
+            var rowId = 0
+            val hasMoviesOrTv =
+                libraries.any {
+                    it.collectionType == CollectionType.MOVIES ||
+                        it.collectionType == CollectionType.TVSHOWS
+                }
+            val combinedMediaRow =
+                if (hasMoviesOrTv) {
+                    listOf(
+                        HomeRowConfigDisplay(
+                            id = rowId++,
+                            title = context.getString(R.string.recently_added),
+                            config = HomeRowConfig.Category(HomeCategory.RECENTLY_ADDED),
+                        ),
+                        HomeRowConfigDisplay(
+                            id = rowId++,
+                            title = context.getString(R.string.recently_released),
+                            config = HomeRowConfig.Category(HomeCategory.RECENTLY_RELEASED),
+                        ),
+                    )
+                } else {
+                    emptyList()
+                }
             val includedIds =
-                libraries
-                    .mapIndexed { index, it ->
-                        val parentId = it.itemId
-                        val title = getRecentlyAddedTitle(context, it)
-                        if (it.collectionType == CollectionType.LIVETV) {
-                            HomeRowConfigDisplay(
-                                id = index,
-                                title = context.getString(R.string.live_tv),
-                                config = HomeRowConfig.TvPrograms(),
-                            )
-                        } else {
-                            HomeRowConfigDisplay(
-                                id = index,
-                                title = title,
-                                config = HomeRowConfig.RecentlyAdded(parentId),
-                            )
+                combinedMediaRow +
+                    libraries.mapNotNull { library ->
+                        when (library.collectionType) {
+                            CollectionType.MOVIES,
+                            CollectionType.TVSHOWS,
+                            -> null
+
+                            CollectionType.LIVETV ->
+                                HomeRowConfigDisplay(
+                                    id = rowId++,
+                                    title = context.getString(R.string.live_tv),
+                                    config = HomeRowConfig.TvPrograms(),
+                                )
+
+                            else ->
+                                HomeRowConfigDisplay(
+                                    id = rowId++,
+                                    title = getRecentlyAddedTitle(context, library),
+                                    config = HomeRowConfig.RecentlyAdded(library.itemId),
+                                )
                         }
                     }
             val continueWatchingRows =
@@ -754,15 +911,14 @@ class HomeSettingsService
                         GetItemsRequest(
                             userId = userDto.id,
                             recursive = true,
-                            includeItemTypes = listOf(row.category.itemKind),
+                            includeItemTypes = row.category.itemKinds,
                             sortBy = listOf(row.category.sortBy),
                             sortOrder = listOf(row.category.sortOrder),
                             isPlayed = row.category.isPlayed,
                             minCommunityRating = row.category.minCommunityRating,
                             maxPremiereDate =
                                 LocalDateTime.now().takeIf {
-                                    row.category == HomeCategory.RECENTLY_RELEASED_MOVIES ||
-                                        row.category == HomeCategory.RECENTLY_RELEASED_TV
+                                    row.category.sortBy == ItemSortBy.PREMIERE_DATE
                                 },
                             limit = fetchLimit,
                             fields = DefaultItemFields,
@@ -1270,6 +1426,8 @@ class HomeSettingsService
                     HomeCategory.TOP_RATED_TV -> R.string.top_rated_tv
                     HomeCategory.POPULAR_MOVIES -> R.string.popular_movies
                     HomeCategory.POPULAR_TV -> R.string.popular_tv
+                    HomeCategory.RECENTLY_ADDED -> R.string.recently_added
+                    HomeCategory.RECENTLY_RELEASED -> R.string.recently_released
                     HomeCategory.RECENTLY_RELEASED_MOVIES -> R.string.recently_released_movies
                     HomeCategory.RECENTLY_RELEASED_TV -> R.string.recently_released_tv
                     HomeCategory.UNWATCHED_MOVIES -> R.string.unwatched_movies
