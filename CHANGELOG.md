@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added an App Font setting under Interface with a selection of elegant Google Fonts (Inter, DM Sans, Outfit, Plus Jakarta Sans, Manrope, Poppins, Nunito Sans, and Playfair Display), plus System Default.
+- Improved App Font so the selected typeface applies app-wide and font names in the picker are shown in their own style.
+- Fixed App Font to use bundled font files instead of Google Fonts downloads, so typefaces load reliably on Android TV.
 - Added admin metadata rematching for movies and series, with in-place refresh after Jellyfin applies the new match.
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
 - Updated Home recently added and recently released rows to combine movies and TV shows in a single row, including migration of existing home settings.

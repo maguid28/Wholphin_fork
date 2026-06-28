@@ -319,6 +319,16 @@
     <string name="advanced_settings">Advanced Settings</string>
     <string name="advanced_ui">Advanced UI</string>
     <string name="app_theme">Application Theme</string>
+    <string name="app_font">App Font</string>
+    <string name="font_system_default">System Default</string>
+    <string name="font_inter">Inter</string>
+    <string name="font_dm_sans">DM Sans</string>
+    <string name="font_outfit">Outfit</string>
+    <string name="font_plus_jakarta_sans">Plus Jakarta Sans</string>
+    <string name="font_manrope">Manrope</string>
+    <string name="font_poppins">Poppins</string>
+    <string name="font_nunito_sans">Nunito Sans</string>
+    <string name="font_playfair_display">Playfair Display</string>
     <string name="auto_check_for_updates">Automatically check for updates</string>
     <string name="auto_play_next_delay">Delay before playing next up</string>
     <string name="auto_play_next">Auto play next up</string>
@@ -801,6 +811,18 @@
         <item>@string/electric_neon</item>
         <item>@string/electric_indigo</item>
         <item>@string/custom</item>
+    </string-array>
+
+    <string-array name="app_fonts">
+        <item>@string/font_system_default</item>
+        <item>@string/font_inter</item>
+        <item>@string/font_dm_sans</item>
+        <item>@string/font_outfit</item>
+        <item>@string/font_plus_jakarta_sans</item>
+        <item>@string/font_manrope</item>
+        <item>@string/font_poppins</item>
+        <item>@string/font_nunito_sans</item>
+        <item>@string/font_playfair_display</item>
     </string-array>
 
     <string name="skip_ignore">Ignore</string>

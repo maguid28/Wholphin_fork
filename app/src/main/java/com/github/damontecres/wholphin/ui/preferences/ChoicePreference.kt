@@ -23,6 +23,7 @@ fun <T> ChoicePreference(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    summaryContent: @Composable (() -> Unit)? = null,
     valueDisplay: @Composable (index: Int, item: T) -> Unit = { _, item -> Text(item.toString()) },
     subtitleDisplay: (index: Int, item: T) -> @Composable (() -> Unit)? = { _, _ -> null },
 ) {
@@ -30,6 +31,7 @@ fun <T> ChoicePreference(
     ClickPreference(
         title = title,
         summary = summary,
+        summaryContent = summaryContent,
         onClick = {
             dialogParams =
                 DialogParams(

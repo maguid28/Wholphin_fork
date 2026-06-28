@@ -400,6 +400,28 @@ fun PreferencesContent(
                                     )
                                 }
 
+                                AppPreference.AppFontPref -> {
+                                    FontPreference(
+                                        title = stringResource(pref.title),
+                                        selectedFont = preferences.interfacePreferences.appFont,
+                                        onValueChange = { newFont ->
+                                            scope.launch(ExceptionHandler()) {
+                                                preferences =
+                                                    viewModel.preferenceDataStore.updateData { prefs ->
+                                                        AppPreference.AppFontPref.setter(prefs, newFont)
+                                                    }
+                                            }
+                                        },
+                                        modifier =
+                                            Modifier
+                                                .ifElse(
+                                                    groupIndex == focusedIndex.first && prefIndex == focusedIndex.second,
+                                                    Modifier.focusRequester(focusRequester),
+                                                ),
+                                        interactionSource = interactionSource,
+                                    )
+                                }
+
                                 AppPreference.CustomThemePrimary,
                                 AppPreference.CustomThemeSecondary,
                                 AppPreference.CustomThemeTertiary,

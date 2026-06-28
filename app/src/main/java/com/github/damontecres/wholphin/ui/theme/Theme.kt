@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.tv.material3.MaterialTheme
+import com.github.damontecres.wholphin.preferences.AppFont
 import com.github.damontecres.wholphin.preferences.AppThemeColors
 import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.ui.theme.colors.AuroraThemeColors
@@ -175,25 +176,33 @@ fun WholphinTheme(
     darkTheme: Boolean = true,
     appThemeColors: AppThemeColors = AppThemeColors.ELECTRIC_INDIGO,
     customThemeColorChoices: CustomThemeColorChoices = DefaultCustomThemeColorChoices,
+    appFont: AppFont = AppFont.SYSTEM_DEFAULT,
     content: @Composable () -> Unit,
 ) {
     val themeColors = getThemeColors(appThemeColors, customThemeColorChoices)
+    val fontFamily = rememberAppFontFamily(appFont)
+    val typography = rememberAppTypography(fontFamily)
+    val material3Typography = rememberMaterial3Typography(fontFamily)
 
     val colorScheme =
         when {
             darkTheme -> themeColors.darkScheme
             else -> themeColors.lightScheme
         }
-    CompositionLocalProvider(LocalTheme provides appThemeColors) {
+    CompositionLocalProvider(
+        LocalTheme provides appThemeColors,
+        LocalAppFontFamily provides fontFamily,
+    ) {
         androidx.compose.material3.MaterialTheme(
             colorScheme = if (darkTheme) themeColors.darkSchemeMaterial else themeColors.lightSchemeMaterial,
-            typography = androidx.compose.material3.Typography(),
+            typography = material3Typography,
         ) {
             MaterialTheme(
                 colorScheme = colorScheme,
-                typography = AppTypography,
-                content = content,
-            )
+                typography = typography,
+            ) {
+                AppFontScope(fontFamily = fontFamily, content = content)
+            }
         }
     }
 }

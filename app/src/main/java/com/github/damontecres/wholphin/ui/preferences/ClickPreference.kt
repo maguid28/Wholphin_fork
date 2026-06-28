@@ -12,6 +12,7 @@ fun ClickPreference(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     summary: String? = null,
+    summaryContent: @Composable (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
@@ -23,7 +24,11 @@ fun ClickPreference(
             PreferenceTitle(title)
         },
         supportingContent = {
-            PreferenceSummary(summary)
+            if (summaryContent != null) {
+                summaryContent()
+            } else {
+                PreferenceSummary(summary)
+            }
         },
         interactionSource = interactionSource,
         modifier = modifier,

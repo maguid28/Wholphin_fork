@@ -93,6 +93,7 @@ class AppPreferencesSerializer
                             .apply {
                                 playThemeSongs = AppPreference.PlayThemeMusic.defaultValue
                                 appThemeColors = AppPreference.ThemeColors.defaultValue
+                                appFont = AppPreference.AppFontPref.defaultValue
                                 navDrawerSwitchOnFocus =
                                     AppPreference.NavDrawerSwitchOnFocus.defaultValue
                                 showClock = AppPreference.ShowClock.defaultValue

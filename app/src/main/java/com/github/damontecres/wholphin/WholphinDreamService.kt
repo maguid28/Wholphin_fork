@@ -105,6 +105,7 @@ class WholphinDreamService :
                             WholphinTheme(
                                 appThemeColors = prefs.interfacePreferences.appThemeColors,
                                 customThemeColorChoices = prefs.interfacePreferences.customThemeColorChoices(),
+                                appFont = prefs.interfacePreferences.appFont,
                             ) {
                                 ProvideLocalClock {
                                     val screensaverPrefs = prefs.interfacePreferences.screensaverPreference

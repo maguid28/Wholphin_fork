@@ -14,6 +14,7 @@ import com.github.damontecres.wholphin.ui.preferences.ConditionalPreferences
 import com.github.damontecres.wholphin.ui.preferences.PreferenceGroup
 import com.github.damontecres.wholphin.ui.preferences.PreferenceScreenOption
 import com.github.damontecres.wholphin.ui.preferences.PreferenceValidation
+import com.github.damontecres.wholphin.ui.theme.AppFontOptions
 import com.github.damontecres.wholphin.ui.theme.AppThemeColorOptions
 import com.github.damontecres.wholphin.util.DebugLogTree
 import kotlin.time.Duration.Companion.hours
@@ -493,6 +494,22 @@ sealed interface AppPreference<Pref, T> {
                 valueToIndex = {
                     AppThemeColorOptions.indexOf(it).takeIf { index -> index >= 0 }
                         ?: AppThemeColorOptions.indexOf(AppThemeColors.ELECTRIC_INDIGO)
+                },
+            )
+
+        val AppFontPref =
+            AppChoicePreference<AppPreferences, AppFont>(
+                title = R.string.app_font,
+                defaultValue = AppFont.SYSTEM_DEFAULT,
+                getter = { it.interfacePreferences.appFont },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences { appFont = value }
+                },
+                displayValues = R.array.app_fonts,
+                indexToValue = { AppFontOptions.getOrElse(it) { AppFont.SYSTEM_DEFAULT } },
+                valueToIndex = {
+                    AppFontOptions.indexOf(it).takeIf { index -> index >= 0 }
+                        ?: AppFontOptions.indexOf(AppFont.SYSTEM_DEFAULT)
                 },
             )
 
@@ -1151,6 +1168,7 @@ val basicPreferences =
                     AppPreference.RememberSelectedTab,
                     AppPreference.SubtitleStyle,
                     AppPreference.ThemeColors,
+                    AppPreference.AppFontPref,
                     AppPreference.LibraryTvEnabled,
                     AppPreference.LibraryTvChannels,
                     AppPreference.ScreensaverSettings,

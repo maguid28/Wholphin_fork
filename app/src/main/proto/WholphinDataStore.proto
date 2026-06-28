@@ -196,6 +196,18 @@ enum BackdropStyle{
   BACKDROP_NONE = 2;
 }
 
+enum AppFont {
+  SYSTEM_DEFAULT = 0;
+  INTER = 1;
+  DM_SANS = 2;
+  OUTFIT = 3;
+  PLUS_JAKARTA_SANS = 4;
+  MANROPE = 5;
+  POPPINS = 6;
+  NUNITO_SANS = 7;
+  PLAYFAIR_DISPLAY = 8;
+}
+
 message ScreensaverPreferences{
   int64 start_delay = 1;
   int64 duration = 2;
@@ -225,6 +237,7 @@ message InterfacePreferences {
   int32 custom_theme_primary = 16;
   int32 custom_theme_secondary = 17;
   int32 custom_theme_tertiary = 18;
+  AppFont app_font = 19;
 }
 
 message AdvancedPreferences {

@@ -34,6 +34,7 @@ import com.github.damontecres.wholphin.ui.playback.audioStreamCount
 import com.github.damontecres.wholphin.ui.playback.embeddedSubtitleCount
 import com.github.damontecres.wholphin.ui.playback.externalSubtitlesCount
 import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.withAppFontFamily
 import com.github.damontecres.wholphin.ui.util.StreamFormatting.concatWithSpace
 import com.github.damontecres.wholphin.ui.util.StreamFormatting.formatAudioCodec
 import com.github.damontecres.wholphin.ui.util.StreamFormatting.formatSubtitleCodec
@@ -182,7 +183,7 @@ fun StreamLabel(
                 color = labelContentColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-            ),
+            ).withAppFontFamily(),
         ) {
             if (icon != null) {
                 Text(

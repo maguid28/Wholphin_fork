@@ -3,6 +3,8 @@ import com.google.protobuf.gradle.id
 import com.mikepenz.aboutlibraries.plugin.DuplicateMode
 import com.mikepenz.aboutlibraries.plugin.DuplicateRule
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
+import java.net.URI
 import java.util.Base64
 import java.util.Properties
 
@@ -277,8 +279,53 @@ openApiGenerate {
     }
 }
 
+val appFontDownloads =
+    mapOf(
+        "inter_regular.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/inter@5.2.5/latin-400-normal.ttf",
+        "inter_semibold.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/inter@5.2.5/latin-600-normal.ttf",
+        "dm_sans_regular.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/dm-sans@5.2.5/latin-400-normal.ttf",
+        "dm_sans_semibold.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/dm-sans@5.2.5/latin-600-normal.ttf",
+        "outfit_regular.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/outfit@5.2.5/latin-400-normal.ttf",
+        "outfit_semibold.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/outfit@5.2.5/latin-600-normal.ttf",
+        "plus_jakarta_sans_regular.ttf" to
+            "https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@5.2.5/latin-400-normal.ttf",
+        "plus_jakarta_sans_semibold.ttf" to
+            "https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@5.2.5/latin-600-normal.ttf",
+        "manrope_regular.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/manrope@5.2.5/latin-400-normal.ttf",
+        "manrope_semibold.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/manrope@5.2.5/latin-600-normal.ttf",
+        "poppins_regular.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/poppins@5.2.5/latin-400-normal.ttf",
+        "poppins_semibold.ttf" to "https://cdn.jsdelivr.net/fontsource/fonts/poppins@5.2.5/latin-600-normal.ttf",
+        "nunito_sans_regular.ttf" to
+            "https://cdn.jsdelivr.net/fontsource/fonts/nunito-sans@5.2.5/latin-400-normal.ttf",
+        "nunito_sans_semibold.ttf" to
+            "https://cdn.jsdelivr.net/fontsource/fonts/nunito-sans@5.2.5/latin-600-normal.ttf",
+        "playfair_display_regular.ttf" to
+            "https://cdn.jsdelivr.net/fontsource/fonts/playfair-display@5.2.5/latin-400-normal.ttf",
+        "playfair_display_semibold.ttf" to
+            "https://cdn.jsdelivr.net/fontsource/fonts/playfair-display@5.2.5/latin-600-normal.ttf",
+    )
+
+tasks.register("downloadAppFonts") {
+    val fontDir = layout.projectDirectory.dir("src/main/res/font").asFile
+    doLast {
+        fontDir.mkdirs()
+        appFontDownloads.forEach { (fileName, url) ->
+            val target = File(fontDir, fileName)
+            if (!target.exists()) {
+                logger.lifecycle("Downloading app font $fileName")
+                URI(url).toURL().openStream().use { input ->
+                    target.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
+    }
+}
+
 tasks.named("preBuild") {
     dependsOn.add(tasks.named("openApiGenerate"))
+    dependsOn.add(tasks.named("downloadAppFonts"))
 }
 
 dependencies {

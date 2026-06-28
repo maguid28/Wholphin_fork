@@ -229,6 +229,7 @@ class MainActivity : AppCompatActivity() {
                         true,
                         appThemeColors = appPreferences.interfacePreferences.appThemeColors,
                         customThemeColorChoices = appPreferences.interfacePreferences.customThemeColorChoices(),
+                        appFont = appPreferences.interfacePreferences.appFont,
                     ) {
                         ProvideLocalClock {
                             MainContent(
