@@ -39,6 +39,8 @@ import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchHost
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchViewModel
 import com.github.damontecres.wholphin.ui.detail.music.addToQueue
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
@@ -187,12 +189,15 @@ fun RecommendedContent(
     viewModel: RecommendedViewModel,
     modifier: Modifier = Modifier,
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
+    metadataRematchViewModel: MetadataRematchViewModel = hiltViewModel(),
     onFocusPosition: ((RowColumn) -> Unit)? = null,
 ) {
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
+    val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
+    val isAdministrator = currentUserDto?.policy?.isAdministrator == true
 
     LaunchedEffect(Unit) {
         viewModel.initIfNeeded()
@@ -213,7 +218,7 @@ fun RecommendedContent(
         else -> {
             var position by rememberPosition()
             val contextActions =
-                remember {
+                remember(position) {
                     ContextMenuActions(
                         navigateTo = viewModel.navigationManager::navigateTo,
                         onClickWatch = { itemId, watched ->
@@ -238,6 +243,11 @@ fun RecommendedContent(
                         onClearChosenStreams = {
                             // Not supported on this page
                         },
+                        onClickRematchMetadata = { item ->
+                            metadataRematchViewModel.startRematch(item) {
+                                viewModel.refreshItem(position, it.id)
+                            }
+                        },
                     )
                 }
 
@@ -255,7 +265,18 @@ fun RecommendedContent(
                             chosenStreams = null,
                             showGoTo = true,
                             showStreamChoices = false,
-                            canDelete = viewModel.canDelete(item, preferences.appPreferences),
+                            canDelete =
+                                canDeleteInContextMenu(
+                                    item,
+                                    preferences.appPreferences,
+                                    isAdministrator,
+                                ),
+                            canRematchMetadata =
+                                canRematchMetadata(
+                                    item,
+                                    isAdministrator,
+                                    preferences.appPreferences,
+                                ),
                             canRemoveContinueWatching = false,
                             canRemoveNextUp = false,
                             actions = contextActions,
@@ -330,6 +351,7 @@ fun RecommendedContent(
             elevation = 3.dp,
         )
     }
+    MetadataRematchHost(metadataRematchViewModel)
 }
 
 data class RowColumnItem(

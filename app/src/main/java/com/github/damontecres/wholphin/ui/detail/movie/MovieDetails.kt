@@ -48,6 +48,8 @@ import com.github.damontecres.wholphin.ui.cards.SeasonCard
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
+import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
+import com.github.damontecres.wholphin.ui.components.canRematchMetadata
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.ExpandablePlayButtons
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
@@ -194,8 +196,18 @@ fun MovieDetails(
                             chosenStreams = chosenStreams,
                             showGoTo = false,
                             showStreamChoices = true,
-                            canDelete = state.canDelete,
-                            canRematchMetadata = currentUserDto?.policy?.isAdministrator == true,
+                            canDelete =
+                                canDeleteInContextMenu(
+                                    movie,
+                                    preferences.appPreferences,
+                                    currentUserDto?.policy?.isAdministrator == true,
+                                ),
+                            canRematchMetadata =
+                                canRematchMetadata(
+                                    movie,
+                                    currentUserDto?.policy?.isAdministrator == true,
+                                    preferences.appPreferences,
+                                ),
                             canRemoveContinueWatching = false,
                             canRemoveNextUp = false,
                             actions = contextActions,
@@ -220,6 +232,7 @@ fun MovieDetails(
                         )
                 },
                 onLongClickSimilar = { _, similar ->
+                    val isAdministrator = currentUserDto?.policy?.isAdministrator == true
                     showContextMenu =
                         ContextMenu.ForBaseItem(
                             fromLongClick = true,
@@ -227,7 +240,18 @@ fun MovieDetails(
                             chosenStreams = null,
                             showGoTo = true,
                             showStreamChoices = false,
-                            canDelete = false,
+                            canDelete =
+                                canDeleteInContextMenu(
+                                    similar,
+                                    preferences.appPreferences,
+                                    isAdministrator,
+                                ),
+                            canRematchMetadata =
+                                canRematchMetadata(
+                                    similar,
+                                    isAdministrator,
+                                    preferences.appPreferences,
+                                ),
                             canRemoveContinueWatching = false,
                             canRemoveNextUp = false,
                             actions = contextActions,

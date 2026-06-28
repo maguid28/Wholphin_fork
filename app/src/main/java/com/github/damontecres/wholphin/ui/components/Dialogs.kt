@@ -48,6 +48,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -238,9 +239,10 @@ fun DialogPopup(
                 dismissOnClick = dismissOnClick,
                 elevation = elevation,
                 modifier =
-                    Modifier.onKeyEvent { event ->
+                    Modifier.onPreviewKeyEvent { event ->
                         val code = event.nativeKeyEvent.keyCode
-                        if (event.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
+                        if (waiting &&
+                            event.type == KeyEventType.KeyUp &&
                             code in
                             setOf(
                                 KeyEvent.KEYCODE_ENTER,
@@ -249,8 +251,10 @@ fun DialogPopup(
                             )
                         ) {
                             waiting = false
+                            true
+                        } else {
+                            false
                         }
-                        false
                     },
             )
         }

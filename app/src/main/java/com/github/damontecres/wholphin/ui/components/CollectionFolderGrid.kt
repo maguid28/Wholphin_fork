@@ -87,6 +87,8 @@ import com.github.damontecres.wholphin.ui.detail.CardGrid
 import com.github.damontecres.wholphin.ui.detail.ItemViewModel
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchHost
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchViewModel
 import com.github.damontecres.wholphin.ui.detail.music.addToQueue
 import com.github.damontecres.wholphin.ui.equalsNotNull
 import com.github.damontecres.wholphin.ui.launchDefault
@@ -752,6 +754,17 @@ class CollectionFolderViewModel
             }
         }
 
+        fun refreshItemAfterRematch(
+            position: Int,
+            itemId: UUID,
+        ) {
+            viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
+                (loading.value as? DataLoadingState.Success)?.let {
+                    (it.data as? ApiRequestPager<*>)?.refreshItem(position, itemId)
+                }
+            }
+        }
+
         fun deleteItem(
             index: Int,
             item: BaseItem,
@@ -872,6 +885,7 @@ fun CollectionFolderGrid(
     filterOptions: List<ItemFilterBy<*>> = DefaultFilterOptions,
     focusRequesterOnEmpty: FocusRequester? = null,
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
+    metadataRematchViewModel: MetadataRematchViewModel = hiltViewModel(),
     viewModel: CollectionFolderViewModel =
         hiltViewModel<CollectionFolderViewModel, CollectionFolderViewModel.Factory>(
             viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
@@ -899,9 +913,11 @@ fun CollectionFolderGrid(
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var showPlaylistDialog by remember { mutableStateOf<Optional<UUID>>(Optional.absent()) }
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
+    val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
+    val isAdministrator = currentUserDto?.policy?.isAdministrator == true
 
     val contextActions =
-        remember {
+        remember(viewModel.position) {
             ContextMenuActions(
                 navigateTo = viewModel::navigateTo,
                 onClickWatch = { itemId, watched ->
@@ -926,6 +942,11 @@ fun CollectionFolderGrid(
                 onClearChosenStreams = {
                     // Not supported on this page
                 },
+                onClickRematchMetadata = { item ->
+                    metadataRematchViewModel.startRematch(item) {
+                        viewModel.refreshItemAfterRematch(viewModel.position, it.id)
+                    }
+                },
             )
         }
 
@@ -942,7 +963,18 @@ fun CollectionFolderGrid(
                                 chosenStreams = null,
                                 showGoTo = true,
                                 showStreamChoices = false,
-                                canDelete = viewModel.canDelete(item, preferences.appPreferences),
+                                canDelete =
+                                    canDeleteInContextMenu(
+                                        item,
+                                        preferences.appPreferences,
+                                        isAdministrator,
+                                    ),
+                                canRematchMetadata =
+                                    canRematchMetadata(
+                                        item,
+                                        isAdministrator,
+                                        preferences.appPreferences,
+                                    ),
                                 canRemoveContinueWatching = false,
                                 canRemoveNextUp = false,
                                 actions = contextActions,
@@ -1111,6 +1143,7 @@ fun CollectionFolderGrid(
             elevation = 3.dp,
         )
     }
+    MetadataRematchHost(metadataRematchViewModel)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

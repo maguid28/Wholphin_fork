@@ -847,7 +847,7 @@ sealed interface AppPreference<Pref, T> {
         val ManageMedia =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.show_media_management,
-                defaultValue = false,
+                defaultValue = true,
                 getter = { it.interfacePreferences.enableMediaManagement },
                 setter = { prefs, value ->
                     prefs.updateInterfacePreferences { enableMediaManagement = value }

@@ -41,6 +41,8 @@ import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
+import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
+import com.github.damontecres.wholphin.ui.components.canRematchMetadata
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.HiddenFocusBox
@@ -53,6 +55,8 @@ import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.data.SortAndDirection
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchHost
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchViewModel
 import com.github.damontecres.wholphin.ui.main.HomePageHeader
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.tryRequestFocus
@@ -72,9 +76,12 @@ fun CollectionDetails(
             creationCallback = { it.create(itemId) },
         ),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
+    metadataRematchViewModel: MetadataRematchViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
+    val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
+    val isAdministrator = currentUserDto?.policy?.isAdministrator == true
 
     // Dialogs
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
@@ -108,6 +115,13 @@ fun CollectionDetails(
             onClearChosenStreams = {
                 // Not supported on this page
             },
+            onClickRematchMetadata = { item ->
+                if (position != null) {
+                    metadataRematchViewModel.startRematch(item) {
+                        viewModel.refreshItemAfterRematch(it.id, position)
+                    }
+                }
+            },
         )
 
     // Actions
@@ -125,7 +139,18 @@ fun CollectionDetails(
                         chosenStreams = null,
                         showGoTo = true,
                         showStreamChoices = false,
-                        canDelete = viewModel.canDelete(item, preferences.appPreferences),
+                        canDelete =
+                            canDeleteInContextMenu(
+                                item,
+                                preferences.appPreferences,
+                                isAdministrator,
+                            ),
+                        canRematchMetadata =
+                            canRematchMetadata(
+                                item,
+                                isAdministrator,
+                                preferences.appPreferences,
+                            ),
                         canRemoveContinueWatching = false,
                         canRemoveNextUp = false,
                         actions = contextActionsFor(position),
@@ -275,6 +300,7 @@ fun CollectionDetails(
             elevation = 3.dp,
         )
     }
+    MetadataRematchHost(metadataRematchViewModel)
 }
 
 @Composable

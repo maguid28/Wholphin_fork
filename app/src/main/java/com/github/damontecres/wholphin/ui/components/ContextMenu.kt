@@ -23,6 +23,7 @@ import com.github.damontecres.wholphin.data.model.AudioItem
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
+import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.util.supportedPlayableTypes
@@ -33,6 +34,30 @@ import org.jellyfin.sdk.model.api.MediaSourceInfo
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import kotlin.time.Duration
+
+private val metadataManagedItemTypes =
+    setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)
+
+fun canDeleteInContextMenu(
+    item: BaseItem,
+    appPreferences: AppPreferences,
+    isAdministrator: Boolean,
+): Boolean {
+    if (item.type in metadataManagedItemTypes) {
+        if (isAdministrator) return true
+        return appPreferences.interfacePreferences.enableMediaManagement && item.canDelete
+    }
+    return appPreferences.interfacePreferences.enableMediaManagement && item.canDelete
+}
+
+fun canRematchMetadata(
+    item: BaseItem,
+    isAdministrator: Boolean,
+    appPreferences: AppPreferences,
+): Boolean {
+    if (item.type !in metadataManagedItemTypes) return false
+    return isAdministrator || appPreferences.interfacePreferences.enableMediaManagement
+}
 
 sealed interface ContextMenu {
     data class ForBaseItem(
@@ -189,7 +214,13 @@ fun ContextMenu(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     val dialogItems =
-        remember(context, item, chosenStreams, contextMenu.canRematchMetadata) {
+        remember(
+            context,
+            item,
+            chosenStreams,
+            contextMenu.canDelete,
+            contextMenu.canRematchMetadata,
+        ) {
             buildContextMenuItems(
                 context = context,
                 item = item,
@@ -421,6 +452,29 @@ private fun buildContextMenuItems(
                 }
             }
         }
+        if (canDelete) {
+            add(
+                DialogItem(
+                    context.getString(R.string.delete),
+                    Icons.Default.Delete,
+                    iconColor = Color.Red.copy(alpha = .8f),
+                    dismissOnClick = false,
+                ) {
+                    onClickDelete.invoke()
+                },
+            )
+        }
+        if (canRematchMetadata && item.type in metadataManagedItemTypes) {
+            add(
+                DialogItem(
+                    text = R.string.rematch_metadata,
+                    iconStringRes = R.string.fa_magnifying_glass_plus,
+                    dismissOnClick = true,
+                ) {
+                    actions.onClickRematchMetadata.invoke(item)
+                },
+            )
+        }
         if (item.type == BaseItemKind.MUSIC_ALBUM) {
             add(
                 DialogItem(
@@ -441,29 +495,6 @@ private fun buildContextMenuItems(
                 actions.onClickAddPlaylist.invoke(item.id)
             },
         )
-        if (canDelete) {
-            add(
-                DialogItem(
-                    context.getString(R.string.delete),
-                    Icons.Default.Delete,
-                    iconColor = Color.Red.copy(alpha = .8f),
-                    dismissOnClick = false,
-                ) {
-                    onClickDelete.invoke()
-                },
-            )
-        }
-        if (canRematchMetadata && item.type in listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)) {
-            add(
-                DialogItem(
-                    text = R.string.rematch_metadata,
-                    iconStringRes = R.string.fa_magnifying_glass_plus,
-                    dismissOnClick = true,
-                ) {
-                    actions.onClickRematchMetadata.invoke(item)
-                },
-            )
-        }
         if (canRemoveContinueWatching && !watched && item.playbackPosition > Duration.ZERO) {
             add(
                 DialogItem(

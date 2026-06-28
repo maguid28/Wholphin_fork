@@ -304,6 +304,32 @@ class HomeViewModel
             }
         }
 
+        fun refreshItem(
+            position: RowColumn,
+            updatedItem: BaseItem,
+        ) {
+            viewModelScope.launchDefault {
+                val row = state.value.homeRows.getOrNull(position.row)
+                if (row is HomeRowLoadingState.Success) {
+                    _state.update {
+                        val newRow =
+                            row.items.toMutableList().apply {
+                                if (getOrNull(position.column)?.id == updatedItem.id) {
+                                    set(position.column, updatedItem)
+                                }
+                            }
+                        it.copy(
+                            homeRows =
+                                it.homeRows.toMutableList().apply {
+                                    set(position.row, row.copy(items = newRow))
+                                },
+                        )
+                    }
+                }
+                backdropService.submit(updatedItem)
+            }
+        }
+
         fun canDelete(
             item: BaseItem,
             appPreferences: AppPreferences,

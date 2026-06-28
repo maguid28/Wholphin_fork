@@ -108,9 +108,8 @@ fun BannerCard(
     val currentOnLongClick by rememberUpdatedState(onLongClick)
 
     Card(
-        modifier = modifier.size(cardHeight * aspectRatio, cardHeight),
+        modifier = modifier.size(cardHeight * aspectRatio, cardHeight).tvLongPress { currentOnLongClick() },
         onClick = { currentOnClick() },
-        onLongClick = { currentOnLongClick() },
         interactionSource = interactionSource,
             colors =
                 CardDefaults.colors(

@@ -466,6 +466,15 @@ class CollectionViewModel
             }
         }
 
+        fun refreshItemAfterRematch(
+            itemId: UUID,
+            position: RowColumn,
+        ) {
+            viewModelScope.launchIO {
+                refreshItem(itemId, position, false)
+            }
+        }
+
         fun updateBackdrop(item: BaseItem) {
             viewModelScope.launchDefault {
                 val collection = state.value.collection

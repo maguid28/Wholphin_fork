@@ -70,12 +70,11 @@ fun GridCard(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(spaceBetween),
-        modifier = modifier,
+        modifier = modifier.tvLongPress(onLongClick),
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             onClick = onClick,
-            onLongClick = onLongClick,
             interactionSource = interactionSource,
             colors =
                 CardDefaults.colors(

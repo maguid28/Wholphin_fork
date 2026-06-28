@@ -72,6 +72,8 @@ import com.github.damontecres.wholphin.ui.cards.StudioCard
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
+import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
+import com.github.damontecres.wholphin.ui.components.canRematchMetadata
 import com.github.damontecres.wholphin.ui.components.EpisodeName
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.FocusableItemRow
@@ -86,6 +88,8 @@ import com.github.damontecres.wholphin.ui.data.ItemDetailsDialogInfo
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.detail.PlaylistDialog
 import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchHost
+import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchViewModel
 import com.github.damontecres.wholphin.ui.indexOfFirstOrNull
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -150,6 +154,7 @@ fun HomePage(
     suppressContentScroll: () -> Boolean = { false },
     viewModel: HomeViewModel = hiltViewModel(),
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
+    metadataRematchViewModel: MetadataRematchViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) {
@@ -178,6 +183,8 @@ fun HomePage(
             var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
 
             val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
+            val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
+            val isAdministrator = currentUserDto?.policy?.isAdministrator == true
             var position by rememberPosition()
 
             val onFocusPosition = remember { { it: RowColumn -> position = it } }
@@ -206,8 +213,15 @@ fun HomePage(
                                 showGoTo = true,
                                 showStreamChoices = false,
                                 canDelete =
-                                    viewModel.canDelete(
+                                    canDeleteInContextMenu(
                                         item,
+                                        preferences.appPreferences,
+                                        isAdministrator,
+                                    ),
+                                canRematchMetadata =
+                                    canRematchMetadata(
+                                        item,
+                                        isAdministrator,
                                         preferences.appPreferences,
                                     ),
                                 canRemoveContinueWatching = canRemoveContinueWatching,
@@ -235,6 +249,11 @@ fun HomePage(
                                             overviewDialog = ItemDetailsDialogInfo(it)
                                         },
                                         onClearChosenStreams = {},
+                                        onClickRematchMetadata = { rematchItem ->
+                                            metadataRematchViewModel.startRematch(rematchItem) {
+                                                viewModel.refreshItem(position, it)
+                                            }
+                                        },
                                     ),
                             )
                     }
@@ -297,6 +316,7 @@ fun HomePage(
             }
         }
     }
+    MetadataRematchHost(metadataRematchViewModel)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

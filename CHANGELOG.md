@@ -7,6 +7,10 @@
 - Fixed App Font to use bundled font files instead of Google Fonts downloads, so typefaces load reliably on Android TV.
 - Changed the default App Font to Outfit.
 - Added admin metadata rematching for movies and series, with in-place refresh after Jellyfin applies the new match.
+- Added delete and rematch metadata actions to the long-press menu for movies and TV shows in Home, library grids, recommended rows, and collections.
+- Fixed long-press context menus hiding delete and rematch for movies and TV shows when media management was disabled or the grid item omitted server delete permission.
+- Enabled media management by default and improved Android TV long-press detection on poster cards.
+- Fixed long-press context menus immediately activating the first item when the select button is released.
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
 - Updated Home recently added and recently released rows to combine movies and TV shows in a single row, including migration of existing home settings.
 - Added optional seasonal Home rows for Halloween in October and Christmas in December.
