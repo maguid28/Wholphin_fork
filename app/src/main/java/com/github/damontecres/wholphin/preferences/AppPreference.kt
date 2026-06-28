@@ -500,16 +500,16 @@ sealed interface AppPreference<Pref, T> {
         val AppFontPref =
             AppChoicePreference<AppPreferences, AppFont>(
                 title = R.string.app_font,
-                defaultValue = AppFont.SYSTEM_DEFAULT,
+                defaultValue = AppFont.OUTFIT,
                 getter = { it.interfacePreferences.appFont },
                 setter = { prefs, value ->
                     prefs.updateInterfacePreferences { appFont = value }
                 },
                 displayValues = R.array.app_fonts,
-                indexToValue = { AppFontOptions.getOrElse(it) { AppFont.SYSTEM_DEFAULT } },
+                indexToValue = { AppFontOptions.getOrElse(it) { AppFont.OUTFIT } },
                 valueToIndex = {
                     AppFontOptions.indexOf(it).takeIf { index -> index >= 0 }
-                        ?: AppFontOptions.indexOf(AppFont.SYSTEM_DEFAULT)
+                        ?: AppFontOptions.indexOf(AppFont.OUTFIT)
                 },
             )
 

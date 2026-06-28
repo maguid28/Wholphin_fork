@@ -176,7 +176,7 @@ fun WholphinTheme(
     darkTheme: Boolean = true,
     appThemeColors: AppThemeColors = AppThemeColors.ELECTRIC_INDIGO,
     customThemeColorChoices: CustomThemeColorChoices = DefaultCustomThemeColorChoices,
-    appFont: AppFont = AppFont.SYSTEM_DEFAULT,
+    appFont: AppFont = AppFont.OUTFIT,
     content: @Composable () -> Unit,
 ) {
     val themeColors = getThemeColors(appThemeColors, customThemeColorChoices)
