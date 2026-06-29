@@ -72,7 +72,6 @@ import com.github.damontecres.wholphin.ui.cards.StudioCard
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
-import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
 import com.github.damontecres.wholphin.ui.components.canRematchMetadata
 import com.github.damontecres.wholphin.ui.components.EpisodeName
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
@@ -213,10 +212,9 @@ fun HomePage(
                                 showGoTo = true,
                                 showStreamChoices = false,
                                 canDelete =
-                                    canDeleteInContextMenu(
+                                    viewModel.canDelete(
                                         item,
                                         preferences.appPreferences,
-                                        isAdministrator,
                                     ),
                                 canRematchMetadata =
                                     canRematchMetadata(

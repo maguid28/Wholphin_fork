@@ -946,6 +946,9 @@
     <string name="series_continueing">Present</string>
     <string name="in_app_screensaver">Use in-app screensaver</string>
     <string name="delete_item">Are you sure you want to delete this item?</string>
+    <string name="delete_not_allowed">This item cannot be deleted</string>
+    <string name="delete_error">Error deleting item: %s</string>
+    <string name="delete_server_error">Jellyfin could not delete this item. Try deleting it in the Jellyfin web app, then check Dashboard → Logs for file permission or database errors.</string>
     <string name="show_media_management">Show media management options</string>
     <string-array name="backdrop_style_options">
         <item>@string/backdrop_style_dynamic</item>

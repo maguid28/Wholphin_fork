@@ -38,18 +38,6 @@ import kotlin.time.Duration
 private val metadataManagedItemTypes =
     setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)
 
-fun canDeleteInContextMenu(
-    item: BaseItem,
-    appPreferences: AppPreferences,
-    isAdministrator: Boolean,
-): Boolean {
-    if (item.type in metadataManagedItemTypes) {
-        if (isAdministrator) return true
-        return appPreferences.interfacePreferences.enableMediaManagement && item.canDelete
-    }
-    return appPreferences.interfacePreferences.enableMediaManagement && item.canDelete
-}
-
 fun canRematchMetadata(
     item: BaseItem,
     isAdministrator: Boolean,

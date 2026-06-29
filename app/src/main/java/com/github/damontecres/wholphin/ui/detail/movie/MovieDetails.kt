@@ -48,7 +48,6 @@ import com.github.damontecres.wholphin.ui.cards.SeasonCard
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
-import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
 import com.github.damontecres.wholphin.ui.components.canRematchMetadata
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.ExpandablePlayButtons
@@ -196,12 +195,7 @@ fun MovieDetails(
                             chosenStreams = chosenStreams,
                             showGoTo = false,
                             showStreamChoices = true,
-                            canDelete =
-                                canDeleteInContextMenu(
-                                    movie,
-                                    preferences.appPreferences,
-                                    currentUserDto?.policy?.isAdministrator == true,
-                                ),
+                            canDelete = state.canDelete,
                             canRematchMetadata =
                                 canRematchMetadata(
                                     movie,
@@ -232,7 +226,6 @@ fun MovieDetails(
                         )
                 },
                 onLongClickSimilar = { _, similar ->
-                    val isAdministrator = currentUserDto?.policy?.isAdministrator == true
                     showContextMenu =
                         ContextMenu.ForBaseItem(
                             fromLongClick = true,
@@ -240,16 +233,11 @@ fun MovieDetails(
                             chosenStreams = null,
                             showGoTo = true,
                             showStreamChoices = false,
-                            canDelete =
-                                canDeleteInContextMenu(
-                                    similar,
-                                    preferences.appPreferences,
-                                    isAdministrator,
-                                ),
+                            canDelete = viewModel.canDelete(similar, preferences.appPreferences),
                             canRematchMetadata =
                                 canRematchMetadata(
                                     similar,
-                                    isAdministrator,
+                                    currentUserDto?.policy?.isAdministrator == true,
                                     preferences.appPreferences,
                                 ),
                             canRemoveContinueWatching = false,

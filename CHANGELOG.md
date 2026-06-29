@@ -11,6 +11,8 @@
 - Fixed long-press context menus hiding delete and rematch for movies and TV shows when media management was disabled or the grid item omitted server delete permission.
 - Enabled media management by default and improved Android TV long-press detection on poster cards.
 - Fixed long-press context menus immediately activating the first item when the select button is released.
+- Fixed delete from long-press menus by verifying Jellyfin delete permission on a fresh item before calling the API, restoring delete visibility for admin accounts, and showing clearer messages when the server rejects deletion.
+- Added a script to fetch Jellyfin server logs for debugging delete failures.
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
 - Updated Home recently added and recently released rows to combine movies and TV shows in a single row, including migration of existing home settings.
 - Added optional seasonal Home rows for Halloween in October and Christmas in December.

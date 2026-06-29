@@ -41,7 +41,6 @@ import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
-import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
 import com.github.damontecres.wholphin.ui.components.canRematchMetadata
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
@@ -139,12 +138,7 @@ fun CollectionDetails(
                         chosenStreams = null,
                         showGoTo = true,
                         showStreamChoices = false,
-                        canDelete =
-                            canDeleteInContextMenu(
-                                item,
-                                preferences.appPreferences,
-                                isAdministrator,
-                            ),
+                        canDelete = viewModel.canDelete(item, preferences.appPreferences),
                         canRematchMetadata =
                             canRematchMetadata(
                                 item,

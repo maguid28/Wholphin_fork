@@ -86,7 +86,13 @@ class EpisodeViewModel
                     .filterNotNull()
                     .combinePair(userPreferencesService.flow.map { it.appPreferences })
                     .collectLatest { (item, preferences) ->
-                        canDelete.update { mediaManagementService.canDelete(item, preferences) }
+                        canDelete.update {
+                            mediaManagementService.canDelete(
+                                item,
+                                preferences,
+                                serverRepository.currentUserDto.value?.policy?.isAdministrator == true,
+                            )
+                        }
                     }
             }
         }

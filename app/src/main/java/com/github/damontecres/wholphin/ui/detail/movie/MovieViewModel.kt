@@ -14,6 +14,7 @@ import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
+import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.ThemeSongVolume
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.ExtrasService
@@ -95,10 +96,11 @@ class MovieViewModel
                 userPreferencesService.flow.collectLatest { preferences ->
                     _state.update {
                         val canDelete =
-                            it.movie?.let {
+                            it.movie?.let { movie ->
                                 mediaManagementService.canDelete(
-                                    it,
+                                    movie,
                                     preferences.appPreferences,
+                                    serverRepository.currentUserDto.value?.policy?.isAdministrator == true,
                                 )
                             }
                         it.copy(
@@ -375,6 +377,16 @@ class MovieViewModel
                 }
             }
         }
+
+        fun canDelete(
+            item: BaseItem,
+            appPreferences: AppPreferences,
+        ): Boolean =
+            mediaManagementService.canDelete(
+                item,
+                appPreferences,
+                serverRepository.currentUserDto.value?.policy?.isAdministrator == true,
+            )
 
         fun deleteItem(item: BaseItem) {
             deleteItem(context, mediaManagementService, item) {

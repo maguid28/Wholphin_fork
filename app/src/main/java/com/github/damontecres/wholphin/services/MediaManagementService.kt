@@ -3,6 +3,7 @@ package com.github.damontecres.wholphin.services
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -13,11 +14,17 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 import org.jellyfin.sdk.api.client.extensions.libraryApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private val metadataManagedItemTypes =
+    setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)
 
 /**
  * Service to manage media such as deletions
@@ -45,7 +52,7 @@ class MediaManagementService
 
         suspend fun canDelete(item: BaseItem): Boolean {
             val appPreferences = userPreferencesService.getCurrent().appPreferences
-            return canDelete(item, appPreferences)
+            return canDelete(item, appPreferences, isCurrentUserAdministrator())
         }
 
         /**
@@ -54,19 +61,37 @@ class MediaManagementService
         fun canDelete(
             item: BaseItem,
             appPreferences: AppPreferences,
+            isAdministrator: Boolean = false,
         ): Boolean {
-            Timber.v("canDelete %s: %s", item.id, item.canDelete)
-            val enabled = appPreferences.interfacePreferences.enableMediaManagement
-            return enabled &&
-                item.canDelete &&
-                if (item.type == BaseItemKind.RECORDING) {
+            val canUseMediaManagement =
+                isAdministrator || appPreferences.interfacePreferences.enableMediaManagement
+            if (!canUseMediaManagement) {
+                return false
+            }
+            if (item.type == BaseItemKind.RECORDING) {
+                if (item.data.canDelete == false) {
+                    return false
+                }
+                return item.canDelete &&
                     serverRepository.currentUserDto.value
                         ?.policy
                         ?.enableLiveTvManagement == true
-                } else {
-                    true
-                }
+            }
+            if (isAdministrator && item.type in metadataManagedItemTypes) {
+                return true
+            }
+            if (item.data.canDelete == false) {
+                return false
+            }
+            if (item.canDelete) {
+                return true
+            }
+            // Grid rows may omit CanDelete; allow the action and verify again before deleting.
+            return item.data.canDelete == null && item.type in metadataManagedItemTypes
         }
+
+        private fun isCurrentUserAdministrator(): Boolean =
+            serverRepository.currentUserDto.value?.policy?.isAdministrator == true
 
         /**
          * Delete the item.
@@ -75,13 +100,84 @@ class MediaManagementService
          */
         suspend fun deleteItem(item: BaseItem): DeleteResult {
             try {
-                Timber.i("Deleting %s", item.id)
-                api.libraryApi.deleteItem(item.id)
-                _deletedItemFlow.emit(DeletedItem(item))
+                syncAccessToken()
+                val freshItem = fetchItemForDelete(item.id)
+                val appPreferences = userPreferencesService.getCurrent().appPreferences
+                if (freshItem.data.canDelete != true) {
+                    Timber.w(
+                        "Refusing to delete %s (%s): server canDelete=%s",
+                        freshItem.id,
+                        freshItem.title,
+                        freshItem.data.canDelete,
+                    )
+                    return DeleteResult.Error(
+                        IllegalStateException("This item cannot be deleted"),
+                    )
+                }
+                if (!canDelete(freshItem, appPreferences, isCurrentUserAdministrator())) {
+                    Timber.w(
+                        "Refusing to delete %s (%s): app settings or user policy",
+                        freshItem.id,
+                        freshItem.title,
+                    )
+                    return DeleteResult.Error(
+                        IllegalStateException("This item cannot be deleted"),
+                    )
+                }
+                Timber.i(
+                    "Deleting %s (%s, type=%s, path=%s, server=%s)",
+                    freshItem.id,
+                    freshItem.title,
+                    freshItem.type,
+                    freshItem.data.path,
+                    serverRepository.currentServer.value?.version,
+                )
+                invokeDelete(freshItem.id)
+                _deletedItemFlow.emit(DeletedItem(freshItem))
                 return DeleteResult.Success
             } catch (ex: Exception) {
-                Timber.e(ex, "Error deleting %s", item.id)
+                Timber.e(
+                    ex,
+                    "Error deleting %s (%s, type=%s, path=%s, server=%s)",
+                    item.id,
+                    item.title,
+                    item.type,
+                    item.data.path,
+                    serverRepository.currentServer.value?.version,
+                )
                 return DeleteResult.Error(ex)
+            }
+        }
+
+        private fun syncAccessToken() {
+            val token = serverRepository.currentUser.value?.accessToken ?: return
+            if (api.accessToken != token) {
+                Timber.w("Syncing Jellyfin access token before delete")
+                api.update(accessToken = token)
+            }
+        }
+
+        private suspend fun fetchItemForDelete(itemId: UUID): BaseItem {
+            val userId = serverRepository.currentUser.value?.id
+            val dto =
+                if (userId != null) {
+                    api.userLibraryApi.getItem(itemId, userId).content
+                } else {
+                    api.userLibraryApi.getItem(itemId).content
+                }
+            return BaseItem(dto)
+        }
+
+        private suspend fun invokeDelete(itemId: UUID) {
+            try {
+                api.libraryApi.deleteItem(itemId)
+            } catch (ex: InvalidStatusException) {
+                if (ex.status == 500) {
+                    Timber.w("deleteItem returned 500 for %s, retrying with deleteItems", itemId)
+                    api.libraryApi.deleteItems(listOf(itemId))
+                } else {
+                    throw ex
+                }
             }
         }
     }
@@ -109,10 +205,21 @@ fun ViewModel.deleteItem(
 ) = viewModelScope.launchIO {
     when (val r = mediaManagementService.deleteItem(item)) {
         is DeleteResult.Error -> {
-            showToast(
-                context,
-                "Error deleting item: ${r.ex.localizedMessage}",
-            )
+            val message =
+                when {
+                    r.ex is IllegalStateException ->
+                        context.getString(R.string.delete_not_allowed)
+
+                    r.ex is InvalidStatusException && r.ex.status >= 500 ->
+                        context.getString(R.string.delete_server_error)
+
+                    else ->
+                        context.getString(
+                            R.string.delete_error,
+                            r.ex.localizedMessage ?: r.ex.message ?: "Unknown",
+                        )
+                }
+            showToast(context, message)
         }
 
         DeleteResult.Success -> {

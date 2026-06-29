@@ -427,7 +427,12 @@ class CollectionViewModel
         fun canDelete(
             item: BaseItem,
             appPreferences: AppPreferences,
-        ): Boolean = mediaManagementService.canDelete(item, appPreferences)
+        ): Boolean =
+            mediaManagementService.canDelete(
+                item,
+                appPreferences,
+                serverRepository.currentUserDto.value?.policy?.isAdministrator == true,
+            )
 
         fun deleteItem(
             item: BaseItem,

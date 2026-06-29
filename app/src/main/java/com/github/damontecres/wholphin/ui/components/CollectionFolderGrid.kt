@@ -779,7 +779,12 @@ class CollectionFolderViewModel
         fun canDelete(
             item: BaseItem,
             appPreferences: AppPreferences,
-        ): Boolean = mediaManagementService.canDelete(item, appPreferences)
+        ): Boolean =
+            mediaManagementService.canDelete(
+                item,
+                appPreferences,
+                serverRepository.currentUserDto.value?.policy?.isAdministrator == true,
+            )
 
         fun addToQueue(
             item: BaseItem,
@@ -963,12 +968,7 @@ fun CollectionFolderGrid(
                                 chosenStreams = null,
                                 showGoTo = true,
                                 showStreamChoices = false,
-                                canDelete =
-                                    canDeleteInContextMenu(
-                                        item,
-                                        preferences.appPreferences,
-                                        isAdministrator,
-                                    ),
+                                canDelete = viewModel.canDelete(item, preferences.appPreferences),
                                 canRematchMetadata =
                                     canRematchMetadata(
                                         item,

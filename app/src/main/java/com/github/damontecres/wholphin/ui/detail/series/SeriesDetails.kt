@@ -61,7 +61,6 @@ import com.github.damontecres.wholphin.ui.components.ConfirmDialog
 import com.github.damontecres.wholphin.ui.components.ContextMenu
 import com.github.damontecres.wholphin.ui.components.ContextMenuActions
 import com.github.damontecres.wholphin.ui.components.ContextMenuDialog
-import com.github.damontecres.wholphin.ui.components.canDeleteInContextMenu
 import com.github.damontecres.wholphin.ui.components.canRematchMetadata as supportsMetadataRematch
 import com.github.damontecres.wholphin.ui.components.DeleteButton
 import com.github.damontecres.wholphin.ui.components.DialogItem
@@ -222,6 +221,7 @@ fun SeriesDetails(
                     favorite = item.data.userData?.isFavorite ?: false,
                     canDelete = canDelete,
                     canRematchMetadata = currentUserDto?.policy?.isAdministrator == true,
+                    canDeleteItem = { viewModel.canDelete(it, preferences.appPreferences) },
                     rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
                     modifier = modifier,
                     onClickItem = { index, item ->
@@ -236,7 +236,6 @@ fun SeriesDetails(
                         )
                     },
                     onLongClickItem = { index, season ->
-                        val isAdministrator = currentUserDto?.policy?.isAdministrator == true
                         showContextMenu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
@@ -244,12 +243,7 @@ fun SeriesDetails(
                                 chosenStreams = null,
                                 showGoTo = true,
                                 showStreamChoices = false,
-                                canDelete =
-                                    canDeleteInContextMenu(
-                                        season,
-                                        preferences.appPreferences,
-                                        isAdministrator,
-                                    ),
+                                canDelete = viewModel.canDelete(season, preferences.appPreferences),
                                 canRematchMetadata = false,
                                 canRemoveContinueWatching = false,
                                 canRemoveNextUp = false,
@@ -386,6 +380,7 @@ fun SeriesDetailsContent(
     favorite: Boolean,
     canDelete: Boolean,
     canRematchMetadata: Boolean,
+    canDeleteItem: (BaseItem) -> Boolean,
     rottenTomatoesAudienceScore: Float?,
     onClickItem: (Int, BaseItem) -> Unit,
     onClickPerson: (Person) -> Unit,
@@ -662,7 +657,6 @@ fun SeriesDetailsContent(
                             },
                             onLongClickItem = { index, item ->
                                 position = SIMILAR_ROW
-                                val isAdministrator = canRematchMetadata
                                 onShowContextMenu.invoke(
                                     ContextMenu.ForBaseItem(
                                         fromLongClick = true,
@@ -670,16 +664,11 @@ fun SeriesDetailsContent(
                                         chosenStreams = null,
                                         showGoTo = true,
                                         showStreamChoices = false,
-                                        canDelete =
-                                            canDeleteInContextMenu(
-                                                item,
-                                                preferences.appPreferences,
-                                                isAdministrator,
-                                            ),
+                                        canDelete = canDeleteItem.invoke(item),
                                         canRematchMetadata =
                                             supportsMetadataRematch(
                                                 item,
-                                                isAdministrator,
+                                                canRematchMetadata,
                                                 preferences.appPreferences,
                                             ),
                                         canRemoveContinueWatching = false,

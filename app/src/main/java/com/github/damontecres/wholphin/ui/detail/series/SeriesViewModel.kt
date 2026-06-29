@@ -819,7 +819,12 @@ class SeriesViewModel
         fun canDelete(
             item: BaseItem,
             appPreferences: AppPreferences,
-        ): Boolean = mediaManagementService.canDelete(item, appPreferences)
+        ): Boolean =
+            mediaManagementService.canDelete(
+                item,
+                appPreferences,
+                serverRepository.currentUserDto.value?.policy?.isAdministrator == true,
+            )
     }
 
 sealed interface EpisodeList {
