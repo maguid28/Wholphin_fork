@@ -100,6 +100,29 @@ class ApiRequestPager<T>(
         }
         fetchPageBlocking(position, true)
     }
+
+    suspend fun indexOfItemId(itemId: UUID): Int {
+        init(0)
+        for (i in 0 until size) {
+            if (getBlocking(i)?.id == itemId) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    /**
+     * Refreshes the pager after an item was deleted, using [knownPosition] when available.
+     */
+    suspend fun refreshAfterItemDeleted(
+        itemId: UUID,
+        knownPosition: Int? = null,
+    ) {
+        val position = knownPosition?.takeIf { it >= 0 } ?: indexOfItemId(itemId)
+        if (position >= 0) {
+            refreshPagesAfter(position)
+        }
+    }
 }
 
 /**

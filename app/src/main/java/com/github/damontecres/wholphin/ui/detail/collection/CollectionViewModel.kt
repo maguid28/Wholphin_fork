@@ -51,11 +51,14 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -118,6 +121,10 @@ class CollectionViewModel
 
         init {
             addCloseable { release() }
+            mediaManagementService.deletedItemFlow
+                .onEach { refreshAfterDelete(it.item, null) }
+                .catch { ex -> Timber.e(ex, "Error refreshing collection after delete") }
+                .launchIn(viewModelScope)
             // Get global per-user view options for collections
             viewOptionsFlow.collectLatestIn(viewModelScope) { viewOptions ->
                 Timber.v("Updated viewOptions")
@@ -396,7 +403,7 @@ class CollectionViewModel
             if (itemId == state.value.collection?.id) {
                 refreshCollection()
             } else if (position != null) {
-                refreshItem(itemId, position, false)
+                refreshItem(itemId, position)
             }
         }
 
@@ -409,7 +416,7 @@ class CollectionViewModel
             if (itemId == state.value.collection?.id) {
                 refreshCollection()
             } else if (position != null) {
-                refreshItem(itemId, position, false)
+                refreshItem(itemId, position)
             }
         }
 
@@ -440,9 +447,36 @@ class CollectionViewModel
         ) {
             deleteItem(context, mediaManagementService, item) {
                 viewModelScope.launchIO {
-                    if (position != null) {
-                        refreshItem(itemId, position, true)
+                    refreshAfterDelete(item, position)
+                }
+            }
+        }
+
+        private suspend fun refreshAfterDelete(
+            item: BaseItem,
+            position: RowColumn?,
+        ) {
+            state.value.let { state ->
+                if (state.viewOptions.separateTypes) {
+                    state.separateItems.forEach { (type, row) ->
+                        if (row is HomeRowLoadingState.Success) {
+                            val rowIndex =
+                                state.separateItems.keys
+                                    .toList()
+                                    .indexOf(type)
+                            val knownIndex =
+                                position?.column?.takeIf { position.row == rowIndex }
+                            (row.items as? ApiRequestPager<*>)?.refreshAfterItemDeleted(
+                                item.id,
+                                knownIndex,
+                            )
+                        }
                     }
+                } else {
+                    (state.items as? ApiRequestPager<*>)?.refreshAfterItemDeleted(
+                        item.id,
+                        position?.column,
+                    )
                 }
             }
         }
@@ -450,7 +484,6 @@ class CollectionViewModel
         private suspend fun refreshItem(
             itemId: UUID,
             position: RowColumn,
-            isDelete: Boolean,
         ) {
             state.value.let { state ->
                 val items =
@@ -463,11 +496,7 @@ class CollectionViewModel
                     } else {
                         state.items as? ApiRequestPager<*>
                     }
-                if (isDelete) {
-                    items?.refreshPagesAfter(position.column)
-                } else {
-                    items?.refreshItem(position.column, itemId)
-                }
+                items?.refreshItem(position.column, itemId)
             }
         }
 
@@ -476,7 +505,7 @@ class CollectionViewModel
             position: RowColumn,
         ) {
             viewModelScope.launchIO {
-                refreshItem(itemId, position, false)
+                refreshItem(itemId, position)
             }
         }
 

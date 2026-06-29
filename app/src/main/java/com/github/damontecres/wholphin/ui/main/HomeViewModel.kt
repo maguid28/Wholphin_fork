@@ -25,6 +25,7 @@ import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.showToast
+import com.github.damontecres.wholphin.util.ApiRequestPager
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
@@ -34,7 +35,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -66,6 +70,13 @@ class HomeViewModel
     ) : ViewModel() {
         private val _state = MutableStateFlow(HomeState.EMPTY)
         val state: StateFlow<HomeState> = _state
+
+        init {
+            mediaManagementService.deletedItemFlow
+                .onEach { removedItemFromHomeState(it.item) }
+                .catch { ex -> Timber.e(ex, "Error refreshing home after delete") }
+                .launchIn(viewModelScope)
+        }
 
         fun init() {
             viewModelScope.launchIO {
@@ -285,22 +296,44 @@ class HomeViewModel
         ) {
             deleteItem(context, mediaManagementService, item) {
                 viewModelScope.launchDefault {
-                    val row = state.value.homeRows.getOrNull(position.row)
-                    if (row is HomeRowLoadingState.Success) {
-                        _state.update {
-                            val newRow =
-                                row.items.toMutableList().apply {
-                                    removeAt(position.column)
-                                }
-                            it.copy(
-                                homeRows =
-                                    it.homeRows.toMutableList().apply {
-                                        set(position.row, row.copy(items = newRow))
-                                    },
-                            )
-                        }
-                    }
+                    removedItemFromHomeState(item, position)
                 }
+            }
+        }
+
+        private suspend fun removedItemFromHomeState(
+            item: BaseItem,
+            position: RowColumn? = null,
+        ) {
+            val row = position?.row?.let { state.value.homeRows.getOrNull(it) }
+            if (row is HomeRowLoadingState.Success) {
+                val pager = row.items as? ApiRequestPager<*>
+                if (pager != null && position != null) {
+                    pager.refreshAfterItemDeleted(item.id, position.column)
+                }
+            }
+            _state.update { current ->
+                current.copy(
+                    homeRows =
+                        current.homeRows.mapIndexed { rowIndex, homeRow ->
+                            if (homeRow is HomeRowLoadingState.Success) {
+                                if (homeRow.items is ApiRequestPager<*>) {
+                                    homeRow
+                                } else {
+                                    val filtered =
+                                        homeRow.items.filterNot { it?.id == item.id }
+                                    if (filtered.size == homeRow.items.size) {
+                                        homeRow
+                                    } else {
+                                        homeRow.copy(items = filtered)
+                                    }
+                                }
+                            } else {
+                                homeRow
+                            }
+                        },
+                    mediaBannerItems = current.mediaBannerItems.filter { it.id != item.id },
+                )
             }
         }
 

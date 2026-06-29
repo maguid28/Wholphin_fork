@@ -90,8 +90,6 @@ import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
 import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchHost
 import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchViewModel
 import com.github.damontecres.wholphin.ui.detail.music.addToQueue
-import com.github.damontecres.wholphin.ui.equalsNotNull
-import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.main.HomePageHeader
 import com.github.damontecres.wholphin.ui.nav.Destination
@@ -467,31 +465,24 @@ class CollectionFolderViewModel
             }
             mediaManagementService.deletedItemFlow
                 .onEach { deletedItem ->
-                    refreshAfterDelete(position, deletedItem.item)
+                    refreshAfterDelete(deletedItem.item)
                 }.catch { ex ->
                     Timber.e(ex, "Error refreshing after deleted item")
                 }.launchIn(viewModelScope)
         }
 
         private suspend fun refreshAfterDelete(
-            position: Int,
             deletedItem: BaseItem,
+            knownIndex: Int? = null,
         ) {
             try {
                 val pager =
                     ((loading.value as? DataLoadingState.Success)?.data as? ApiRequestPager<*>)
-                position.let {
-                    Timber.v("Item deleted: position=%s, id=%s", it, itemId)
-                    val item = pager?.get(it)
-                    // Exact item deleted (eg a movie) or deleted item was within the series
-                    if (item?.id == deletedItem.id ||
-                        equalsNotNull(item?.data?.id, deletedItem.data.seriesId)
-                    ) {
-                        pager?.refreshPagesAfter(position)
-                    }
-                }
+                        ?: return
+                Timber.v("Item deleted: index=%s, id=%s", knownIndex, deletedItem.id)
+                pager.refreshAfterItemDeleted(deletedItem.id, knownIndex)
             } catch (ex: Exception) {
-                Timber.e(ex, "Error refreshing after deleted item %s", itemId)
+                Timber.e(ex, "Error refreshing after deleted item %s", deletedItem.id)
                 showToast(context, "Error refreshing after item deleted")
             }
         }
@@ -770,8 +761,8 @@ class CollectionFolderViewModel
             item: BaseItem,
         ) {
             deleteItem(context, mediaManagementService, item) {
-                viewModelScope.launchDefault {
-                    refreshAfterDelete(index, item)
+                viewModelScope.launchIO {
+                    refreshAfterDelete(item, index)
                 }
             }
         }
@@ -921,46 +912,44 @@ fun CollectionFolderGrid(
     val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
     val isAdministrator = currentUserDto?.policy?.isAdministrator == true
 
-    val contextActions =
-        remember(viewModel.position) {
-            ContextMenuActions(
-                navigateTo = viewModel::navigateTo,
-                onClickWatch = { itemId, watched ->
-                    viewModel.setWatched(viewModel.position, itemId, watched)
-                },
-                onClickFavorite = { itemId, favorite ->
-                    viewModel.setFavorite(viewModel.position, itemId, favorite)
-                },
-                onClickAddPlaylist = { itemId ->
-                    playlistViewModel.loadPlaylists(MediaType.VIDEO)
-                    showPlaylistDialog.makePresent(itemId)
-                },
-                onSendMediaInfo = viewModel.mediaReportService::sendReportFor,
-                onDeleteItem = { viewModel.deleteItem(viewModel.position, it) },
-                onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
-                onChooseVersion = { _, _ ->
-                    // Not supported on this page
-                },
-                onChooseTracks = { result ->
-                    // Not supported on this page
-                },
-                onClearChosenStreams = {
-                    // Not supported on this page
-                },
-                onClickRematchMetadata = { item ->
-                    metadataRematchViewModel.startRematch(item) {
-                        viewModel.refreshItemAfterRematch(viewModel.position, it.id)
-                    }
-                },
-            )
-        }
+    fun contextActionsFor(gridPosition: Int) =
+        ContextMenuActions(
+            navigateTo = viewModel::navigateTo,
+            onClickWatch = { itemId, watched ->
+                viewModel.setWatched(gridPosition, itemId, watched)
+            },
+            onClickFavorite = { itemId, favorite ->
+                viewModel.setFavorite(gridPosition, itemId, favorite)
+            },
+            onClickAddPlaylist = { itemId ->
+                playlistViewModel.loadPlaylists(MediaType.VIDEO)
+                showPlaylistDialog.makePresent(itemId)
+            },
+            onSendMediaInfo = viewModel.mediaReportService::sendReportFor,
+            onDeleteItem = { viewModel.deleteItem(gridPosition, it) },
+            onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
+            onChooseVersion = { _, _ ->
+                // Not supported on this page
+            },
+            onChooseTracks = { result ->
+                // Not supported on this page
+            },
+            onClearChosenStreams = {
+                // Not supported on this page
+            },
+            onClickRematchMetadata = { item ->
+                metadataRematchViewModel.startRematch(item) {
+                    viewModel.refreshItemAfterRematch(gridPosition, it.id)
+                }
+            },
+        )
 
     val gridActions =
         remember(actions) {
             GridClickActions(
                 onClickItem = actions.onClickItem,
                 onLongClickItem =
-                    actions.onLongClickItem ?: { position, item ->
+                    actions.onLongClickItem ?: { gridPosition, item ->
                         showContextMenu =
                             ContextMenu.ForBaseItem(
                                 fromLongClick = true,
@@ -977,7 +966,7 @@ fun CollectionFolderGrid(
                                     ),
                                 canRemoveContinueWatching = false,
                                 canRemoveNextUp = false,
-                                actions = contextActions,
+                                actions = contextActionsFor(gridPosition),
                             )
                     },
                 onClickPlayAll =

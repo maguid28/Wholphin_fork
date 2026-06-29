@@ -56,8 +56,13 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.MediaType
+import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -90,6 +95,13 @@ abstract class RecommendedViewModel(
     val loading = MutableLiveData<LoadingState>(LoadingState.Loading)
 
     private val initStarted = AtomicBoolean(false)
+
+    init {
+        mediaManagementService.deletedItemFlow
+            .onEach { removeItemFromRows(it.item) }
+            .catch { ex -> Timber.e(ex, "Error refreshing recommended after delete") }
+            .launchIn(viewModelScope)
+    }
 
     fun initIfNeeded() {
         if (loading.value == LoadingState.Success) return
@@ -164,9 +176,33 @@ abstract class RecommendedViewModel(
     ) {
         deleteItem(context, mediaManagementService, item) {
             viewModelScope.launchDefault {
-                val row = rows.value.getOrNull(position.row)
-                if (row is HomeRowLoadingState.Success) {
-                    (row.items as? ApiRequestPager<*>)?.refreshPagesAfter(position.column)
+                removeItemFromRows(item, position)
+            }
+        }
+    }
+
+    private suspend fun removeItemFromRows(
+        item: BaseItem,
+        position: RowColumn? = null,
+    ) {
+        val row = position?.row?.let { rows.value.getOrNull(it) }
+        if (row is HomeRowLoadingState.Success) {
+            (row.items as? ApiRequestPager<*>)?.refreshAfterItemDeleted(
+                item.id,
+                position?.column,
+            )
+        }
+        rows.update { homeRows ->
+            homeRows.map { homeRow ->
+                if (homeRow is HomeRowLoadingState.Success && homeRow.items !is ApiRequestPager<*>) {
+                    val filtered = homeRow.items.filterNot { it?.id == item.id }
+                    if (filtered.size == homeRow.items.size) {
+                        homeRow
+                    } else {
+                        homeRow.copy(items = filtered)
+                    }
+                } else {
+                    homeRow
                 }
             }
         }
@@ -222,39 +258,37 @@ fun RecommendedContent(
 
         else -> {
             var position by rememberPosition()
-            val contextActions =
-                remember(position) {
-                    ContextMenuActions(
-                        navigateTo = viewModel.navigationManager::navigateTo,
-                        onClickWatch = { itemId, watched ->
-                            viewModel.setWatched(position, itemId, watched)
-                        },
-                        onClickFavorite = { itemId, favorite ->
-                            viewModel.setFavorite(position, itemId, favorite)
-                        },
-                        onClickAddPlaylist = { itemId ->
-                            playlistViewModel.loadPlaylists(MediaType.VIDEO)
-                            showPlaylistDialog.makePresent(itemId)
-                        },
-                        onSendMediaInfo = viewModel.mediaReportService::sendReportFor,
-                        onDeleteItem = { viewModel.deleteItem(position, it) },
-                        onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
-                        onChooseVersion = { _, _ ->
-                            // Not supported on this page
-                        },
-                        onChooseTracks = { result ->
-                            // Not supported on this page
-                        },
-                        onClearChosenStreams = {
-                            // Not supported on this page
-                        },
-                        onClickRematchMetadata = { item ->
-                            metadataRematchViewModel.startRematch(item) {
-                                viewModel.refreshItem(position, it.id)
-                            }
-                        },
-                    )
-                }
+            fun contextActionsFor(rowColumn: RowColumn) =
+                ContextMenuActions(
+                    navigateTo = viewModel.navigationManager::navigateTo,
+                    onClickWatch = { itemId, watched ->
+                        viewModel.setWatched(rowColumn, itemId, watched)
+                    },
+                    onClickFavorite = { itemId, favorite ->
+                        viewModel.setFavorite(rowColumn, itemId, favorite)
+                    },
+                    onClickAddPlaylist = { itemId ->
+                        playlistViewModel.loadPlaylists(MediaType.VIDEO)
+                        showPlaylistDialog.makePresent(itemId)
+                    },
+                    onSendMediaInfo = viewModel.mediaReportService::sendReportFor,
+                    onDeleteItem = { viewModel.deleteItem(rowColumn, it) },
+                    onShowOverview = { overviewDialog = ItemDetailsDialogInfo(it) },
+                    onChooseVersion = { _, _ ->
+                        // Not supported on this page
+                    },
+                    onChooseTracks = { result ->
+                        // Not supported on this page
+                    },
+                    onClearChosenStreams = {
+                        // Not supported on this page
+                    },
+                    onClickRematchMetadata = { item ->
+                        metadataRematchViewModel.startRematch(item) {
+                            viewModel.refreshItem(rowColumn, it.id)
+                        }
+                    },
+                )
 
             HomePageContent(
                 homeRows = rows,
@@ -262,7 +296,8 @@ fun RecommendedContent(
                 onClickItem = { _, item ->
                     viewModel.navigationManager.navigateTo(item.destination())
                 },
-                onLongClickItem = { position, item ->
+                onLongClickItem = { rowColumn, item ->
+                    position = rowColumn
                     showContextMenu =
                         ContextMenu.ForBaseItem(
                             fromLongClick = true,
@@ -279,7 +314,7 @@ fun RecommendedContent(
                                 ),
                             canRemoveContinueWatching = false,
                             canRemoveNextUp = false,
-                            actions = contextActions,
+                            actions = contextActionsFor(rowColumn),
                         )
                 },
                 onClickPlay = { _, item ->
