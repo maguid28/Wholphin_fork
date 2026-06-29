@@ -51,6 +51,7 @@ import com.github.damontecres.wholphin.ui.rememberPosition
 import com.github.damontecres.wholphin.util.ApiRequestPager
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.PaginatedRowKind
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,32 @@ abstract class RecommendedViewModel(
     abstract fun init()
 
     abstract val rows: MutableStateFlow<List<HomeRowLoadingState>>
+
+    abstract suspend fun fetchMoreForRow(
+        kind: PaginatedRowKind,
+        startIndex: Int,
+    ): Pair<List<BaseItem>, Boolean>?
+
+    suspend fun loadMoreRow(rowIndex: Int) {
+        val currentRow = rows.value.getOrNull(rowIndex) as? HomeRowLoadingState.Success ?: return
+        val kind = currentRow.paginationKind ?: return
+        if (!currentRow.hasMore) return
+
+        val result = fetchMoreForRow(kind, currentRow.items.size) ?: return
+        val (newItems, hasMore) = result
+        rows.update { homeRows ->
+            homeRows.mapIndexed { index, row ->
+                if (index == rowIndex && row is HomeRowLoadingState.Success) {
+                    row.copy(
+                        items = row.items + newItems,
+                        hasMore = hasMore,
+                    )
+                } else {
+                    row
+                }
+            }
+        }
+    }
 
     val loading = MutableLiveData<LoadingState>(LoadingState.Loading)
 
@@ -336,6 +363,7 @@ fun RecommendedContent(
                     )
                 },
                 onUpdateBackdrop = viewModel::updateBackdrop,
+                onLoadMoreRow = viewModel::loadMoreRow,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 modifier = modifier,
                 headerComposable = { focusedItem ->

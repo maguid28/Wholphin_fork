@@ -53,6 +53,7 @@ import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.SeerrService
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.Cards
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.cards.DiscoverItemCard
 import com.github.damontecres.wholphin.ui.cards.EpisodeCard
@@ -112,11 +113,14 @@ class SearchViewModel
 
         private val semaphore = Semaphore(4)
 
+        private val searchPagers = mutableMapOf<BaseItemKind, ApiRequestPager<GetItemsRequest>>()
+
         fun search(query: String?) {
             if (currentQuery == query) {
                 return
             }
             currentQuery = query
+            searchPagers.clear()
             if (query.isNotNullOrBlank()) {
                 movies.value = SearchResult.Searching
                 series.value = SearchResult.Searching
@@ -153,13 +157,28 @@ class SearchViewModel
                                 recursive = true,
                                 includeItemTypes = listOf(type),
                                 fields = SlimItemFields,
-                                limit = 25,
                             )
                         val pager =
-                            ApiRequestPager(api, request, GetItemsRequestHandler, viewModelScope)
+                            ApiRequestPager(
+                                api,
+                                request,
+                                GetItemsRequestHandler,
+                                viewModelScope,
+                                pageSize = HOME_ROW_PAGE_SIZE,
+                            )
                         pager.init()
+                        searchPagers[type] = pager
+                        val visibleCount = minOf(HOME_ROW_PAGE_SIZE, pager.size)
+                        val items =
+                            (0 until visibleCount).mapNotNull { index ->
+                                pager.getBlocking(index)
+                            }
                         withContext(Dispatchers.Main) {
-                            target.value = SearchResult.Success(pager)
+                            target.value =
+                                SearchResult.Success(
+                                    items = items,
+                                    hasMore = pager.size > visibleCount,
+                                )
                         }
                     }
                 } catch (ex: Exception) {
@@ -168,6 +187,34 @@ class SearchViewModel
                         target.value = SearchResult.Error(ex)
                     }
                 }
+            }
+        }
+
+        suspend fun loadMoreSearchRow(type: BaseItemKind) {
+            val target =
+                when (type) {
+                    BaseItemKind.MOVIE -> movies
+                    BaseItemKind.SERIES -> series
+                    BaseItemKind.EPISODE -> episodes
+                    BaseItemKind.BOX_SET -> collections
+                    else -> return
+                }
+            val current = target.value as? SearchResult.Success ?: return
+            if (!current.hasMore) return
+            val pager = searchPagers[type] ?: return
+            val startIndex = current.items.size
+            val endIndex = minOf(startIndex + HOME_ROW_PAGE_SIZE, pager.size)
+            val newItems =
+                (startIndex until endIndex).mapNotNull { index ->
+                    pager.getBlocking(index)
+                }
+            if (newItems.isEmpty()) return
+            withContext(Dispatchers.Main) {
+                target.value =
+                    SearchResult.Success(
+                        items = current.items + newItems,
+                        hasMore = endIndex < pager.size,
+                    )
             }
         }
 
@@ -206,6 +253,7 @@ sealed interface SearchResult {
 
     data class Success(
         val items: List<BaseItem?>,
+        val hasMore: Boolean = false,
     ) : SearchResult
 
     data class SuccessSeerr(
@@ -383,6 +431,7 @@ fun SearchPage(
             focusRequester = focusRequesters[MOVIE_ROW],
             onClickItem = onClickItem,
             onClickPosition = { position = it },
+            onLoadMore = { viewModel.loadMoreSearchRow(BaseItemKind.MOVIE) },
             modifier = Modifier.fillMaxWidth(),
         )
         searchResultRow(
@@ -393,6 +442,7 @@ fun SearchPage(
             focusRequester = focusRequesters[SERIES_ROW],
             onClickItem = onClickItem,
             onClickPosition = { position = it },
+            onLoadMore = { viewModel.loadMoreSearchRow(BaseItemKind.SERIES) },
             modifier = Modifier.fillMaxWidth(),
         )
         searchResultRow(
@@ -403,6 +453,7 @@ fun SearchPage(
             focusRequester = focusRequesters[EPISODE_ROW],
             onClickItem = onClickItem,
             onClickPosition = { position = it },
+            onLoadMore = { viewModel.loadMoreSearchRow(BaseItemKind.EPISODE) },
             modifier = Modifier.fillMaxWidth(),
             cardContent = @Composable { index, item, mod, onClick, onLongClick ->
                 EpisodeCard(
@@ -498,6 +549,7 @@ fun SearchPage(
             focusRequester = focusRequesters[COLLECTION_ROW],
             onClickItem = onClickItem,
             onClickPosition = { position = it },
+            onLoadMore = { viewModel.loadMoreSearchRow(BaseItemKind.BOX_SET) },
             modifier = Modifier.fillMaxWidth(),
         )
         searchResultRow(
@@ -537,6 +589,7 @@ fun LazyListScope.searchResultRow(
     onClickPosition: (RowColumn) -> Unit,
     modifier: Modifier = Modifier,
     onClickDiscover: ((Int, DiscoverItem) -> Unit)? = null,
+    onLoadMore: (suspend () -> Unit)? = null,
     cardContent: @Composable (
         index: Int,
         item: BaseItem?,
@@ -591,6 +644,8 @@ fun LazyListScope.searchResultRow(
                     ItemRow(
                         title = stringResource(title),
                         items = r.items,
+                        showLoadMore = r.hasMore,
+                        onClickLoadMore = { onLoadMore?.invoke() },
                         onClickItem = onClickItem,
                         onLongClickItem = { _, _ -> },
                         modifier = modifier.focusRequester(focusRequester),

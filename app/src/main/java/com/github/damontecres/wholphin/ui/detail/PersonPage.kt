@@ -50,6 +50,7 @@ import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.OneTimeLaunchedEffect
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.cards.SeasonCard
 import com.github.damontecres.wholphin.ui.components.ErrorMessage
@@ -105,6 +106,7 @@ class PersonViewModel
         val series = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
         val episodes = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
         val discovered = MutableStateFlow<List<DiscoverItem>>(listOf())
+        private val rowPagers = mutableMapOf<BaseItemKind, ApiRequestPager<GetItemsRequest>>()
 
         fun init(itemId: UUID) {
             viewModelScope.launchIO(
@@ -161,15 +163,52 @@ class PersonViewModel
                             request,
                             GetItemsRequestHandler,
                             viewModelScope,
-                            pageSize = 15,
+                            pageSize = HOME_ROW_PAGE_SIZE,
                             useSeriesForPrimary = false,
                         ).init()
-                    target.setValueOnMain(RowLoadingState.Success(pager))
+                    rowPagers[type] = pager
+                    val visibleCount = minOf(HOME_ROW_PAGE_SIZE, pager.size)
+                    val items =
+                        (0 until visibleCount).mapNotNull { index ->
+                            pager.getBlocking(index)
+                        }
+                    target.setValueOnMain(
+                        RowLoadingState.Success(
+                            items = items,
+                            hasMore = pager.size > visibleCount,
+                        ),
+                    )
                 } catch (ex: Exception) {
                     Timber.e(ex, "Error fetching $type for $itemId")
                     target.setValueOnMain(RowLoadingState.Error(ex))
                 }
             }
+        }
+
+        suspend fun loadMoreRow(type: BaseItemKind) {
+            val target =
+                when (type) {
+                    BaseItemKind.MOVIE -> movies
+                    BaseItemKind.SERIES -> series
+                    BaseItemKind.EPISODE -> episodes
+                    else -> return
+                }
+            val current = target.value as? RowLoadingState.Success ?: return
+            if (!current.hasMore) return
+            val pager = rowPagers[type] ?: return
+            val startIndex = current.items.size
+            val endIndex = minOf(startIndex + HOME_ROW_PAGE_SIZE, pager.size)
+            val newItems =
+                (startIndex until endIndex).mapNotNull { index ->
+                    pager.getBlocking(index)
+                }
+            if (newItems.isEmpty()) return
+            target.setValueOnMain(
+                RowLoadingState.Success(
+                    items = current.items + newItems,
+                    hasMore = endIndex < pager.size,
+                ),
+            )
         }
 
         fun setFavorite(favorite: Boolean) {
@@ -239,6 +278,9 @@ fun PersonPage(
                     onClickDiscover = { index, item ->
                         viewModel.navigationManager.navigateTo(item.destination)
                     },
+                    onLoadMoreMovies = { viewModel.loadMoreRow(BaseItemKind.MOVIE) },
+                    onLoadMoreSeries = { viewModel.loadMoreRow(BaseItemKind.SERIES) },
+                    onLoadMoreEpisodes = { viewModel.loadMoreRow(BaseItemKind.EPISODE) },
                     modifier = modifier,
                 )
                 AnimatedVisibility(showOverviewDialog) {
@@ -283,6 +325,9 @@ fun PersonPageContent(
     overviewOnClick: () -> Unit,
     favoriteOnClick: () -> Unit,
     onClickDiscover: (Int, DiscoverItem) -> Unit,
+    onLoadMoreMovies: suspend () -> Unit = {},
+    onLoadMoreSeries: suspend () -> Unit = {},
+    onLoadMoreEpisodes: suspend () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -333,6 +378,8 @@ fun PersonPageContent(
                 onClickItem = onClickItem,
                 onClickPosition = { position = it },
                 showIfEmpty = false,
+                showLoadMore = (movies as? RowLoadingState.Success)?.hasMore == true,
+                onClickLoadMore = onLoadMoreMovies,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -346,6 +393,8 @@ fun PersonPageContent(
                 onClickItem = onClickItem,
                 onClickPosition = { position = it },
                 showIfEmpty = false,
+                showLoadMore = (series as? RowLoadingState.Success)?.hasMore == true,
+                onClickLoadMore = onLoadMoreSeries,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -359,6 +408,8 @@ fun PersonPageContent(
                 onClickItem = onClickItem,
                 onClickPosition = { position = it },
                 showIfEmpty = false,
+                showLoadMore = (episodes as? RowLoadingState.Success)?.hasMore == true,
+                onClickLoadMore = onLoadMoreEpisodes,
                 horizontalPadding = 24.dp,
                 modifier = Modifier.fillMaxWidth(),
                 cardContent = { index, item, mod, onClick, onLongClick ->

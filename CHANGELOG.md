@@ -15,6 +15,10 @@
 - Fixed delete from long-press menus so Home, library, recommended, and collection lists remove the item immediately after a successful delete instead of leaving a stale entry that 404s when opened.
 - Added a full loading screen to Discover that stays visible until all category rows are ready.
 - Changed Home rows to show 15 items initially with a More button at the end of each row that loads 15 additional items.
+- Fixed Home row More button so paginated category rows (Recently added, Recently released, etc.) load additional items instead of returning an empty page and losing focus to the nav drawer.
+- Fixed Home row More button focus so selecting it stays on the same row while loading instead of jumping up to the row above.
+- Added More pagination (15 items per page) to Movies and Shows recommended tabs, box set collection rows, movie/series detail similar and season rows, person filmography rows, and search result rows for movies, shows, episodes, and collections.
+- Extended Home per-library recently added rows to support More pagination where the library contains movies or TV shows.
 - Added a script to fetch Jellyfin server logs for debugging delete failures.
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
 - Updated Home recently added and recently released rows to combine movies and TV shows in a single row, including migration of existing home settings.

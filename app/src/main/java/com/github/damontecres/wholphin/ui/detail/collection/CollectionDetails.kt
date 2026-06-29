@@ -231,6 +231,7 @@ fun CollectionDetails(
                             viewModel.canDelete(it, preferences.appPreferences)
                         } ?: false
                     },
+                onLoadMoreRow = viewModel::loadMoreRow,
                 moreOnClick = {
                     showContextMenu =
                         ContextMenu.ForBaseItem(
@@ -316,6 +317,7 @@ fun CollectionDetailsContent(
     onConfirmDelete: () -> Unit,
     canDelete: Boolean,
     moreOnClick: () -> Unit,
+    onLoadMoreRow: suspend (Int) -> Unit = {},
     modifier: Modifier,
 ) {
     var itemsContentHasFocus by rememberSaveable { mutableStateOf(false) }
@@ -442,6 +444,7 @@ fun CollectionDetailsContent(
                     onLongClickItem = onLongClickItem,
                     onClickPlay = onClickPlay,
                     modifier = Modifier.fillMaxSize(),
+                    onLoadMoreRow = onLoadMoreRow,
                     onFocusPosition = { position ->
                         Timber.v("onFocusPosition=%s", position)
                         focusedItem =

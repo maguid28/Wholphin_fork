@@ -988,7 +988,7 @@ class HomeSettingsService
                 }
 
                 is HomeRowConfig.Category -> {
-                    if (row.category.rotatesSelection || startIndex > 0) {
+                    if (row.category.rotatesSelection) {
                         if (startIndex > 0) {
                             Success(
                                 title = getCategoryTitle(row.category),
@@ -1267,29 +1267,60 @@ class HomeSettingsService
                         libraries
                             .firstOrNull { it.itemId == row.parentId }
                     val title = getRecentlyAddedTitle(context, library)
-                    val request =
-                        GetLatestMediaRequest(
-                            fields = SlimItemFields,
-                            imageTypeLimit = 1,
-                            parentId = row.parentId,
-                            groupItems = true,
-                            limit = limit,
-                            isPlayed = null, // Server will handle user's preference
+                    val collectionType = library?.collectionType
+                    val itemKind =
+                        when (collectionType) {
+                            CollectionType.MOVIES -> BaseItemKind.MOVIE
+                            CollectionType.TVSHOWS -> BaseItemKind.SERIES
+                            else -> null
+                        }
+                    if (itemKind != null) {
+                        val request =
+                            GetItemsRequest(
+                                parentId = row.parentId,
+                                sortBy = listOf(ItemSortBy.DATE_CREATED),
+                                sortOrder = listOf(SortOrder.DESCENDING),
+                                fields = DefaultItemFields,
+                                recursive = true,
+                                includeItemTypes = listOf(itemKind),
+                            )
+                        val (items, hasMore) =
+                            fetchGetItemsPage(
+                                request,
+                                limit,
+                                startIndex,
+                                row.viewOptions.useSeries,
+                            )
+                        Success(
+                            title,
+                            items,
+                            row.viewOptions,
+                            rowType = row,
+                            hasMore = hasMore,
                         )
-                    val latest =
-                        api.userLibraryApi
-                            .getLatestMedia(request)
-                            .content
-                            .map { BaseItem.Companion.from(it, api, row.viewOptions.useSeries) }
-                            .let {
-                                Success(
-                                    title,
-                                    it,
-                                    row.viewOptions,
-                                    rowType = row,
-                                )
-                            }
-                    latest
+                    } else {
+                        val request =
+                            GetLatestMediaRequest(
+                                fields = SlimItemFields,
+                                imageTypeLimit = 1,
+                                parentId = row.parentId,
+                                groupItems = true,
+                                limit = limit,
+                                isPlayed = null,
+                            )
+                        val latest =
+                            api.userLibraryApi
+                                .getLatestMedia(request)
+                                .content
+                                .map { BaseItem.Companion.from(it, api, row.viewOptions.useSeries) }
+                        Success(
+                            title,
+                            latest,
+                            row.viewOptions,
+                            rowType = row,
+                            hasMore = latest.size >= limit,
+                        )
+                    }
                 }
 
                 is HomeRowConfig.RecentlyReleased -> {

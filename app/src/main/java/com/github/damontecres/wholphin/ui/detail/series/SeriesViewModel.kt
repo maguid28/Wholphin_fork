@@ -30,6 +30,7 @@ import com.github.damontecres.wholphin.services.ThemeSongPlayer
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.services.deleteItem
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.detail.ItemViewModel
 import com.github.damontecres.wholphin.ui.equalsNotNull
@@ -48,6 +49,7 @@ import com.github.damontecres.wholphin.util.GetEpisodesRequestHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.LoadingExceptionHandler
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.RowPaging
 import com.google.common.cache.CacheBuilder
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -121,12 +123,14 @@ class SeriesViewModel
 
         val loading = MutableLiveData<LoadingState>(LoadingState.Loading)
         val seasons = MutableLiveData<List<BaseItem?>>(listOf())
+        val seasonsHasMore = MutableLiveData(false)
         val episodes = MutableLiveData<EpisodeList>(EpisodeList.Loading)
 
         val trailers = MutableLiveData<List<Trailer>>(listOf())
         val extras = MutableLiveData<List<ExtrasItem>>(listOf())
         val people = MutableLiveData<List<Person>>(listOf())
         val similar = MutableLiveData<List<BaseItem>>()
+        val similarHasMore = MutableLiveData(false)
         val canDeleteSeries = MutableStateFlow(false)
         val rottenTomatoesAudienceScore = MutableStateFlow<Float?>(null)
         val metadataRematchResults =
@@ -137,6 +141,7 @@ class SeriesViewModel
         val discoverSeries = MutableStateFlow<DiscoverItem?>(null)
 
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
+        private var seasonsPager: ApiRequestPager<GetItemsRequest>? = null
         private var focusedEpisodeRefreshJob: Job? = null
         private var metadataSearchJob: Job? = null
 
@@ -215,7 +220,20 @@ class SeriesViewModel
                                 (episodes as? EpisodeList.Success)?.initialEpisodeIndex ?: 0,
                         )
                     }
-                    this@SeriesViewModel.seasons.value = seasons
+                    this@SeriesViewModel.seasons.value =
+                        if (seriesPageType == SeriesPageType.DETAILS) {
+                            val pager = seasons as ApiRequestPager<GetItemsRequest>
+                            seasonsPager = pager
+                            val visibleCount = minOf(HOME_ROW_PAGE_SIZE, pager.size)
+                            val visible =
+                                (0 until visibleCount).mapNotNull { index ->
+                                    pager.getBlocking(index)
+                                }
+                            seasonsHasMore.setValueOnMain(pager.size > visibleCount)
+                            visible
+                        } else {
+                            seasons
+                        }
                     this@SeriesViewModel.episodes.value = episodes
                     loading.value = LoadingState.Success
                 }
@@ -237,18 +255,16 @@ class SeriesViewModel
                     }
                     if (!similar.isInitialized) {
                         viewModelScope.launchIO {
-                            val similar =
-                                api.libraryApi
-                                    .getSimilarItems(
-                                        GetSimilarItemsRequest(
-                                            userId = serverRepository.currentUser.value?.id,
-                                            itemId = seriesId,
-                                            fields = SlimItemFields,
-                                            limit = 25,
-                                        ),
-                                    ).content.items
-                                    .map { BaseItem.from(it, api, true) }
-                            this@SeriesViewModel.similar.setValueOnMain(similar)
+                            val (items, hasMore) =
+                                RowPaging.fetchSimilarPage(
+                                    api = api,
+                                    itemId = seriesId,
+                                    userId = serverRepository.currentUser.value?.id,
+                                    startIndex = 0,
+                                    useSeriesForPrimary = true,
+                                )
+                            this@SeriesViewModel.similar.setValueOnMain(items)
+                            similarHasMore.setValueOnMain(hasMore)
                         }
                     }
                     viewModelScope.launchIO {
@@ -327,6 +343,38 @@ class SeriesViewModel
             themeSongPlayer.stop()
         }
 
+        suspend fun loadMoreSeasons() {
+            if (seasonsHasMore.value != true) return
+            val pager = seasonsPager ?: return
+            val current = seasons.value ?: return
+            val startIndex = current.size
+            val endIndex = minOf(startIndex + HOME_ROW_PAGE_SIZE, pager.size)
+            val newItems =
+                (startIndex until endIndex).mapNotNull { index ->
+                    pager.getBlocking(index)
+                }
+            if (newItems.isEmpty()) return
+            seasons.setValueOnMain(current + newItems)
+            seasonsHasMore.setValueOnMain(endIndex < pager.size)
+        }
+
+        suspend fun loadMoreSimilar() {
+            if (similarHasMore.value != true) return
+            val current = similar.value ?: return
+            val startIndex = current.size
+            val (newItems, hasMore) =
+                RowPaging.fetchSimilarPage(
+                    api = api,
+                    itemId = seriesId,
+                    userId = serverRepository.currentUser.value?.id,
+                    startIndex = startIndex,
+                    useSeriesForPrimary = true,
+                )
+            if (newItems.isEmpty()) return
+            similar.setValueOnMain(current + newItems)
+            similarHasMore.setValueOnMain(hasMore)
+        }
+
         private fun getSeasons(
             series: BaseItem,
             seasonNum: Int?,
@@ -358,7 +406,7 @@ class SeriesViewModel
                         request,
                         GetItemsRequestHandler,
                         viewModelScope,
-                        pageSize = 10,
+                        pageSize = HOME_ROW_PAGE_SIZE,
                     ).init(seasonNum ?: 0)
 //                val seasons =
 //                    GetItemsRequestHandler.execute(api, request).content.items.map {

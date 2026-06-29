@@ -331,7 +331,7 @@ fun HomePageContent(
     onClickPlay: (RowColumn, BaseItem) -> Unit,
     onHoldBannerItem: (BaseItem) -> Unit = {},
     onUpdateBackdrop: (BaseItem) -> Unit,
-    onLoadMoreRow: (Int) -> Unit = {},
+    onLoadMoreRow: suspend (Int) -> Unit = {},
     showLogo: Boolean,
     onBannerShown: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -590,7 +590,6 @@ fun HomePageContent(
                                                 title = row.title,
                                                 items = row.items,
                                                 showLoadMore = row.hasMore,
-                                                isLoadingMore = row.isLoadingMore,
                                                 onClickLoadMore = { onLoadMoreRow(rowIndex) },
                                                 onLoadMoreFocus = { index ->
                                                     liveFocusedRow.intValue = rowIndex
@@ -631,7 +630,14 @@ fun HomePageContent(
                                                 restoreFocusedIndex =
                                                     position
                                                         .column
-                                                        .takeIf { !firstFocused && rowIndex == position.row },
+                                                        .takeIf {
+                                                            !firstFocused &&
+                                                                rowIndex == position.row &&
+                                                                (
+                                                                    position.column in row.items.indices ||
+                                                                        (row.hasMore && position.column == row.items.size)
+                                                                )
+                                                        },
                                                 cardContent = { index, item, cardModifier, onClick, onLongClick ->
                                                     val onFocus =
                                                         remember(rowIndex, index) {

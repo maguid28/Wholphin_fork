@@ -11,6 +11,7 @@ import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
+import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
@@ -20,18 +21,16 @@ import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.RecommendedRowPagingService
 import com.github.damontecres.wholphin.services.SuggestionService
 import com.github.damontecres.wholphin.services.SuggestionsResource
-import com.github.damontecres.wholphin.ui.SlimItemFields
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.setValueOnMain
-import com.github.damontecres.wholphin.ui.toBaseItems
 import com.github.damontecres.wholphin.util.ExceptionHandler
-import com.github.damontecres.wholphin.util.GetItemsRequestHandler
-import com.github.damontecres.wholphin.util.GetNextUpRequestHandler
-import com.github.damontecres.wholphin.util.GetResumeItemsRequestHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.PaginatedRowKind
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -48,11 +47,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
-import org.jellyfin.sdk.model.api.ItemSortBy
-import org.jellyfin.sdk.model.api.SortOrder
-import org.jellyfin.sdk.model.api.request.GetItemsRequest
-import org.jellyfin.sdk.model.api.request.GetNextUpRequest
-import org.jellyfin.sdk.model.api.request.GetResumeItemsRequest
 import timber.log.Timber
 import java.util.UUID
 
@@ -65,7 +59,8 @@ class RecommendedTvShowViewModel
         musicService: MusicService,
         serverRepository: ServerRepository,
         private val preferencesDataStore: DataStore<AppPreferences>,
-        private val lastestNextUpService: LatestNextUpService,
+        private val latestNextUpService: LatestNextUpService,
+        private val recommendedRowPagingService: RecommendedRowPagingService,
         private val suggestionService: SuggestionService,
         @Assisted val parentId: UUID,
         navigationManager: NavigationManager,
@@ -89,6 +84,11 @@ class RecommendedTvShowViewModel
             fun create(parentId: UUID): RecommendedTvShowViewModel
         }
 
+        private var suggestionItems: List<BaseItem> = emptyList()
+        private var combineContinueNext = false
+        private var enableRewatchingNextUp = false
+        private var maxDaysNextUp = 0
+
         override val rows =
             MutableStateFlow<List<HomeRowLoadingState>>(
                 rowTitles.keys.map {
@@ -98,55 +98,68 @@ class RecommendedTvShowViewModel
                 },
             )
 
+        override suspend fun fetchMoreForRow(
+            kind: PaginatedRowKind,
+            startIndex: Int,
+        ): Pair<List<BaseItem>, Boolean>? =
+            when (kind) {
+                PaginatedRowKind.SUGGESTIONS -> {
+                    val next = suggestionItems.drop(startIndex).take(HOME_ROW_PAGE_SIZE)
+                    next to (startIndex + next.size < suggestionItems.size)
+                }
+
+                else ->
+                    recommendedRowPagingService.fetchTvRowPage(
+                        kind = kind,
+                        parentId = parentId,
+                        userId = serverRepository.currentUser.value?.id,
+                        startIndex = startIndex,
+                        combineContinueNext = combineContinueNext,
+                        enableRewatchingNextUp = enableRewatchingNextUp,
+                        maxDaysNextUp = maxDaysNextUp,
+                    )
+            }
+
         override fun init() {
             viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {
                 val preferences =
                     preferencesDataStore.data.firstOrNull() ?: AppPreferences.getDefaultInstance()
-                val combineNextUp = preferences.homePagePreferences.combineContinueNext
-                val itemsPerRow = preferences.homePagePreferences.maxItemsPerRow
+                combineContinueNext = preferences.homePagePreferences.combineContinueNext
+                enableRewatchingNextUp = preferences.homePagePreferences.enableRewatchingNextUp
+                maxDaysNextUp = preferences.homePagePreferences.maxDaysNextUp
                 val userId = serverRepository.currentUser.value?.id
                 try {
                     val resumeItemsDeferred =
                         async(Dispatchers.IO) {
-                            val resumeItemsRequest =
-                                GetResumeItemsRequest(
-                                    userId = userId,
-                                    parentId = parentId,
-                                    fields = SlimItemFields,
-                                    includeItemTypes = listOf(BaseItemKind.EPISODE),
-                                    enableUserData = true,
-                                    startIndex = 0,
-                                    limit = itemsPerRow,
-                                    enableTotalRecordCount = false,
-                                )
-                            GetResumeItemsRequestHandler
-                                .execute(api, resumeItemsRequest)
-                                .toBaseItems(api, true)
+                            recommendedRowPagingService.fetchTvRowPage(
+                                kind = PaginatedRowKind.RESUME,
+                                parentId = parentId,
+                                userId = userId,
+                                startIndex = 0,
+                                combineContinueNext = false,
+                                enableRewatchingNextUp = enableRewatchingNextUp,
+                                maxDaysNextUp = maxDaysNextUp,
+                            ) ?: (emptyList<BaseItem>() to false)
                         }
 
                     val nextUpItemsDeferred =
                         async(Dispatchers.IO) {
-                            val nextUpRequest =
-                                GetNextUpRequest(
-                                    userId = userId,
-                                    fields = SlimItemFields,
-                                    imageTypeLimit = 1,
-                                    parentId = parentId,
-                                    limit = itemsPerRow,
-                                    enableResumable = false,
-                                    enableUserData = true,
-                                    enableRewatching = preferences.homePagePreferences.enableRewatchingNextUp,
-                                )
-                            GetNextUpRequestHandler
-                                .execute(api, nextUpRequest)
-                                .toBaseItems(api, true)
+                            recommendedRowPagingService.fetchTvRowPage(
+                                kind = PaginatedRowKind.NEXT_UP,
+                                parentId = parentId,
+                                userId = userId,
+                                startIndex = 0,
+                                combineContinueNext = false,
+                                enableRewatchingNextUp = enableRewatchingNextUp,
+                                maxDaysNextUp = maxDaysNextUp,
+                            ) ?: (emptyList<BaseItem>() to false)
                         }
 
-                    val resumeItems = resumeItemsDeferred.await()
-                    val nextUpItems = nextUpItemsDeferred.await()
+                    val (resumeItems, resumeHasMore) = resumeItemsDeferred.await()
+                    val (nextUpItems, nextUpHasMore) = nextUpItemsDeferred.await()
 
-                    if (combineNextUp) {
-                        val combined = lastestNextUpService.buildCombined(resumeItems, nextUpItems)
+                    if (combineContinueNext) {
+                        val combined = latestNextUpService.buildCombined(resumeItems, nextUpItems)
                         update(
                             R.string.continue_watching,
                             HomeRowLoadingState.Success(
@@ -164,11 +177,18 @@ class RecommendedTvShowViewModel
                             HomeRowLoadingState.Success(
                                 context.getString(R.string.continue_watching),
                                 resumeItems,
+                                paginationKind = PaginatedRowKind.RESUME,
+                                hasMore = resumeHasMore,
                             ),
                         )
                         update(
                             R.string.next_up,
-                            HomeRowLoadingState.Success(context.getString(R.string.next_up), nextUpItems),
+                            HomeRowLoadingState.Success(
+                                context.getString(R.string.next_up),
+                                nextUpItems,
+                                paginationKind = PaginatedRowKind.NEXT_UP,
+                                hasMore = nextUpHasMore,
+                            ),
                         )
                     }
 
@@ -183,58 +203,9 @@ class RecommendedTvShowViewModel
                 }
 
                 val jobs = mutableListOf<Deferred<HomeRowLoadingState>>()
-
-                update(R.string.recently_released) {
-                    val request =
-                        GetItemsRequest(
-                            parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.EPISODE),
-                            recursive = true,
-                            enableUserData = true,
-                            sortBy = listOf(ItemSortBy.PREMIERE_DATE),
-                            sortOrder = listOf(SortOrder.DESCENDING),
-                            startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    GetItemsRequestHandler.execute(api, request).toBaseItems(api, true)
-                }.also(jobs::add)
-
-                update(R.string.recently_added) {
-                    val request =
-                        GetItemsRequest(
-                            parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.EPISODE),
-                            recursive = true,
-                            enableUserData = true,
-                            sortBy = listOf(ItemSortBy.DATE_CREATED),
-                            sortOrder = listOf(SortOrder.DESCENDING),
-                            startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    GetItemsRequestHandler.execute(api, request).toBaseItems(api, true)
-                }.also(jobs::add)
-
-                update(R.string.top_unwatched) {
-                    val request =
-                        GetItemsRequest(
-                            parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.SERIES),
-                            recursive = true,
-                            enableUserData = true,
-                            isPlayed = false,
-                            sortBy = listOf(ItemSortBy.COMMUNITY_RATING),
-                            sortOrder = listOf(SortOrder.DESCENDING),
-                            startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    GetItemsRequestHandler.execute(api, request).toBaseItems(api, true)
-                }.also(jobs::add)
+                loadPaginatedRow(R.string.recently_released, PaginatedRowKind.RECENTLY_RELEASED).also(jobs::add)
+                loadPaginatedRow(R.string.recently_added, PaginatedRowKind.RECENTLY_ADDED).also(jobs::add)
+                loadPaginatedRow(R.string.top_unwatched, PaginatedRowKind.TOP_UNWATCHED).also(jobs::add)
 
                 viewModelScope.launch(Dispatchers.IO) {
                     try {
@@ -250,13 +221,18 @@ class RecommendedTvShowViewModel
                                         }
 
                                         is SuggestionsResource.Success -> {
+                                            suggestionItems = resource.items
+                                            val items = resource.items.take(HOME_ROW_PAGE_SIZE)
                                             HomeRowLoadingState.Success(
                                                 context.getString(R.string.suggestions),
-                                                resource.items,
+                                                items,
+                                                paginationKind = PaginatedRowKind.SUGGESTIONS,
+                                                hasMore = resource.items.size > HOME_ROW_PAGE_SIZE,
                                             )
                                         }
 
                                         is SuggestionsResource.Empty -> {
+                                            suggestionItems = emptyList()
                                             HomeRowLoadingState.Success(
                                                 context.getString(R.string.suggestions),
                                                 emptyList(),
@@ -283,7 +259,6 @@ class RecommendedTvShowViewModel
                     for (i in 0..<jobs.size) {
                         val result = jobs[i].await()
                         if (result is HomeRowLoadingState.Success) {
-                            Timber.v("First success")
                             loading.setValueOnMain(LoadingState.Success)
                         }
                         break
@@ -291,6 +266,34 @@ class RecommendedTvShowViewModel
                 }
             }
         }
+
+        private fun loadPaginatedRow(
+            @StringRes title: Int,
+            kind: PaginatedRowKind,
+        ): Deferred<HomeRowLoadingState> =
+            viewModelScope.async(Dispatchers.IO) {
+                val titleStr = context.getString(title)
+                try {
+                    val (items, hasMore) =
+                        recommendedRowPagingService.fetchTvRowPage(
+                            kind = kind,
+                            parentId = parentId,
+                            userId = serverRepository.currentUser.value?.id,
+                            startIndex = 0,
+                            combineContinueNext = combineContinueNext,
+                            enableRewatchingNextUp = enableRewatchingNextUp,
+                            maxDaysNextUp = maxDaysNextUp,
+                        ) ?: (emptyList<BaseItem>() to false)
+                    HomeRowLoadingState.Success(
+                        titleStr,
+                        items,
+                        paginationKind = kind,
+                        hasMore = hasMore,
+                    )
+                } catch (ex: Exception) {
+                    HomeRowLoadingState.Error(titleStr, null, ex)
+                }.also { update(title, it) }
+            }
 
         override fun update(
             @StringRes title: Int,

@@ -86,10 +86,12 @@ class LatestNextUpService
             startIndex: Int,
             includeEpisodes: Boolean,
             useSeriesForPrimary: Boolean = true,
+            parentId: UUID? = null,
         ): Pair<List<BaseItem>, Boolean> {
             val request =
                 GetResumeItemsRequest(
                     userId = userId,
+                    parentId = parentId,
                     fields = SlimItemFields,
                     limit = limit,
                     startIndex = startIndex,
@@ -122,6 +124,7 @@ class LatestNextUpService
             enableResumable: Boolean,
             maxDays: Int,
             useSeriesForPrimary: Boolean = true,
+            parentId: UUID? = null,
         ): Pair<List<BaseItem>, Boolean> {
             val removedSeries = getRemovedFromNextUp(userId)
             val nextUpDateCutoff =
@@ -131,7 +134,7 @@ class LatestNextUpService
                     userId = userId,
                     fields = SlimItemFields,
                     imageTypeLimit = 1,
-                    parentId = null,
+                    parentId = parentId,
                     limit = limit,
                     startIndex = startIndex,
                     enableTotalRecordCount = true,

@@ -33,6 +33,7 @@ fun CollectionRows(
     onClickPlay: (RowColumn, BaseItem) -> Unit,
     modifier: Modifier = Modifier,
     onFocusPosition: (RowColumn) -> Unit = {},
+    onLoadMoreRow: suspend (Int) -> Unit = {},
 ) {
     var position by rememberPosition(0, 0)
 
@@ -79,6 +80,7 @@ fun CollectionRows(
                 onClickItem = onClickItem,
                 onLongClickItem = onLongClickItem,
                 onClickPlay = onClickPlay,
+                onLoadMoreRow = onLoadMoreRow,
                 onUpdateBackdrop = {},
                 headerComposable = {},
                 takeFocus = false,

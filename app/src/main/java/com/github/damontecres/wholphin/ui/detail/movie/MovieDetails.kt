@@ -256,6 +256,7 @@ fun MovieDetails(
                 },
                 canDelete = state.canDelete,
                 onConfirmDelete = { state.movie?.let { viewModel.deleteItem(it) } },
+                onLoadMoreSimilar = { viewModel.loadMoreSimilar() },
                 modifier = modifier,
             )
         }
@@ -339,6 +340,7 @@ fun MovieDetailsContent(
     onClickDiscover: (Int, DiscoverItem) -> Unit,
     canDelete: Boolean,
     onConfirmDelete: () -> Unit,
+    onLoadMoreSimilar: suspend () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -478,6 +480,8 @@ fun MovieDetailsContent(
                     ItemRow(
                         title = stringResource(R.string.more_like_this),
                         items = similar,
+                        showLoadMore = state.similarHasMore,
+                        onClickLoadMore = onLoadMoreSimilar,
                         onClickItem = { index, item ->
                             position = SIMILAR_ROW
                             onClickItem.invoke(index, item)

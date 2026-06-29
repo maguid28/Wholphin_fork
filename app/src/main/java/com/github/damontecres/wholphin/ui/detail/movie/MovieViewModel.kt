@@ -31,6 +31,7 @@ import com.github.damontecres.wholphin.services.ThemeSongPlayer
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.services.deleteItem
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
@@ -38,6 +39,7 @@ import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.showToast
 import com.github.damontecres.wholphin.util.DataLoadingState
+import com.github.damontecres.wholphin.util.RowPaging
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -190,19 +192,20 @@ class MovieViewModel
                 }
 
                 if (state.value.similar.isEmpty()) {
-                    val similar =
-                        api.libraryApi
-                            .getSimilarItems(
-                                GetSimilarItemsRequest(
-                                    userId = serverRepository.currentUser.value?.id,
-                                    itemId = itemId,
-                                    fields = SlimItemFields,
-                                    limit = 25,
-                                ),
-                            ).content.items
-                            .map { BaseItem(it) }
-
-                    _state.update { it.copy(similar = similar) }
+                    val (similar, hasMore) =
+                        RowPaging.fetchSimilarPage(
+                            api = api,
+                            itemId = itemId,
+                            userId = serverRepository.currentUser.value?.id,
+                            startIndex = 0,
+                            useSeriesForPrimary = false,
+                        )
+                    _state.update {
+                        it.copy(
+                            similar = similar,
+                            similarHasMore = hasMore,
+                        )
+                    }
                 }
             }
 
@@ -299,6 +302,27 @@ class MovieViewModel
 
         fun release() {
             themeSongPlayer.stop()
+        }
+
+        suspend fun loadMoreSimilar() {
+            val movie = state.value.movie ?: return
+            if (!state.value.similarHasMore) return
+            val startIndex = state.value.similar.size
+            val (newItems, hasMore) =
+                RowPaging.fetchSimilarPage(
+                    api = api,
+                    itemId = movie.id,
+                    userId = serverRepository.currentUser.value?.id,
+                    startIndex = startIndex,
+                    useSeriesForPrimary = false,
+                )
+            if (newItems.isEmpty()) return
+            _state.update {
+                it.copy(
+                    similar = it.similar + newItems,
+                    similarHasMore = hasMore,
+                )
+            }
         }
 
         fun navigateTo(destination: Destination) {
@@ -402,6 +426,7 @@ data class MovieState(
     val chapters: List<Chapter> = emptyList(),
     val extras: List<ExtrasItem> = emptyList(),
     val similar: List<BaseItem> = emptyList(),
+    val similarHasMore: Boolean = false,
     val discovered: List<DiscoverItem> = emptyList(),
     val chosenStreams: ChosenStreams? = null,
     val rottenTomatoesAudienceScore: Float? = null,

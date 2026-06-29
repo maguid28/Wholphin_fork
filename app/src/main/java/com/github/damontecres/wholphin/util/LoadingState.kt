@@ -34,6 +34,7 @@ sealed interface RowLoadingState {
 
     data class Success(
         val items: List<BaseItem?>,
+        val hasMore: Boolean = false,
     ) : RowLoadingState
 
     data class Error(
@@ -67,7 +68,8 @@ sealed interface HomeRowLoadingState {
         val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
         val rowType: HomeRowConfig? = null,
         val hasMore: Boolean = false,
-        val isLoadingMore: Boolean = false,
+        val paginationKind: PaginatedRowKind? = null,
+        val paginationTag: String? = null,
     ) : HomeRowLoadingState
 
     data class Error(

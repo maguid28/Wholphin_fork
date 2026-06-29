@@ -123,10 +123,12 @@ fun SeriesDetails(
     val item by viewModel.item.observeAsState()
     val canDelete by viewModel.canDeleteSeries.collectAsState()
     val seasons by viewModel.seasons.observeAsState(listOf())
+    val seasonsHasMore by viewModel.seasonsHasMore.observeAsState(false)
     val trailers by viewModel.trailers.observeAsState(listOf())
     val extras by viewModel.extras.observeAsState(listOf())
     val people by viewModel.people.observeAsState(listOf())
     val similar by viewModel.similar.observeAsState(listOf())
+    val similarHasMore by viewModel.similarHasMore.observeAsState(false)
     val discovered by viewModel.discovered.collectAsState()
     val discoverSeries by viewModel.discoverSeries.collectAsState()
     val rottenTomatoesAudienceScore by viewModel.rottenTomatoesAudienceScore.collectAsState()
@@ -213,10 +215,12 @@ fun SeriesDetails(
                     preferences = preferences,
                     series = item,
                     seasons = seasons,
+                    seasonsHasMore = seasonsHasMore,
                     trailers = trailers,
                     extras = extras,
                     people = people,
                     similar = similar,
+                    similarHasMore = similarHasMore,
                     played = played,
                     favorite = item.data.userData?.isFavorite ?: false,
                     canDelete = canDelete,
@@ -287,6 +291,8 @@ fun SeriesDetails(
                     onClickDiscover = { index, item ->
                         viewModel.navigateTo(item.destination)
                     },
+                    onLoadMoreSeasons = { viewModel.loadMoreSeasons() },
+                    onLoadMoreSimilar = { viewModel.loadMoreSimilar() },
                     onShowContextMenu = {
                         showContextMenu = it
                     },
@@ -371,7 +377,9 @@ fun SeriesDetailsContent(
     preferences: UserPreferences,
     series: BaseItem,
     seasons: List<BaseItem?>,
+    seasonsHasMore: Boolean = false,
     similar: List<BaseItem>,
+    similarHasMore: Boolean = false,
     trailers: List<Trailer>,
     extras: List<ExtrasItem>,
     people: List<Person>,
@@ -395,6 +403,8 @@ fun SeriesDetailsContent(
     onShowContextMenu: (ContextMenu) -> Unit,
     actions: ContextMenuActions,
     onClickDiscover: (Int, DiscoverItem) -> Unit,
+    onLoadMoreSeasons: suspend () -> Unit = {},
+    onLoadMoreSimilar: suspend () -> Unit = {},
     discoverSeries: DiscoverItem?,
     onClickDiscoverSeries: () -> Unit,
     modifier: Modifier = Modifier,
@@ -576,6 +586,8 @@ fun SeriesDetailsContent(
                     ItemRow(
                         title = stringResource(R.string.tv_seasons) + " (${seasons.size})",
                         items = seasons,
+                        showLoadMore = seasonsHasMore,
+                        onClickLoadMore = onLoadMoreSeasons,
                         onClickItem = { index, item ->
                             position = SEASONS_ROW
                             onClickItem.invoke(index, item)
@@ -651,6 +663,8 @@ fun SeriesDetailsContent(
                         ItemRow(
                             title = stringResource(R.string.more_like_this),
                             items = similar,
+                            showLoadMore = similarHasMore,
+                            onClickLoadMore = onLoadMoreSimilar,
                             onClickItem = { index, item ->
                                 position = SIMILAR_ROW
                                 onClickItem.invoke(index, item)

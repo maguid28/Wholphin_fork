@@ -11,6 +11,7 @@ import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
+import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
 import com.github.damontecres.wholphin.preferences.AppPreference
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -33,6 +34,7 @@ import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.PaginatedRowKind
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -92,6 +94,11 @@ class RecommendedMusicViewModel
                     )
                 },
             )
+
+        override suspend fun fetchMoreForRow(
+            kind: PaginatedRowKind,
+            startIndex: Int,
+        ): Pair<List<BaseItem>, Boolean>? = null
 
         override fun init() {
             viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {

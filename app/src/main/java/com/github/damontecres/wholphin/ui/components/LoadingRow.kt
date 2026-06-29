@@ -34,6 +34,8 @@ fun LoadingRow(
     modifier: Modifier = Modifier,
     showIfEmpty: Boolean = true,
     horizontalPadding: Dp = 16.dp,
+    showLoadMore: Boolean = false,
+    onClickLoadMore: suspend () -> Unit = {},
     cardContent: @Composable (
         index: Int,
         item: BaseItem?,
@@ -83,6 +85,8 @@ fun LoadingRow(
                 ItemRow(
                     title = title,
                     items = r.items,
+                    showLoadMore = showLoadMore,
+                    onClickLoadMore = onClickLoadMore,
                     onClickItem = onClickItem,
                     onLongClickItem = { _, _ -> },
                     modifier = modifier,

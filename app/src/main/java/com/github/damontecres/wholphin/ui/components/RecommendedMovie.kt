@@ -5,14 +5,12 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
-import androidx.datastore.core.DataStore
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.findViewTreeViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ServerRepository
-import com.github.damontecres.wholphin.preferences.AppPreference
-import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.UserPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
@@ -20,17 +18,16 @@ import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.RecommendedRowPagingService
 import com.github.damontecres.wholphin.services.SuggestionService
 import com.github.damontecres.wholphin.services.SuggestionsResource
-import com.github.damontecres.wholphin.ui.SlimItemFields
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.setValueOnMain
-import com.github.damontecres.wholphin.ui.toBaseItems
 import com.github.damontecres.wholphin.util.ExceptionHandler
-import com.github.damontecres.wholphin.util.GetItemsRequestHandler
-import com.github.damontecres.wholphin.util.GetResumeItemsRequestHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.PaginatedRowKind
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -39,17 +36,13 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
-import org.jellyfin.sdk.model.api.ItemSortBy
-import org.jellyfin.sdk.model.api.SortOrder
-import org.jellyfin.sdk.model.api.request.GetItemsRequest
-import org.jellyfin.sdk.model.api.request.GetResumeItemsRequest
 import timber.log.Timber
 import java.util.UUID
 
@@ -61,7 +54,7 @@ class RecommendedMovieViewModel
         api: ApiClient,
         musicService: MusicService,
         serverRepository: ServerRepository,
-        private val preferencesDataStore: DataStore<AppPreferences>,
+        private val recommendedRowPagingService: RecommendedRowPagingService,
         private val suggestionService: SuggestionService,
         @Assisted val parentId: UUID,
         navigationManager: NavigationManager,
@@ -85,6 +78,8 @@ class RecommendedMovieViewModel
             fun create(parentId: UUID): RecommendedMovieViewModel
         }
 
+        private var suggestionItems: List<BaseItem> = emptyList()
+
         override val rows =
             MutableStateFlow<List<HomeRowLoadingState>>(
                 rowTitles.keys.map {
@@ -94,34 +89,43 @@ class RecommendedMovieViewModel
                 },
             )
 
+        override suspend fun fetchMoreForRow(
+            kind: PaginatedRowKind,
+            startIndex: Int,
+        ): Pair<List<BaseItem>, Boolean>? =
+            when (kind) {
+                PaginatedRowKind.SUGGESTIONS -> {
+                    val next = suggestionItems.drop(startIndex).take(HOME_ROW_PAGE_SIZE)
+                    next to (startIndex + next.size < suggestionItems.size)
+                }
+
+                else ->
+                    recommendedRowPagingService.fetchMovieRowPage(
+                        kind = kind,
+                        parentId = parentId,
+                        userId = serverRepository.currentUser.value?.id,
+                        startIndex = startIndex,
+                    )
+            }
+
         override fun init() {
             viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {
-                val itemsPerRow =
-                    preferencesDataStore.data
-                        .firstOrNull()
-                        ?.homePagePreferences
-                        ?.maxItemsPerRow
-                        ?: AppPreference.HomePageItems.defaultValue.toInt()
+                val userId = serverRepository.currentUser.value?.id
                 try {
-                    val resumeItemsRequest =
-                        GetResumeItemsRequest(
+                    val (resumeItems, resumeHasMore) =
+                        recommendedRowPagingService.fetchMovieRowPage(
+                            kind = PaginatedRowKind.RESUME,
                             parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.MOVIE),
-                            enableUserData = true,
+                            userId = userId,
                             startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    val resumeItems =
-                        GetResumeItemsRequestHandler
-                            .execute(api, resumeItemsRequest)
-                            .toBaseItems(api, false)
+                        ) ?: (emptyList<BaseItem>() to false)
                     update(
                         R.string.continue_watching,
                         HomeRowLoadingState.Success(
                             context.getString(R.string.continue_watching),
                             resumeItems,
+                            paginationKind = PaginatedRowKind.RESUME,
+                            hasMore = resumeHasMore,
                         ),
                     )
 
@@ -136,58 +140,9 @@ class RecommendedMovieViewModel
                 }
 
                 val jobs = mutableListOf<Deferred<HomeRowLoadingState>>()
-
-                update(R.string.recently_released) {
-                    val request =
-                        GetItemsRequest(
-                            parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.MOVIE),
-                            recursive = true,
-                            enableUserData = true,
-                            sortBy = listOf(ItemSortBy.PREMIERE_DATE),
-                            sortOrder = listOf(SortOrder.DESCENDING),
-                            startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    GetItemsRequestHandler.execute(api, request).toBaseItems(api, false)
-                }.also(jobs::add)
-
-                update(R.string.recently_added) {
-                    val request =
-                        GetItemsRequest(
-                            parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.MOVIE),
-                            recursive = true,
-                            enableUserData = true,
-                            sortBy = listOf(ItemSortBy.DATE_CREATED),
-                            sortOrder = listOf(SortOrder.DESCENDING),
-                            startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    GetItemsRequestHandler.execute(api, request).toBaseItems(api, false)
-                }.also(jobs::add)
-
-                update(R.string.top_unwatched) {
-                    val request =
-                        GetItemsRequest(
-                            parentId = parentId,
-                            fields = SlimItemFields,
-                            includeItemTypes = listOf(BaseItemKind.MOVIE),
-                            recursive = true,
-                            enableUserData = true,
-                            isPlayed = false,
-                            sortBy = listOf(ItemSortBy.COMMUNITY_RATING),
-                            sortOrder = listOf(SortOrder.DESCENDING),
-                            startIndex = 0,
-                            limit = itemsPerRow,
-                            enableTotalRecordCount = false,
-                        )
-                    GetItemsRequestHandler.execute(api, request).toBaseItems(api, false)
-                }.also(jobs::add)
+                loadPaginatedRow(R.string.recently_released, PaginatedRowKind.RECENTLY_RELEASED).also(jobs::add)
+                loadPaginatedRow(R.string.recently_added, PaginatedRowKind.RECENTLY_ADDED).also(jobs::add)
+                loadPaginatedRow(R.string.top_unwatched, PaginatedRowKind.TOP_UNWATCHED).also(jobs::add)
 
                 viewModelScope.launch(Dispatchers.IO) {
                     try {
@@ -203,13 +158,18 @@ class RecommendedMovieViewModel
                                         }
 
                                         is SuggestionsResource.Success -> {
+                                            suggestionItems = resource.items
+                                            val items = resource.items.take(HOME_ROW_PAGE_SIZE)
                                             HomeRowLoadingState.Success(
                                                 context.getString(R.string.suggestions),
-                                                resource.items,
+                                                items,
+                                                paginationKind = PaginatedRowKind.SUGGESTIONS,
+                                                hasMore = resource.items.size > HOME_ROW_PAGE_SIZE,
                                             )
                                         }
 
                                         is SuggestionsResource.Empty -> {
+                                            suggestionItems = emptyList()
                                             HomeRowLoadingState.Success(
                                                 context.getString(R.string.suggestions),
                                                 emptyList(),
@@ -232,13 +192,10 @@ class RecommendedMovieViewModel
                     }
                 }
 
-                // If the continue watching row is empty, then wait until the first successful row
-                // is loaded before telling the UI that the page is loaded
                 if (loading.value == LoadingState.Loading || loading.value == LoadingState.Pending) {
                     for (i in 0..<jobs.size) {
                         val result = jobs[i].await()
                         if (result.completed) {
-                            Timber.v("First success")
                             loading.setValueOnMain(LoadingState.Success)
                         }
                         break
@@ -246,6 +203,31 @@ class RecommendedMovieViewModel
                 }
             }
         }
+
+        private fun loadPaginatedRow(
+            @StringRes title: Int,
+            kind: PaginatedRowKind,
+        ): Deferred<HomeRowLoadingState> =
+            viewModelScope.async(Dispatchers.IO) {
+                val titleStr = context.getString(title)
+                try {
+                    val (items, hasMore) =
+                        recommendedRowPagingService.fetchMovieRowPage(
+                            kind = kind,
+                            parentId = parentId,
+                            userId = serverRepository.currentUser.value?.id,
+                            startIndex = 0,
+                        ) ?: (emptyList<BaseItem>() to false)
+                    HomeRowLoadingState.Success(
+                        titleStr,
+                        items,
+                        paginationKind = kind,
+                        hasMore = hasMore,
+                    )
+                } catch (ex: Exception) {
+                    HomeRowLoadingState.Error(titleStr, null, ex)
+                }.also { update(title, it) }
+            }
 
         override fun update(
             @StringRes title: Int,

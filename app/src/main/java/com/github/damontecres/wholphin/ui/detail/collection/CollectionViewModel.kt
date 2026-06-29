@@ -24,6 +24,7 @@ import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.ThemeSongPlayer
 import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.services.deleteItem
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.collectLatestIn
 import com.github.damontecres.wholphin.ui.data.RowColumn
@@ -40,6 +41,7 @@ import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
+import com.github.damontecres.wholphin.util.PaginatedRowKind
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -118,6 +120,8 @@ class CollectionViewModel
 
         private val _state = MutableStateFlow(CollectionState())
         val state: StateFlow<CollectionState> = _state
+
+        private val separateRowPagers = mutableMapOf<BaseItemKind, ApiRequestPager<GetItemsRequest>>()
 
         init {
             addCloseable { release() }
@@ -216,6 +220,7 @@ class CollectionViewModel
                     separateItems = emptyMap(),
                 )
             }
+            separateRowPagers.clear()
             if (!separateTypes) {
                 val result = fetchItems(sort, filter, typesInCollection)
                 _state.update { it.copy(items = result) }
@@ -228,7 +233,19 @@ class CollectionViewModel
                                 val result =
                                     try {
                                         val pager = fetchItems(sort, filter, listOf(type))
-                                        HomeRowLoadingState.Success(title, pager)
+                                        separateRowPagers[type] = pager
+                                        val visibleCount = minOf(HOME_ROW_PAGE_SIZE, pager.size)
+                                        val items =
+                                            (0 until visibleCount).mapNotNull { index ->
+                                                pager.getBlocking(index)
+                                            }
+                                        HomeRowLoadingState.Success(
+                                            title = title,
+                                            items = items,
+                                            hasMore = pager.size > visibleCount,
+                                            paginationKind = PaginatedRowKind.COLLECTION_ITEMS,
+                                            paginationTag = type.name,
+                                        )
                                     } catch (ex: Exception) {
                                         Timber.e(
                                             ex,
@@ -269,8 +286,37 @@ class CollectionViewModel
                 request,
                 GetItemsRequestHandler,
                 viewModelScope,
+                pageSize = HOME_ROW_PAGE_SIZE,
                 useSeriesForPrimary = useSeriesForPrimary,
             ).init()
+        }
+
+        suspend fun loadMoreRow(rowIndex: Int) {
+            val types = state.value.separateItems.keys.toList()
+            val type = types.getOrNull(rowIndex) ?: return
+            val currentRow = state.value.separateItems[type] as? HomeRowLoadingState.Success ?: return
+            if (!currentRow.hasMore) return
+            val pager = separateRowPagers[type] ?: return
+            val startIndex = currentRow.items.size
+            val endIndex = minOf(startIndex + HOME_ROW_PAGE_SIZE, pager.size)
+            val newItems =
+                (startIndex until endIndex).mapNotNull { index ->
+                    pager.getBlocking(index)
+                }
+            if (newItems.isEmpty()) return
+            _state.update { collectionState ->
+                val updatedRow =
+                    currentRow.copy(
+                        items = currentRow.items + newItems,
+                        hasMore = endIndex < pager.size,
+                    )
+                collectionState.copy(
+                    separateItems =
+                        collectionState.separateItems.toMutableMap().apply {
+                            put(type, updatedRow)
+                        },
+                )
+            }
         }
 
         private fun createGetItemsRequest(
@@ -458,19 +504,22 @@ class CollectionViewModel
         ) {
             state.value.let { state ->
                 if (state.viewOptions.separateTypes) {
-                    state.separateItems.forEach { (type, row) ->
-                        if (row is HomeRowLoadingState.Success) {
-                            val rowIndex =
-                                state.separateItems.keys
-                                    .toList()
-                                    .indexOf(type)
-                            val knownIndex =
-                                position?.column?.takeIf { position.row == rowIndex }
-                            (row.items as? ApiRequestPager<*>)?.refreshAfterItemDeleted(
-                                item.id,
-                                knownIndex,
-                            )
-                        }
+                    _state.update { collectionState ->
+                        collectionState.copy(
+                            separateItems =
+                                collectionState.separateItems.mapValues { (_, row) ->
+                                    if (row is HomeRowLoadingState.Success) {
+                                        val filtered = row.items.filterNot { it?.id == item.id }
+                                        if (filtered.size == row.items.size) {
+                                            row
+                                        } else {
+                                            row.copy(items = filtered)
+                                        }
+                                    } else {
+                                        row
+                                    }
+                                },
+                        )
                     }
                 } else {
                     (state.items as? ApiRequestPager<*>)?.refreshAfterItemDeleted(
