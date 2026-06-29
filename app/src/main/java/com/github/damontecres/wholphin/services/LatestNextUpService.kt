@@ -80,6 +80,99 @@ class LatestNextUpService
             return items
         }
 
+        suspend fun getResumePage(
+            userId: UUID,
+            limit: Int,
+            startIndex: Int,
+            includeEpisodes: Boolean,
+            useSeriesForPrimary: Boolean = true,
+        ): Pair<List<BaseItem>, Boolean> {
+            val request =
+                GetResumeItemsRequest(
+                    userId = userId,
+                    fields = SlimItemFields,
+                    limit = limit,
+                    startIndex = startIndex,
+                    enableTotalRecordCount = true,
+                    includeItemTypes =
+                        if (includeEpisodes) {
+                            supportItemKinds
+                        } else {
+                            supportItemKinds
+                                .toMutableSet()
+                                .apply {
+                                    remove(BaseItemKind.EPISODE)
+                                }
+                        },
+                )
+            val response = api.itemsApi.getResumeItems(request).content
+            val items =
+                response.items.map { BaseItem.from(it, api, useSeriesForPrimary) }
+            return items to hasMoreItems(items.size, limit, startIndex, response.totalRecordCount)
+        }
+
+        /**
+         * Get next up items for a user
+         */
+        suspend fun getNextUpPage(
+            userId: UUID,
+            limit: Int,
+            startIndex: Int,
+            enableRewatching: Boolean,
+            enableResumable: Boolean,
+            maxDays: Int,
+            useSeriesForPrimary: Boolean = true,
+        ): Pair<List<BaseItem>, Boolean> {
+            val removedSeries = getRemovedFromNextUp(userId)
+            val nextUpDateCutoff =
+                maxDays.takeIf { it > 0 }?.let { LocalDateTime.now().minusDays(it.toLong()) }
+            val request =
+                GetNextUpRequest(
+                    userId = userId,
+                    fields = SlimItemFields,
+                    imageTypeLimit = 1,
+                    parentId = null,
+                    limit = limit,
+                    startIndex = startIndex,
+                    enableTotalRecordCount = true,
+                    enableResumable = enableResumable,
+                    enableUserData = true,
+                    enableRewatching = enableRewatching,
+                    nextUpDateCutoff = nextUpDateCutoff,
+                )
+            val response = api.tvShowsApi.getNextUp(request).content
+            val nextUp =
+                response.items
+                    .map { BaseItem.from(it, api, useSeriesForPrimary) }
+                    .filter {
+                        val seriesId = it.data.seriesId
+                        if (seriesId != null && seriesId in removedSeries) {
+                            val lastPlayedDate = it.data.userData?.lastPlayedDate
+                            if (lastPlayedDate != null) {
+                                lastPlayedDate > removedSeries[seriesId]
+                            } else {
+                                false
+                            }
+                        } else {
+                            true
+                        }
+                    }
+
+            return nextUp to hasMoreItems(nextUp.size, limit, startIndex, response.totalRecordCount)
+        }
+
+        private fun hasMoreItems(
+            itemCount: Int,
+            limit: Int,
+            startIndex: Int,
+            totalRecordCount: Int?,
+        ): Boolean =
+            when {
+                itemCount <= 0 -> false
+                totalRecordCount != null -> totalRecordCount > startIndex + itemCount
+                else -> itemCount >= limit
+            }
+
         /**
          * Get next up items for a user
          */

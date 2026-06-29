@@ -43,6 +43,8 @@ object AppColors {
 
 const val DEFAULT_PAGE_SIZE = 100
 
+const val HOME_ROW_PAGE_SIZE = 15
+
 /**
  * The default [ItemFields] to fetch for most queries
  */

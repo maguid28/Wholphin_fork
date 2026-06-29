@@ -14,6 +14,7 @@ import com.github.damontecres.wholphin.data.model.createStudioDestination
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
 import com.github.damontecres.wholphin.preferences.HomePagePreferences
 import com.github.damontecres.wholphin.ui.DefaultItemFields
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.components.getGenreImageMap
 import com.github.damontecres.wholphin.ui.main.settings.Library
@@ -49,6 +50,7 @@ import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.model.UUID
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.ImageType
@@ -822,22 +824,104 @@ class HomeSettingsService
         /**
          * Fetch the data from the server for a given [HomeRowConfig]
          */
+        private suspend fun fetchGetItemsPage(
+            request: GetItemsRequest,
+            limit: Int,
+            startIndex: Int,
+            useSeries: Boolean,
+        ): Pair<List<BaseItem>, Boolean> {
+            val response =
+                GetItemsRequestHandler
+                    .execute(
+                        api,
+                        request.copy(
+                            limit = limit,
+                            startIndex = startIndex,
+                            enableTotalRecordCount = true,
+                        ),
+                    ).content
+            val items = response.items.map { BaseItem(it, useSeries) }
+            return items to hasMoreItems(items.size, limit, startIndex, response.totalRecordCount)
+        }
+
+        private suspend fun fetchGenresPage(
+            request: GetGenresRequest,
+            limit: Int,
+            startIndex: Int,
+        ): Pair<List<BaseItemDto>, Boolean> {
+            val response =
+                GetGenresRequestHandler
+                    .execute(
+                        api,
+                        request.copy(
+                            limit = limit,
+                            startIndex = startIndex,
+                            enableTotalRecordCount = true,
+                        ),
+                    ).content
+            return response.items to
+                hasMoreItems(
+                    response.items.size,
+                    limit,
+                    startIndex,
+                    response.totalRecordCount,
+                )
+        }
+
+        private suspend fun fetchStudiosPage(
+            request: GetStudiosRequest,
+            limit: Int,
+            startIndex: Int,
+        ): Pair<List<BaseItemDto>, Boolean> {
+            val response =
+                GetStudiosRequestHandler
+                    .execute(
+                        api,
+                        request.copy(
+                            limit = limit,
+                            startIndex = startIndex,
+                            enableTotalRecordCount = true,
+                        ),
+                    ).content
+            return response.items to
+                hasMoreItems(
+                    response.items.size,
+                    limit,
+                    startIndex,
+                    response.totalRecordCount,
+                )
+        }
+
+        private fun hasMoreItems(
+            itemCount: Int,
+            limit: Int,
+            startIndex: Int,
+            totalRecordCount: Int?,
+        ): Boolean =
+            when {
+                itemCount <= 0 -> false
+                totalRecordCount != null -> totalRecordCount > startIndex + itemCount
+                else -> itemCount >= limit
+            }
+
         suspend fun fetchDataForRow(
             row: HomeRowConfig,
             scope: CoroutineScope,
             prefs: HomePagePreferences,
             userDto: UserDto,
             libraries: List<Library>,
-            limit: Int = prefs.maxItemsPerRow,
+            limit: Int = HOME_ROW_PAGE_SIZE,
+            startIndex: Int = 0,
             isRefresh: Boolean,
             includeInactiveSeasonal: Boolean = false,
         ): HomeRowLoadingState =
             when (row) {
                 is HomeRowConfig.ContinueWatching -> {
-                    val resume =
-                        latestNextUpService.getResume(
+                    val (resume, hasMore) =
+                        latestNextUpService.getResumePage(
                             userDto.id,
                             limit,
+                            startIndex,
                             true,
                             row.viewOptions.useSeries,
                         )
@@ -847,14 +931,16 @@ class HomeSettingsService
                         items = resume,
                         viewOptions = row.viewOptions,
                         rowType = row,
+                        hasMore = hasMore,
                     )
                 }
 
                 is HomeRowConfig.NextUp -> {
-                    val nextUp =
-                        latestNextUpService.getNextUp(
+                    val (nextUp, hasMore) =
+                        latestNextUpService.getNextUpPage(
                             userDto.id,
                             limit,
+                            startIndex,
                             prefs.enableRewatchingNextUp,
                             false,
                             prefs.maxDaysNextUp,
@@ -866,6 +952,7 @@ class HomeSettingsService
                         items = nextUp,
                         viewOptions = row.viewOptions,
                         rowType = row,
+                        hasMore = hasMore,
                     )
                 }
 
@@ -896,53 +983,89 @@ class HomeSettingsService
                             ),
                         viewOptions = row.viewOptions,
                         rowType = row,
+                        hasMore = false,
                     )
                 }
 
                 is HomeRowConfig.Category -> {
-                    val fetchLimit =
-                        if (row.category.rotatesSelection) {
-                            (limit * ROTATING_CATEGORY_POOL_MULTIPLIER)
-                                .coerceAtLeast(ROTATING_CATEGORY_MIN_POOL_SIZE)
+                    if (row.category.rotatesSelection || startIndex > 0) {
+                        if (startIndex > 0) {
+                            Success(
+                                title = getCategoryTitle(row.category),
+                                items = emptyList(),
+                                viewOptions = row.viewOptions,
+                                rowType = row,
+                                hasMore = false,
+                            )
                         } else {
-                            limit
-                        }
-                    val request =
-                        GetItemsRequest(
-                            userId = userDto.id,
-                            recursive = true,
-                            includeItemTypes = row.category.itemKinds,
-                            sortBy = listOf(row.category.sortBy),
-                            sortOrder = listOf(row.category.sortOrder),
-                            isPlayed = row.category.isPlayed,
-                            minCommunityRating = row.category.minCommunityRating,
-                            maxPremiereDate =
-                                LocalDateTime.now().takeIf {
-                                    row.category.sortBy == ItemSortBy.PREMIERE_DATE
-                                },
-                            limit = fetchLimit,
-                            fields = DefaultItemFields,
-                            enableTotalRecordCount = false,
-                        )
-                    val items =
-                        GetItemsRequestHandler
-                            .execute(api, request)
-                            .content.items
-                            .map { BaseItem(it, row.viewOptions.useSeries) }
-                            .let { fetched ->
-                                if (row.category.rotatesSelection) {
-                                    fetched.shuffled().take(limit)
-                                } else {
-                                    fetched
-                                }
-                            }
+                            val fetchLimit =
+                                (limit * ROTATING_CATEGORY_POOL_MULTIPLIER)
+                                    .coerceAtLeast(ROTATING_CATEGORY_MIN_POOL_SIZE)
+                            val request =
+                                GetItemsRequest(
+                                    userId = userDto.id,
+                                    recursive = true,
+                                    includeItemTypes = row.category.itemKinds,
+                                    sortBy = listOf(row.category.sortBy),
+                                    sortOrder = listOf(row.category.sortOrder),
+                                    isPlayed = row.category.isPlayed,
+                                    minCommunityRating = row.category.minCommunityRating,
+                                    maxPremiereDate =
+                                        LocalDateTime.now().takeIf {
+                                            row.category.sortBy == ItemSortBy.PREMIERE_DATE
+                                        },
+                                    limit = fetchLimit,
+                                    fields = DefaultItemFields,
+                                    enableTotalRecordCount = false,
+                                )
+                            val items =
+                                GetItemsRequestHandler
+                                    .execute(api, request)
+                                    .content.items
+                                    .map { BaseItem(it, row.viewOptions.useSeries) }
+                                    .shuffled()
+                                    .take(limit)
 
-                    Success(
-                        title = getCategoryTitle(row.category),
-                        items = items,
-                        viewOptions = row.viewOptions,
-                        rowType = row,
-                    )
+                            Success(
+                                title = getCategoryTitle(row.category),
+                                items = items,
+                                viewOptions = row.viewOptions,
+                                rowType = row,
+                                hasMore = false,
+                            )
+                        }
+                    } else {
+                        val request =
+                            GetItemsRequest(
+                                userId = userDto.id,
+                                recursive = true,
+                                includeItemTypes = row.category.itemKinds,
+                                sortBy = listOf(row.category.sortBy),
+                                sortOrder = listOf(row.category.sortOrder),
+                                isPlayed = row.category.isPlayed,
+                                minCommunityRating = row.category.minCommunityRating,
+                                maxPremiereDate =
+                                    LocalDateTime.now().takeIf {
+                                        row.category.sortBy == ItemSortBy.PREMIERE_DATE
+                                    },
+                                fields = DefaultItemFields,
+                            )
+                        val (items, hasMore) =
+                            fetchGetItemsPage(
+                                request,
+                                limit,
+                                startIndex,
+                                row.viewOptions.useSeries,
+                            )
+
+                        Success(
+                            title = getCategoryTitle(row.category),
+                            items = items,
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                            hasMore = hasMore,
+                        )
+                    }
                 }
 
                 is HomeRowConfig.Seasonal -> {
@@ -1039,12 +1162,8 @@ class HomeSettingsService
                         GetGenresRequest(
                             parentId = row.parentId,
                             userId = userDto.id,
-                            limit = limit,
                         )
-                    val items =
-                        GetGenresRequestHandler
-                            .execute(api, request)
-                            .content.items
+                    val (items, hasMore) = fetchGenresPage(request, limit, startIndex)
                     val genreIds = items.map { it.id }
                     val genreImages =
                         getGenreImageMap(
@@ -1091,6 +1210,7 @@ class HomeSettingsService
                         genres,
                         viewOptions = row.viewOptions,
                         rowType = row,
+                        hasMore = hasMore,
                     )
                 }
 
@@ -1099,13 +1219,9 @@ class HomeSettingsService
                         GetStudiosRequest(
                             parentId = row.parentId,
                             userId = userDto.id,
-                            limit = limit,
                             includeItemTypes = listOf(BaseItemKind.SERIES),
                         )
-                    val items =
-                        GetStudiosRequestHandler
-                            .execute(api, request)
-                            .content.items
+                    val (items, hasMore) = fetchStudiosPage(request, limit, startIndex)
                     val library =
                         libraries
                             .firstOrNull { it.itemId == row.parentId }
@@ -1142,6 +1258,7 @@ class HomeSettingsService
                         title,
                         studios,
                         viewOptions = row.viewOptions,
+                        hasMore = hasMore,
                     )
                 }
 
@@ -1187,24 +1304,25 @@ class HomeSettingsService
                     val request =
                         GetItemsRequest(
                             parentId = row.parentId,
-                            limit = limit,
                             sortBy = listOf(ItemSortBy.PREMIERE_DATE),
                             sortOrder = listOf(SortOrder.DESCENDING),
                             fields = DefaultItemFields,
                             recursive = true,
                         )
-                    GetItemsRequestHandler
-                        .execute(api, request)
-                        .content.items
-                        .map { BaseItem.Companion.from(it, api, row.viewOptions.useSeries) }
-                        .let {
-                            Success(
-                                title,
-                                it,
-                                row.viewOptions,
-                                rowType = row,
-                            )
-                        }
+                    val (items, hasMore) =
+                        fetchGetItemsPage(
+                            request,
+                            limit,
+                            startIndex,
+                            row.viewOptions.useSeries,
+                        )
+                    Success(
+                        title,
+                        items,
+                        row.viewOptions,
+                        rowType = row,
+                        hasMore = hasMore,
+                    )
                 }
 
                 is HomeRowConfig.ByParent -> {
@@ -1215,25 +1333,26 @@ class HomeSettingsService
                             recursive = row.recursive,
                             sortBy = row.sort?.let { listOf(it.sort) },
                             sortOrder = row.sort?.let { listOf(it.direction) },
-                            limit = limit,
                             fields = DefaultItemFields,
+                        )
+                    val (items, hasMore) =
+                        fetchGetItemsPage(
+                            request,
+                            limit,
+                            startIndex,
+                            row.viewOptions.useSeries,
                         )
                     val name =
                         api.userLibraryApi
                             .getItem(itemId = row.parentId)
                             .content.name
-                    GetItemsRequestHandler
-                        .execute(api, request)
-                        .content.items
-                        .map { BaseItem(it, row.viewOptions.useSeries) }
-                        .let {
-                            Success(
-                                name ?: context.getString(R.string.collection),
-                                it,
-                                row.viewOptions,
-                                rowType = row,
-                            )
-                        }
+                    Success(
+                        name ?: context.getString(R.string.collection),
+                        items,
+                        row.viewOptions,
+                        rowType = row,
+                        hasMore = hasMore,
+                    )
                 }
 
                 is HomeRowConfig.GetItems -> {
@@ -1242,7 +1361,6 @@ class HomeSettingsService
                             if (it.limit == null) {
                                 it.copy(
                                     userId = userDto.id,
-                                    limit = limit,
                                 )
                             } else {
                                 it.copy(
@@ -1250,18 +1368,20 @@ class HomeSettingsService
                                 )
                             }
                         }
-                    GetItemsRequestHandler
-                        .execute(api, request)
-                        .content.items
-                        .map { BaseItem(it, row.viewOptions.useSeries) }
-                        .let {
-                            Success(
-                                row.name,
-                                it,
-                                row.viewOptions,
-                                rowType = row,
-                            )
-                        }
+                    val (items, hasMore) =
+                        fetchGetItemsPage(
+                            request,
+                            limit,
+                            startIndex,
+                            row.viewOptions.useSeries,
+                        )
+                    Success(
+                        row.name,
+                        items,
+                        row.viewOptions,
+                        rowType = row,
+                        hasMore = hasMore,
+                    )
                 }
 
                 is HomeRowConfig.Favorite -> {
@@ -1296,23 +1416,24 @@ class HomeSettingsService
                             GetItemsRequest(
                                 userId = userDto.id,
                                 recursive = true,
-                                limit = limit,
                                 fields = DefaultItemFields,
                                 includeItemTypes = listOf(row.kind),
                                 isFavorite = true,
                             )
-                        GetItemsRequestHandler
-                            .execute(api, request)
-                            .content.items
-                            .map { BaseItem(it, row.viewOptions.useSeries) }
-                            .let {
-                                Success(
-                                    title,
-                                    it,
-                                    row.viewOptions,
-                                    rowType = row,
-                                )
-                            }
+                        val (items, hasMore) =
+                            fetchGetItemsPage(
+                                request,
+                                limit,
+                                startIndex,
+                                row.viewOptions.useSeries,
+                            )
+                        Success(
+                            title,
+                            items,
+                            row.viewOptions,
+                            rowType = row,
+                            hasMore = hasMore,
+                        )
                     }
                 }
 

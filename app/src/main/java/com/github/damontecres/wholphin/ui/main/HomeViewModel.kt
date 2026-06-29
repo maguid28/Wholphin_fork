@@ -22,6 +22,7 @@ import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.services.deleteItem
 import com.github.damontecres.wholphin.services.tvAccess
 import com.github.damontecres.wholphin.ui.data.RowColumn
+import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.showToast
@@ -144,7 +145,7 @@ class HomeViewModel
                                                     prefs = prefs,
                                                     userDto = userDto,
                                                     libraries = libraries,
-                                                    limit = prefs.maxItemsPerRow,
+                                                    limit = HOME_ROW_PAGE_SIZE,
                                                     isRefresh = refresh,
                                                 )
                                             } catch (ex: Exception) {
@@ -285,6 +286,80 @@ class HomeViewModel
                             Timber.w(ex, "Failed to play trailer for %s", item.id)
                             showToast(activityContext, "Unable to open trailer")
                         }
+                    }
+                }
+            }
+        }
+
+        fun loadMoreRow(rowIndex: Int) {
+            viewModelScope.launchIO {
+                val currentRow =
+                    state.value.homeRows.getOrNull(rowIndex) as? HomeRowLoadingState.Success
+                        ?: return@launchIO
+                val rowConfig = currentRow.rowType ?: return@launchIO
+                if (!currentRow.hasMore || currentRow.isLoadingMore) return@launchIO
+
+                _state.update { homeState ->
+                    homeState.copy(
+                        homeRows =
+                            homeState.homeRows.mapIndexed { index, row ->
+                                if (index == rowIndex && row is HomeRowLoadingState.Success) {
+                                    row.copy(isLoadingMore = true)
+                                } else {
+                                    row
+                                }
+                            },
+                    )
+                }
+
+                try {
+                    val preferences = userPreferencesService.getCurrent()
+                    val prefs = preferences.appPreferences.homePagePreferences
+                    val userDto = serverRepository.currentUserDto.value ?: return@launchIO
+                    val libraries =
+                        navDrawerService.getAllUserLibraries(userDto.id, userDto.tvAccess)
+                    val result =
+                        homeSettingsService.fetchDataForRow(
+                            row = rowConfig,
+                            scope = viewModelScope,
+                            prefs = prefs,
+                            userDto = userDto,
+                            libraries = libraries,
+                            limit = HOME_ROW_PAGE_SIZE,
+                            startIndex = currentRow.items.size,
+                            isRefresh = false,
+                        ) as? HomeRowLoadingState.Success ?: return@launchIO
+
+                    _state.update { homeState ->
+                        homeState.copy(
+                            homeRows =
+                                homeState.homeRows.mapIndexed { index, row ->
+                                    if (index == rowIndex && row is HomeRowLoadingState.Success) {
+                                        row.copy(
+                                            items = row.items + result.items,
+                                            hasMore = result.hasMore,
+                                            isLoadingMore = false,
+                                        )
+                                    } else {
+                                        row
+                                    }
+                                },
+                        )
+                    }
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Error loading more items for home row %s", rowIndex)
+                    showToast(context, "Error loading more items")
+                    _state.update { homeState ->
+                        homeState.copy(
+                            homeRows =
+                                homeState.homeRows.mapIndexed { index, row ->
+                                    if (index == rowIndex && row is HomeRowLoadingState.Success) {
+                                        row.copy(isLoadingMore = false)
+                                    } else {
+                                        row
+                                    }
+                                },
+                        )
                     }
                 }
             }

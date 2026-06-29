@@ -13,6 +13,8 @@
 - Fixed long-press context menus immediately activating the first item when the select button is released.
 - Fixed delete from long-press menus by verifying Jellyfin delete permission on a fresh item before calling the API, restoring delete visibility for admin accounts, and showing clearer messages when the server rejects deletion.
 - Fixed delete from long-press menus so Home, library, recommended, and collection lists remove the item immediately after a successful delete instead of leaving a stale entry that 404s when opened.
+- Added a full loading screen to Discover that stays visible until all category rows are ready.
+- Changed Home rows to show 15 items initially with a More button at the end of each row that loads 15 additional items.
 - Added a script to fetch Jellyfin server logs for debugging delete failures.
 - Added customizable Home categories including top rated, popular, recently released, unwatched, genre, and other library-specific rows.
 - Updated Home recently added and recently released rows to combine movies and TV shows in a single row, including migration of existing home settings.

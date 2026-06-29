@@ -44,6 +44,7 @@ import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.listToDotString
+import com.github.damontecres.wholphin.ui.components.LoadingPage
 import com.github.damontecres.wholphin.ui.main.HomePageHeader
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberPosition
@@ -271,6 +272,16 @@ fun SeerrDiscoverPage(
     val state by viewModel.state.collectAsState()
     val rows = state.rows
     val ratingMap by viewModel.rating.collectAsState()
+    val isPageLoading =
+        rows.isEmpty() ||
+            rows.any {
+                it.items is DataLoadingState.Loading || it.items is DataLoadingState.Pending
+            }
+
+    if (isPageLoading) {
+        LoadingPage(modifier.fillMaxSize())
+        return
+    }
 
     val focusRequesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
     var position by rememberPosition(0, -1)

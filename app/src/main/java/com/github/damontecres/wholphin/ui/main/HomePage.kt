@@ -274,6 +274,7 @@ fun HomePage(
                 onClickPlay = onClickPlay,
                 onHoldBannerItem = { viewModel.playFirstTrailer(context, it) },
                 onUpdateBackdrop = viewModel::updateBackdrop,
+                onLoadMoreRow = viewModel::loadMoreRow,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 onBannerShown = onBannerShown,
                 modifier = modifier,
@@ -330,6 +331,7 @@ fun HomePageContent(
     onClickPlay: (RowColumn, BaseItem) -> Unit,
     onHoldBannerItem: (BaseItem) -> Unit = {},
     onUpdateBackdrop: (BaseItem) -> Unit,
+    onLoadMoreRow: (Int) -> Unit = {},
     showLogo: Boolean,
     onBannerShown: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -587,6 +589,17 @@ fun HomePageContent(
                                             ItemRow(
                                                 title = row.title,
                                                 items = row.items,
+                                                showLoadMore = row.hasMore,
+                                                isLoadingMore = row.isLoadingMore,
+                                                onClickLoadMore = { onLoadMoreRow(rowIndex) },
+                                                onLoadMoreFocus = { index ->
+                                                    liveFocusedRow.intValue = rowIndex
+                                                    scheduleFocusedPosition(
+                                                        RowColumn(rowIndex, index),
+                                                    )
+                                                },
+                                                loadMoreCardHeight = viewOptions.heightDp.dp,
+                                                loadMoreAspectRatio = viewOptions.aspectRatio.ratio,
                                                 onClickItem =
                                                     remember(rowIndex, onClickItem) {
                                                         { index, item ->
