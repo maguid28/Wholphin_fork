@@ -25,6 +25,11 @@ sealed interface HomeSettingsDestination : NavKey {
     ) : HomeSettingsDestination
 
     @Serializable
+    data class ChooseGenre(
+        val library: Library,
+    ) : HomeSettingsDestination
+
+    @Serializable
     data object ChooseFavorite : HomeSettingsDestination
 
     @Serializable

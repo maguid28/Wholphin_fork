@@ -146,11 +146,11 @@ fun HomeSettingsPage(
                                     showDiscover = discoverEnabled,
                                     onClick = { backStack.add(ChooseRowType(it)) },
                                     onClickGenres = { library ->
+                                        backStack.add(HomeSettingsDestination.ChooseGenre(library))
+                                    },
+                                    onClickRotatingGenres = { library ->
                                         addRow {
-                                            viewModel.addRow(
-                                                library,
-                                                LibraryRowType.GENRES,
-                                            )
+                                            viewModel.addRotatingGenreRow(library)
                                         }
                                     },
                                     onClickMeta = {
@@ -248,6 +248,22 @@ fun HomeSettingsPage(
                                     },
                                     onApplyApplyAll = {
                                         viewModel.updateViewOptionsForAll(row.config.viewOptions)
+                                    },
+                                    modifier = destModifier,
+                                )
+                            }
+
+                            is HomeSettingsDestination.ChooseGenre -> {
+                                val (genres, loading) =
+                                    rememberGenreListState(dest.library, viewModel::getGenresForLibrary)
+                                HomeSettingsGenreList(
+                                    library = dest.library,
+                                    genres = genres,
+                                    loading = loading,
+                                    onClick = { genre ->
+                                        addRow {
+                                            viewModel.addGenreRow(dest.library, genre)
+                                        }
                                     },
                                     modifier = destModifier,
                                 )

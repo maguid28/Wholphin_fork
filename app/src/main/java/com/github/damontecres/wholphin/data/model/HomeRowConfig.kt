@@ -95,6 +95,32 @@ sealed interface HomeRowConfig {
     }
 
     /**
+     * Row of media filtered by a specific genre in a library
+     */
+    @Serializable
+    @SerialName("ByGenre")
+    data class ByGenre(
+        val genreName: String,
+        val parentId: UUID,
+        override val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
+    ) : HomeRowConfig {
+        override fun updateViewOptions(viewOptions: HomeRowViewOptions): ByGenre = this.copy(viewOptions = viewOptions)
+    }
+
+    /**
+     * Row that cycles through genres in a library on a fixed time interval
+     */
+    @Serializable
+    @SerialName("RotatingGenre")
+    data class RotatingGenre(
+        val parentId: UUID,
+        val intervalHours: Int = DEFAULT_ROTATING_GENRE_INTERVAL_HOURS,
+        override val viewOptions: HomeRowViewOptions = HomeRowViewOptions(),
+    ) : HomeRowConfig {
+        override fun updateViewOptions(viewOptions: HomeRowViewOptions): RotatingGenre = this.copy(viewOptions = viewOptions)
+    }
+
+    /**
      * Row of a studios in a library
      */
     @Serializable
@@ -323,6 +349,23 @@ data class HomePageSettings(
  * This is the max version supported by this version of the app
  */
 const val SUPPORTED_HOME_PAGE_SETTINGS_VERSION = 1
+
+const val DEFAULT_ROTATING_GENRE_INTERVAL_HOURS = 6
+
+/**
+ * Picks a genre from [genres] based on the current time slot.
+ */
+fun selectRotatingGenre(
+    genres: List<String>,
+    intervalHours: Int = DEFAULT_ROTATING_GENRE_INTERVAL_HOURS,
+    timeMillis: Long = System.currentTimeMillis(),
+): String? {
+    if (genres.isEmpty()) return null
+    val sorted = genres.sorted()
+    val intervalMs = intervalHours.coerceAtLeast(1) * 3_600_000L
+    val slot = (timeMillis / intervalMs).toInt()
+    return sorted[slot % sorted.size]
+}
 
 /**
  * View options for displaying a row

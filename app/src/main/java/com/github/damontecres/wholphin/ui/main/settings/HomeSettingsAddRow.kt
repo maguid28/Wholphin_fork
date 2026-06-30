@@ -26,6 +26,7 @@ fun HomeSettingsAddRow(
     showDiscover: Boolean,
     onClick: (Library) -> Unit,
     onClickGenres: (Library) -> Unit,
+    onClickRotatingGenres: (Library) -> Unit,
     onClickMeta: (MetaRowType) -> Unit,
     modifier: Modifier,
     firstFocus: FocusRequester = remember { FocusRequester() },
@@ -90,8 +91,17 @@ fun HomeSettingsAddRow(
                 itemsIndexed(genreLibraries) { _, library ->
                     HomeSettingsListItem(
                         selected = false,
-                        headlineText = stringResource(R.string.genres_in, library.name),
+                        headlineText = stringResource(R.string.genre_rows_in, library.name),
                         onClick = { onClickGenres.invoke(library) },
+                        modifier = Modifier,
+                    )
+                    HomeSettingsListItem(
+                        selected = false,
+                        headlineText = stringResource(R.string.rotating_genre_row_in, library.name),
+                        supportingContent = {
+                            Text(stringResource(R.string.rotating_genre_row_summary))
+                        },
+                        onClick = { onClickRotatingGenres.invoke(library) },
                         modifier = Modifier,
                     )
                 }

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added genre rows to Home customization so you can pick specific genres (e.g. Comedy, Sci-Fi) from a library and show them as content rows on the home screen.
+- Added rotating genre rows to Home customization that cycle through a library's genres every 6 hours.
+- Fixed Home and other horizontal rows so the focused item scrolls into view instead of staying pinned to the left edge near the nav drawer until the end of the row, by animating the row to the focused index on each focus change (matching TabRow scroll behavior) instead of relying on bring-into-view alone.
+- Fixed Top rated movies/TV and rotating genre Home rows so they show a More button and paginate like other category rows.
 - Fixed returning to Home after visiting another section so focus and scroll position restore to the row you left instead of landing off-screen or on the collapsed nav drawer.
 - Fixed Movies and TV Shows recommended tabs so focus and scroll position restore to the row you left when returning from another section, using an in-memory UI state cache that preserves list scroll offset across nav backstack changes.
 - Fixed Movies and TV Shows recommended tabs so focus restores to the saved item within a row after scroll position is restored.

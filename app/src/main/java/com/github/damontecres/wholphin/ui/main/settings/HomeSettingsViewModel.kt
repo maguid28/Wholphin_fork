@@ -54,10 +54,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
+import com.github.damontecres.wholphin.util.GetGenresRequestHandler
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.CollectionType
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
+import org.jellyfin.sdk.model.api.request.GetGenresRequest
 import org.jellyfin.sdk.model.serializer.UUIDSerializer
 import timber.log.Timber
 import java.util.UUID
@@ -445,6 +449,71 @@ class HomeSettingsViewModel
                 fetchRowData()
             }
 
+        suspend fun getGenresForLibrary(library: Library): List<String> {
+            val userId = serverRepository.currentUser.value?.id
+            val includeItemTypes = genreIncludeItemTypes(library)
+            val request =
+                GetGenresRequest(
+                    userId = userId,
+                    parentId = library.itemId,
+                    includeItemTypes = includeItemTypes,
+                    sortBy = listOf(ItemSortBy.SORT_NAME),
+                    sortOrder = listOf(SortOrder.ASCENDING),
+                )
+            return GetGenresRequestHandler
+                .execute(api, request)
+                .content.items
+                .mapNotNull { it.name }
+                .distinct()
+        }
+
+        fun addGenreRow(
+            library: Library,
+            genreName: String,
+        ): Job =
+            viewModelScope.launchIO {
+                val id = idCounter++
+                val newRow =
+                    HomeRowConfigDisplay(
+                        id = id,
+                        title = genreName,
+                        config =
+                            HomeRowConfig.ByGenre(
+                                genreName = genreName,
+                                parentId = library.itemId,
+                            ),
+                    )
+                updateState {
+                    it.copy(
+                        loading = LoadingState.Loading,
+                        rows = it.rows.toMutableList().apply { add(newRow) },
+                    )
+                }
+                fetchRowData()
+            }
+
+        fun addRotatingGenreRow(library: Library): Job =
+            viewModelScope.launchIO {
+                val id = idCounter++
+                val newRow =
+                    HomeRowConfigDisplay(
+                        id = id,
+                        title =
+                            context.getString(
+                                R.string.rotating_genre_row_settings_title,
+                                library.name,
+                            ),
+                        config = HomeRowConfig.RotatingGenre(parentId = library.itemId),
+                    )
+                updateState {
+                    it.copy(
+                        loading = LoadingState.Loading,
+                        rows = it.rows.toMutableList().apply { add(newRow) },
+                    )
+                }
+                fetchRowData()
+            }
+
         fun addFavoriteRow(type: BaseItemKind): Job =
             viewModelScope.launchIO {
                 Timber.v("Adding favorite row for $type")
@@ -714,6 +783,13 @@ class HomeSettingsViewModel
                 Toast.LENGTH_SHORT,
             )
 
+        private fun genreIncludeItemTypes(library: Library): List<BaseItemKind>? =
+            when (library.collectionType) {
+                CollectionType.MOVIES -> listOf(BaseItemKind.MOVIE)
+                CollectionType.TVSHOWS -> listOf(BaseItemKind.SERIES)
+                else -> null
+            }
+
         fun applyPreset(preset: HomeRowPresets) {
             _state.update { it.copy(loading = LoadingState.Loading) }
             viewModelScope.launchIO {
@@ -789,6 +865,18 @@ class HomeSettingsViewModel
 
                                 is HomeRowConfig.Seasonal -> {
                                     it.config.updateViewOptions(preset.movieLibrary)
+                                }
+
+                                is HomeRowConfig.ByGenre -> {
+                                    val collectionType = getCollectionType(it.config.parentId)
+                                    val viewOptions = preset.getByCollectionType(collectionType)
+                                    it.config.updateViewOptions(viewOptions)
+                                }
+
+                                is HomeRowConfig.RotatingGenre -> {
+                                    val collectionType = getCollectionType(it.config.parentId)
+                                    val viewOptions = preset.getByCollectionType(collectionType)
+                                    it.config.updateViewOptions(viewOptions)
                                 }
 
                                 is RecentlyAdded -> {

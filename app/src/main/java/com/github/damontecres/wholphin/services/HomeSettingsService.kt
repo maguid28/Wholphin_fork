@@ -9,6 +9,7 @@ import com.github.damontecres.wholphin.data.model.HomePageSettings
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.SUPPORTED_HOME_PAGE_SETTINGS_VERSION
 import com.github.damontecres.wholphin.data.model.SeasonalCategory
+import com.github.damontecres.wholphin.data.model.selectRotatingGenre
 import com.github.damontecres.wholphin.data.model.createGenreDestination
 import com.github.damontecres.wholphin.data.model.createStudioDestination
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
@@ -679,6 +680,24 @@ class HomeSettingsService
                     )
                 }
 
+                is HomeRowConfig.ByGenre -> {
+                    val libraryName = getItemName(config.parentId) ?: ""
+                    HomeRowConfigDisplay(
+                        id,
+                        context.getString(R.string.genre_row_title, config.genreName, libraryName),
+                        config,
+                    )
+                }
+
+                is HomeRowConfig.RotatingGenre -> {
+                    val libraryName = getItemName(config.parentId) ?: ""
+                    HomeRowConfigDisplay(
+                        id,
+                        context.getString(R.string.rotating_genre_row_settings_title, libraryName),
+                        config,
+                    )
+                }
+
                 is HomeRowConfig.Studios -> {
                     val name = getItemName(config.parentId) ?: ""
                     HomeRowConfigDisplay(
@@ -1024,84 +1043,36 @@ class HomeSettingsService
                 }
 
                 is HomeRowConfig.Category -> {
-                    if (row.category.rotatesSelection) {
-                        if (startIndex > 0) {
-                            Success(
-                                title = getCategoryTitle(row.category),
-                                items = emptyList(),
-                                viewOptions = row.viewOptions,
-                                rowType = row,
-                                hasMore = false,
-                            )
-                        } else {
-                            val fetchLimit =
-                                (limit * ROTATING_CATEGORY_POOL_MULTIPLIER)
-                                    .coerceAtLeast(ROTATING_CATEGORY_MIN_POOL_SIZE)
-                            val request =
-                                GetItemsRequest(
-                                    userId = userDto.id,
-                                    recursive = true,
-                                    includeItemTypes = row.category.itemKinds,
-                                    sortBy = listOf(row.category.sortBy),
-                                    sortOrder = listOf(row.category.sortOrder),
-                                    isPlayed = row.category.isPlayed,
-                                    minCommunityRating = row.category.minCommunityRating,
-                                    maxPremiereDate =
-                                        LocalDateTime.now().takeIf {
-                                            row.category.sortBy == ItemSortBy.PREMIERE_DATE
-                                        },
-                                    limit = fetchLimit,
-                                    fields = homeRowItemFields,
-                                    enableTotalRecordCount = false,
-                                )
-                            val items =
-                                GetItemsRequestHandler
-                                    .execute(api, request)
-                                    .content.items
-                                    .map { BaseItem(it, row.viewOptions.useSeries) }
-                                    .shuffled()
-                                    .take(limit)
-
-                            Success(
-                                title = getCategoryTitle(row.category),
-                                items = items,
-                                viewOptions = row.viewOptions,
-                                rowType = row,
-                                hasMore = false,
-                            )
-                        }
-                    } else {
-                        val request =
-                            GetItemsRequest(
-                                userId = userDto.id,
-                                recursive = true,
-                                includeItemTypes = row.category.itemKinds,
-                                sortBy = listOf(row.category.sortBy),
-                                sortOrder = listOf(row.category.sortOrder),
-                                isPlayed = row.category.isPlayed,
-                                minCommunityRating = row.category.minCommunityRating,
-                                maxPremiereDate =
-                                    LocalDateTime.now().takeIf {
-                                        row.category.sortBy == ItemSortBy.PREMIERE_DATE
-                                    },
-                                fields = homeRowItemFields,
-                            )
-                        val (items, hasMore) =
-                            fetchGetItemsPage(
-                                request,
-                                limit,
-                                startIndex,
-                                row.viewOptions.useSeries,
-                            )
-
-                        Success(
-                            title = getCategoryTitle(row.category),
-                            items = items,
-                            viewOptions = row.viewOptions,
-                            rowType = row,
-                            hasMore = hasMore,
+                    val request =
+                        GetItemsRequest(
+                            userId = userDto.id,
+                            recursive = true,
+                            includeItemTypes = row.category.itemKinds,
+                            sortBy = listOf(row.category.sortBy),
+                            sortOrder = listOf(row.category.sortOrder),
+                            isPlayed = row.category.isPlayed,
+                            minCommunityRating = row.category.minCommunityRating,
+                            maxPremiereDate =
+                                LocalDateTime.now().takeIf {
+                                    row.category.sortBy == ItemSortBy.PREMIERE_DATE
+                                },
+                            fields = homeRowItemFields,
                         )
-                    }
+                    val (items, hasMore) =
+                        fetchGetItemsPage(
+                            request,
+                            limit,
+                            startIndex,
+                            row.viewOptions.useSeries,
+                        )
+
+                    Success(
+                        title = getCategoryTitle(row.category),
+                        items = items,
+                        viewOptions = row.viewOptions,
+                        rowType = row,
+                        hasMore = hasMore,
+                    )
                 }
 
                 is HomeRowConfig.Seasonal -> {
@@ -1190,6 +1161,107 @@ class HomeSettingsService
                             viewOptions = row.viewOptions,
                             rowType = row,
                         )
+                    }
+                }
+
+                is HomeRowConfig.ByGenre -> {
+                    val library = libraries.firstOrNull { it.itemId == row.parentId }
+                    val includeItemTypes = genreIncludeItemTypes(library)
+                    val request =
+                        GetItemsRequest(
+                            userId = userDto.id,
+                            parentId = row.parentId,
+                            recursive = true,
+                            includeItemTypes = includeItemTypes,
+                            genres = listOf(row.genreName),
+                            sortBy = listOf(ItemSortBy.DATE_CREATED),
+                            sortOrder = listOf(SortOrder.DESCENDING),
+                            fields = homeRowItemFields,
+                        )
+                    val (items, hasMore) =
+                        fetchGetItemsPage(
+                            request,
+                            limit,
+                            startIndex,
+                            row.viewOptions.useSeries,
+                        )
+                    val libraryName = library?.name ?: getItemName(row.parentId).orEmpty()
+                    val title =
+                        if (libraryName.isNotEmpty()) {
+                            context.getString(R.string.genre_row_title, row.genreName, libraryName)
+                        } else {
+                            row.genreName
+                        }
+
+                    Success(
+                        title = title,
+                        items = items,
+                        viewOptions = row.viewOptions,
+                        rowType = row,
+                        hasMore = hasMore,
+                    )
+                }
+
+                is HomeRowConfig.RotatingGenre -> {
+                    val library = libraries.firstOrNull { it.itemId == row.parentId }
+                    val libraryName = library?.name ?: getItemName(row.parentId).orEmpty()
+                    val genreNames =
+                        getGenreNamesForLibrary(
+                            userId = userDto.id,
+                            parentId = row.parentId,
+                            collectionType = library?.collectionType,
+                        )
+                    val genreName =
+                        selectRotatingGenre(genreNames, row.intervalHours)
+                    if (genreName == null) {
+                        Success(
+                            title =
+                                if (libraryName.isNotEmpty()) {
+                                    context.getString(
+                                        R.string.rotating_genre_row_settings_title,
+                                        libraryName,
+                                    )
+                                } else {
+                                    context.getString(R.string.genres)
+                                },
+                            items = emptyList(),
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                        )
+                    } else {
+                    val includeItemTypes = genreIncludeItemTypes(library)
+                    val request =
+                        GetItemsRequest(
+                            userId = userDto.id,
+                            parentId = row.parentId,
+                            recursive = true,
+                            includeItemTypes = includeItemTypes,
+                            genres = listOf(genreName),
+                            sortBy = listOf(ItemSortBy.DATE_CREATED),
+                            sortOrder = listOf(SortOrder.DESCENDING),
+                            fields = homeRowItemFields,
+                        )
+                    val (items, hasMore) =
+                        fetchGetItemsPage(
+                            request,
+                            limit,
+                            startIndex,
+                            row.viewOptions.useSeries,
+                        )
+                    val title =
+                        if (libraryName.isNotEmpty()) {
+                            context.getString(R.string.genre_row_title, genreName, libraryName)
+                        } else {
+                            genreName
+                        }
+
+                    Success(
+                        title = title,
+                        items = items,
+                        viewOptions = row.viewOptions,
+                        rowType = row,
+                        hasMore = hasMore,
+                    )
                     }
                 }
 
@@ -1639,10 +1711,41 @@ class HomeSettingsService
                 },
             )
 
+        private fun genreIncludeItemTypes(library: Library?): List<BaseItemKind> =
+            when (library?.collectionType) {
+                CollectionType.MOVIES -> listOf(BaseItemKind.MOVIE)
+                CollectionType.TVSHOWS -> listOf(BaseItemKind.SERIES)
+                else -> listOf(BaseItemKind.MOVIE, BaseItemKind.SERIES)
+            }
+
+        private suspend fun getGenreNamesForLibrary(
+            userId: UUID,
+            parentId: UUID,
+            collectionType: CollectionType?,
+        ): List<String> {
+            val includeItemTypes =
+                when (collectionType) {
+                    CollectionType.MOVIES -> listOf(BaseItemKind.MOVIE)
+                    CollectionType.TVSHOWS -> listOf(BaseItemKind.SERIES)
+                    else -> null
+                }
+            val request =
+                GetGenresRequest(
+                    userId = userId,
+                    parentId = parentId,
+                    includeItemTypes = includeItemTypes,
+                    sortBy = listOf(ItemSortBy.SORT_NAME),
+                    sortOrder = listOf(SortOrder.ASCENDING),
+                )
+            return GetGenresRequestHandler
+                .execute(api, request)
+                .content.items
+                .mapNotNull { it.name }
+                .distinct()
+        }
+
         companion object {
             const val CUSTOM_PREF_ID = "home_settings"
-            private const val ROTATING_CATEGORY_POOL_MULTIPLIER = 3
-            private const val ROTATING_CATEGORY_MIN_POOL_SIZE = 20
             private const val HOME_PAGE_CACHE_TTL_MS = 10 * 60 * 1000L
             private val homeRowItemFields = SlimItemFields
         }

@@ -45,6 +45,13 @@ class TestHomeRowSamples {
                     parentId = UUID.randomUUID(),
                     viewOptions = HomeRowViewOptions(),
                 ),
+                HomeRowConfig.ByGenre(
+                    genreName = "Comedy",
+                    parentId = UUID.randomUUID(),
+                ),
+                HomeRowConfig.RotatingGenre(
+                    parentId = UUID.randomUUID(),
+                ),
                 HomeRowConfig.Studios(parentId = UUID.randomUUID()),
                 HomeRowConfig.ContinueWatching(
                     viewOptions = HomeRowViewOptions(),
@@ -95,6 +102,8 @@ class TestHomeRowSamples {
                 is HomeRowConfig.ContinueWatching -> foundTypes.add(it::class)
                 is HomeRowConfig.ContinueWatchingCombined -> foundTypes.add(it::class)
                 is HomeRowConfig.Genres -> foundTypes.add(it::class)
+                is HomeRowConfig.ByGenre -> foundTypes.add(it::class)
+                is HomeRowConfig.RotatingGenre -> foundTypes.add(it::class)
                 is HomeRowConfig.NextUp -> foundTypes.add(it::class)
                 is HomeRowConfig.RecentlyAdded -> foundTypes.add(it::class)
                 is HomeRowConfig.RecentlyReleased -> foundTypes.add(it::class)
