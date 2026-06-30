@@ -6,6 +6,12 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class RecommendedListUiState(
+    val focus: RowColumn = RowColumn(-1, -1),
+    val firstVisibleItemIndex: Int = 0,
+    val firstVisibleItemScrollOffset: Int = 0,
+)
+
 @Singleton
 class RecommendedLibraryCacheService
     @Inject
@@ -21,7 +27,7 @@ class RecommendedLibraryCacheService
         )
 
         private val cache = mutableMapOf<CacheKey, Entry>()
-        private val focusPositions = mutableMapOf<CacheKey, RowColumn>()
+        private val listUiStates = mutableMapOf<CacheKey, RecommendedListUiState>()
 
         fun get(
             userId: UUID,
@@ -31,7 +37,7 @@ class RecommendedLibraryCacheService
             val entry = cache[key] ?: return null
             if (System.currentTimeMillis() - entry.cachedAtMs > CACHE_TTL_MS) {
                 cache.remove(key)
-                focusPositions.remove(key)
+                listUiStates.remove(key)
                 return null
             }
             return entry.rows
@@ -49,20 +55,20 @@ class RecommendedLibraryCacheService
                 )
         }
 
-        fun getFocusPosition(
+        fun getListUiState(
             userId: UUID,
             parentId: UUID,
-        ): RowColumn? = focusPositions[CacheKey(userId, parentId)]
+        ): RecommendedListUiState? = listUiStates[CacheKey(userId, parentId)]
 
-        fun saveFocusPosition(
+        fun saveListUiState(
             userId: UUID,
             parentId: UUID,
-            position: RowColumn,
+            state: RecommendedListUiState,
         ) {
-            if (position.row < 0) {
+            if (state.focus.row < 0 && state.firstVisibleItemIndex <= 0 && state.firstVisibleItemScrollOffset <= 0) {
                 return
             }
-            focusPositions[CacheKey(userId, parentId)] = position
+            listUiStates[CacheKey(userId, parentId)] = state
         }
 
         companion object {

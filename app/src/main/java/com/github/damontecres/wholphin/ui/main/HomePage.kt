@@ -336,6 +336,7 @@ fun HomePageContent(
     onBannerShown: () -> Unit = {},
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    onListScrollPosition: ((firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int) -> Unit)? = null,
     takeFocus: Boolean = true,
     suppressContentScroll: () -> Boolean = { false },
     showEmptyRows: Boolean = false,
@@ -416,8 +417,14 @@ fun HomePageContent(
         if (position.row >= 0) {
             liveFocusedRow.intValue = position.row
         }
-        listState.scrollToItem(targetRowIndex)
-        delay(50)
+        val visibleRows = listState.layoutInfo.visibleItemsInfo
+        val targetRowVisible =
+            visibleRows.isNotEmpty() &&
+                targetRowIndex in visibleRows.first().index..visibleRows.last().index
+        if (!targetRowVisible) {
+            listState.scrollToItem(targetRowIndex)
+            delay(50)
+        }
         if (rowFocusRequesters.getOrNull(targetRowIndex)?.tryRequestFocus(debugTag) == true) {
             firstFocused = true
             delay(50)
@@ -425,8 +432,34 @@ fun HomePageContent(
         }
     }
 
+    val currentOnListScrollPosition by rememberUpdatedState(onListScrollPosition)
+    fun persistListScrollPosition() {
+        currentOnListScrollPosition?.invoke(
+            listState.firstVisibleItemIndex,
+            listState.firstVisibleItemScrollOffset,
+        )
+    }
+
+    LaunchedEffect(listState, onListScrollPosition) {
+        if (onListScrollPosition == null) {
+            return@LaunchedEffect
+        }
+        snapshotFlow {
+            listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        }.distinctUntilChanged().collect { (index, offset) ->
+            currentOnListScrollPosition?.invoke(index, offset)
+        }
+    }
+
+    DisposableEffect(onListScrollPosition) {
+        onDispose {
+            persistListScrollPosition()
+        }
+    }
+
     LaunchedEffect(takeFocus) {
         if (!takeFocus) {
+            persistListScrollPosition()
             firstFocused = false
         } else if (position.row >= 0) {
             awaitingColumnRestore = true

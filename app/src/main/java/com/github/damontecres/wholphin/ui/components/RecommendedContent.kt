@@ -5,7 +5,9 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,6 +35,7 @@ import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
 import com.github.damontecres.wholphin.services.RecommendedLibraryCacheService
+import com.github.damontecres.wholphin.services.RecommendedListUiState
 import com.github.damontecres.wholphin.services.deleteItem
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
@@ -139,18 +142,34 @@ abstract class RecommendedViewModel(
         init()
     }
 
-    fun savedFocusPosition(): RowColumn {
-        val userId = serverRepository.currentUser.value?.id ?: return RowColumn(-1, -1)
-        return recommendedLibraryCacheService.getFocusPosition(userId, libraryParentId)
-            ?: RowColumn(-1, -1)
+    fun savedListUiState(): RecommendedListUiState {
+        val userId = serverRepository.currentUser.value?.id ?: return RecommendedListUiState()
+        return recommendedLibraryCacheService.getListUiState(userId, libraryParentId)
+            ?: RecommendedListUiState()
+    }
+
+    fun saveListUiState(state: RecommendedListUiState) {
+        val userId = serverRepository.currentUser.value?.id ?: return
+        recommendedLibraryCacheService.saveListUiState(userId, libraryParentId, state)
     }
 
     fun saveFocusPosition(position: RowColumn) {
         if (position.row < 0) {
             return
         }
-        val userId = serverRepository.currentUser.value?.id ?: return
-        recommendedLibraryCacheService.saveFocusPosition(userId, libraryParentId, position)
+        saveListUiState(savedListUiState().copy(focus = position))
+    }
+
+    fun saveScrollPosition(
+        firstVisibleItemIndex: Int,
+        firstVisibleItemScrollOffset: Int,
+    ) {
+        saveListUiState(
+            savedListUiState().copy(
+                firstVisibleItemIndex = firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = firstVisibleItemScrollOffset,
+            ),
+        )
     }
 
     fun refreshItem(
@@ -285,9 +304,13 @@ fun RecommendedContent(
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
     val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
     val isAdministrator = currentUserDto?.policy?.isAdministrator == true
-    var position by remember(viewModel.libraryParentId) {
-        mutableStateOf(viewModel.savedFocusPosition())
-    }
+    val savedUiState = remember(viewModel.libraryParentId) { viewModel.savedListUiState() }
+    var position by remember(viewModel.libraryParentId) { mutableStateOf(savedUiState.focus) }
+    val listState =
+        rememberLazyListState(
+            initialFirstVisibleItemIndex = savedUiState.firstVisibleItemIndex.coerceAtLeast(0),
+            initialFirstVisibleItemScrollOffset = savedUiState.firstVisibleItemScrollOffset.coerceAtLeast(0),
+        )
 
     LaunchedEffect(Unit) {
         viewModel.initIfNeeded()
@@ -371,6 +394,10 @@ fun RecommendedContent(
                 onFocusPosition = {
                     position = it
                     viewModel.saveFocusPosition(it)
+                    viewModel.saveScrollPosition(
+                        listState.firstVisibleItemIndex,
+                        listState.firstVisibleItemScrollOffset,
+                    )
                     val nonEmptyRowBefore =
                         rows
                             .subList(0, it.row)
@@ -389,6 +416,8 @@ fun RecommendedContent(
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 takeFocus = takeFocus,
                 suppressContentScroll = suppressContentScroll,
+                listState = listState,
+                onListScrollPosition = viewModel::saveScrollPosition,
                 modifier = modifier,
                 headerComposable = { focusedItem ->
                     HomePageHeader(
