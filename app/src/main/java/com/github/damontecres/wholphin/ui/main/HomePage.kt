@@ -277,6 +277,8 @@ fun HomePage(
                 onUpdateBackdrop = viewModel::updateBackdrop,
                 onLoadMoreRow = viewModel::loadMoreRow,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                inAppScreensaverEnabled =
+                    preferences.appPreferences.interfacePreferences.screensaverPreference.enabled,
                 onBannerShown = onBannerShown,
                 modifier = modifier,
                 takeFocus = takeFocus,
@@ -334,6 +336,7 @@ fun HomePageContent(
     onUpdateBackdrop: (BaseItem) -> Unit,
     onLoadMoreRow: suspend (Int) -> Unit = {},
     showLogo: Boolean,
+    inAppScreensaverEnabled: Boolean = false,
     onBannerShown: () -> Unit = {},
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
@@ -372,6 +375,7 @@ fun HomePageContent(
     val currentOnBannerShown by rememberUpdatedState(onBannerShown)
     val coroutineScope = rememberCoroutineScope()
     fun showHomeBanner() {
+        if (inAppScreensaverEnabled) return
         if (takeFocus && bannerItemsAvailable) {
             showBannerHero = true
             currentOnBannerShown()
@@ -533,9 +537,16 @@ fun HomePageContent(
     val homeContentScale = 1f - (.015f * bannerTransitionProgress)
     val homeContentTranslationY = 16f * bannerTransitionProgress
     val idleBannerJob = remember { arrayOfNulls<Job>(1) }
+    LaunchedEffect(inAppScreensaverEnabled) {
+        if (inAppScreensaverEnabled) {
+            idleBannerJob[0]?.cancel()
+            showBannerHero = false
+            bannerFocusedItem = null
+        }
+    }
     fun restartIdleBannerTimer() {
         idleBannerJob[0]?.cancel()
-        if (takeFocus && bannerItemsAvailable) {
+        if (takeFocus && bannerItemsAvailable && !inAppScreensaverEnabled) {
             idleBannerJob[0] =
                 coroutineScope.launch {
                     delay(HomeBannerIdleDelayMillis)

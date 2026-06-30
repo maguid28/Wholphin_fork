@@ -31,8 +31,10 @@ import com.github.damontecres.wholphin.ui.theme.WholphinTheme
 import com.github.damontecres.wholphin.ui.theme.customThemeColorChoices
 import com.github.damontecres.wholphin.ui.util.ProvideLocalClock
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
@@ -83,6 +85,21 @@ class WholphinDreamService :
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         Timber.d("onAttachedToWindow")
+        lifecycleScope.launchDefault {
+            val inAppScreensaverEnabled =
+                preferencesDataStore.data.first().interfacePreferences.screensaverPreference.enabled
+            if (inAppScreensaverEnabled) {
+                Timber.d("In-app screensaver enabled; skipping OS dream")
+                withContext(Dispatchers.Main) { finish() }
+                return@launchDefault
+            }
+            withContext(Dispatchers.Main) {
+                attachDreamContent()
+            }
+        }
+    }
+
+    private fun attachDreamContent() {
         val itemFlow = screensaverService.createItemFlow(lifecycleScope)
         setContentView(
             ComposeView(this).apply {
