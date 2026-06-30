@@ -75,11 +75,14 @@ class RecommendedMovieViewModel
             musicService,
             backdropService,
             mediaManagementService,
+            recommendedLibraryCacheService,
         ) {
         @AssistedFactory
         interface Factory {
             fun create(parentId: UUID): RecommendedMovieViewModel
         }
+
+        override val libraryParentId: UUID = parentId
 
         private var suggestionItems: List<BaseItem> = emptyList()
         private var cachedUserId: UUID? = null

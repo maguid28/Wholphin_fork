@@ -81,11 +81,14 @@ class RecommendedTvShowViewModel
             musicService,
             backdropService,
             mediaManagementService,
+            recommendedLibraryCacheService,
         ) {
         @AssistedFactory
         interface Factory {
             fun create(parentId: UUID): RecommendedTvShowViewModel
         }
+
+        override val libraryParentId: UUID = parentId
 
         private var suggestionItems: List<BaseItem> = emptyList()
         private var combineContinueNext = false

@@ -391,6 +391,9 @@ fun HomePageContent(
     // The row that currently has focus within the content, updated synchronously as focus moves.
     // Used to restore focus to the correct row when returning from the nav drawer (see below).
     val liveFocusedRow = remember { mutableIntStateOf(-1) }
+    var awaitingColumnRestore by remember(position.row, position.column) {
+        mutableStateOf(position.row >= 0)
+    }
     // Content-local re-anchor suppression. Set true when returning from the nav drawer and held until
     // the user presses a key. While true the bring-into-view spec performs no scroll, so the restored
     // row stays exactly where it was (no jump) even if Compose would otherwise re-anchor it. It is
@@ -410,16 +413,24 @@ fun HomePageContent(
 
     suspend fun restoreFocusedHomeRow(debugTag: String) {
         val targetRowIndex = savedFocusRowIndex() ?: return
+        if (position.row >= 0) {
+            liveFocusedRow.intValue = position.row
+        }
         listState.scrollToItem(targetRowIndex)
         delay(50)
         if (rowFocusRequesters.getOrNull(targetRowIndex)?.tryRequestFocus(debugTag) == true) {
             firstFocused = true
+            delay(50)
+            awaitingColumnRestore = false
         }
     }
 
     LaunchedEffect(takeFocus) {
         if (!takeFocus) {
             firstFocused = false
+        } else if (position.row >= 0) {
+            awaitingColumnRestore = true
+            liveFocusedRow.intValue = position.row
         }
     }
 
@@ -446,6 +457,9 @@ fun HomePageContent(
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
     fun scheduleFocusedPosition(rowColumn: RowColumn) {
         currentOnFocusPosition(rowColumn)
+        if (rowColumn.row >= 0) {
+            awaitingColumnRestore = false
+        }
     }
 
     if (takeFocus) {
@@ -622,7 +636,7 @@ fun HomePageContent(
                                                     position
                                                         .column
                                                         .takeIf {
-                                                            !firstFocused &&
+                                                            awaitingColumnRestore &&
                                                                 rowIndex == position.row &&
                                                                 (
                                                                     position.column in row.items.indices ||

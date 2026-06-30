@@ -1,5 +1,6 @@
 package com.github.damontecres.wholphin.services
 
+import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import java.util.UUID
 import javax.inject.Inject
@@ -20,14 +21,17 @@ class RecommendedLibraryCacheService
         )
 
         private val cache = mutableMapOf<CacheKey, Entry>()
+        private val focusPositions = mutableMapOf<CacheKey, RowColumn>()
 
         fun get(
             userId: UUID,
             parentId: UUID,
         ): List<HomeRowLoadingState>? {
-            val entry = cache[CacheKey(userId, parentId)] ?: return null
+            val key = CacheKey(userId, parentId)
+            val entry = cache[key] ?: return null
             if (System.currentTimeMillis() - entry.cachedAtMs > CACHE_TTL_MS) {
-                cache.remove(CacheKey(userId, parentId))
+                cache.remove(key)
+                focusPositions.remove(key)
                 return null
             }
             return entry.rows
@@ -43,6 +47,22 @@ class RecommendedLibraryCacheService
                     rows = rows,
                     cachedAtMs = System.currentTimeMillis(),
                 )
+        }
+
+        fun getFocusPosition(
+            userId: UUID,
+            parentId: UUID,
+        ): RowColumn? = focusPositions[CacheKey(userId, parentId)]
+
+        fun saveFocusPosition(
+            userId: UUID,
+            parentId: UUID,
+            position: RowColumn,
+        ) {
+            if (position.row < 0) {
+                return
+            }
+            focusPositions[CacheKey(userId, parentId)] = position
         }
 
         companion object {

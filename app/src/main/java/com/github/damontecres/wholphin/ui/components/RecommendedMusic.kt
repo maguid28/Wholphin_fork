@@ -22,6 +22,7 @@ import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.RecommendedLibraryCacheService
 import com.github.damontecres.wholphin.services.SuggestionService
 import com.github.damontecres.wholphin.services.SuggestionsResource
 import com.github.damontecres.wholphin.ui.AspectRatio
@@ -63,6 +64,7 @@ class RecommendedMusicViewModel
         musicService: MusicService,
         serverRepository: ServerRepository,
         private val preferencesDataStore: DataStore<AppPreferences>,
+        private val recommendedLibraryCacheService: RecommendedLibraryCacheService,
         private val suggestionService: SuggestionService,
         @Assisted val parentId: UUID,
         navigationManager: NavigationManager,
@@ -80,11 +82,14 @@ class RecommendedMusicViewModel
             musicService,
             backdropService,
             mediaManagementService,
+            recommendedLibraryCacheService,
         ) {
         @AssistedFactory
         interface Factory {
             fun create(parentId: UUID): RecommendedMusicViewModel
         }
+
+        override val libraryParentId: UUID = parentId
 
         override val rows =
             MutableStateFlow<List<HomeRowLoadingState>>(

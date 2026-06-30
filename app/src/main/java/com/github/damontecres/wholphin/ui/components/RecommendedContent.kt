@@ -32,6 +32,7 @@ import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.RecommendedLibraryCacheService
 import com.github.damontecres.wholphin.services.deleteItem
 import com.github.damontecres.wholphin.ui.data.AddPlaylistViewModel
 import com.github.damontecres.wholphin.ui.data.ItemDetailsDialog
@@ -47,7 +48,6 @@ import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.main.HomePageContent
 import com.github.damontecres.wholphin.ui.main.HomePageHeader
 import com.github.damontecres.wholphin.ui.nav.Destination
-import com.github.damontecres.wholphin.ui.rememberPosition
 import com.github.damontecres.wholphin.util.ApiRequestPager
 import com.github.damontecres.wholphin.util.HomeRowLoadingState
 import com.github.damontecres.wholphin.util.LoadingState
@@ -88,8 +88,11 @@ abstract class RecommendedViewModel(
     private val musicService: MusicService,
     private val backdropService: BackdropService,
     private val mediaManagementService: MediaManagementService,
+    private val recommendedLibraryCacheService: RecommendedLibraryCacheService,
 ) : ViewModel() {
     abstract fun init()
+
+    abstract val libraryParentId: UUID
 
     abstract val rows: MutableStateFlow<List<HomeRowLoadingState>>
 
@@ -134,6 +137,20 @@ abstract class RecommendedViewModel(
         if (loading.value == LoadingState.Success) return
         if (!initStarted.compareAndSet(false, true)) return
         init()
+    }
+
+    fun savedFocusPosition(): RowColumn {
+        val userId = serverRepository.currentUser.value?.id ?: return RowColumn(-1, -1)
+        return recommendedLibraryCacheService.getFocusPosition(userId, libraryParentId)
+            ?: RowColumn(-1, -1)
+    }
+
+    fun saveFocusPosition(position: RowColumn) {
+        if (position.row < 0) {
+            return
+        }
+        val userId = serverRepository.currentUser.value?.id ?: return
+        recommendedLibraryCacheService.saveFocusPosition(userId, libraryParentId, position)
     }
 
     fun refreshItem(
@@ -268,7 +285,9 @@ fun RecommendedContent(
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
     val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
     val isAdministrator = currentUserDto?.policy?.isAdministrator == true
-    var position by rememberPosition()
+    var position by remember(viewModel.libraryParentId) {
+        mutableStateOf(viewModel.savedFocusPosition())
+    }
 
     LaunchedEffect(Unit) {
         viewModel.initIfNeeded()
@@ -351,6 +370,7 @@ fun RecommendedContent(
                 },
                 onFocusPosition = {
                     position = it
+                    viewModel.saveFocusPosition(it)
                     val nonEmptyRowBefore =
                         rows
                             .subList(0, it.row)
