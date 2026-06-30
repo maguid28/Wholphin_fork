@@ -10,6 +10,7 @@ import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
 import com.github.damontecres.wholphin.services.HomePageResolvedSettings
+import com.github.damontecres.wholphin.services.HomeRowConfigDisplay
 import com.github.damontecres.wholphin.services.HomeSettingsService
 import com.github.damontecres.wholphin.services.LatestNextUpService
 import com.github.damontecres.wholphin.services.MediaManagementService
@@ -22,7 +23,7 @@ import com.github.damontecres.wholphin.services.UserPreferencesService
 import com.github.damontecres.wholphin.services.deleteItem
 import com.github.damontecres.wholphin.services.tvAccess
 import com.github.damontecres.wholphin.ui.data.RowColumn
-import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
+import com.github.damontecres.wholphin.ui.HOME_PAGE_ROW_SIZE
 import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.showToast
@@ -91,34 +92,100 @@ class HomeViewModel
                             navDrawerService.getAllUserLibraries(userDto.id, userDto.tvAccess)
                         val settings =
                             homeSettingsService.currentSettings.first { it != HomePageResolvedSettings.EMPTY }
-                        val state = state.value
-
-                        // Refreshing if a load has already occurred and the rows haven't significantly changed
+                        val previousState = state.value
                         val refresh =
-                            state.loadingState == LoadingState.Success && state.settings == settings
+                            previousState.loadingState == LoadingState.Success &&
+                                previousState.settings == settings
+                        val cached =
+                            homeSettingsService.getHomePageCache(userDto.id, settings)
+                        val usedCache = cached != null && !refresh
                         Timber.v(
-                            "refresh=%s, state.loadingState=%s, %s rows",
+                            "refresh=%s, usedCache=%s, %s rows",
                             refresh,
-                            state.loadingState,
+                            usedCache,
                             settings.rows.size,
                         )
                         _state.update {
                             it.copy(
-                                loadingState = if (refresh) LoadingState.Success else LoadingState.Loading,
-                                refreshState = if (refresh) LoadingState.Loading else LoadingState.Pending,
+                                loadingState =
+                                    when {
+                                        usedCache || refresh -> LoadingState.Success
+                                        else -> LoadingState.Loading
+                                    },
+                                refreshState =
+                                    when {
+                                        usedCache || refresh -> LoadingState.Loading
+                                        else -> LoadingState.Pending
+                                    },
                                 settings = settings,
-                                mediaBannerItems = if (refresh) it.mediaBannerItems else emptyList(),
-                                mediaBannerAudienceScores = if (refresh) it.mediaBannerAudienceScores else emptyMap(),
+                                mediaBannerItems =
+                                    when {
+                                        usedCache -> cached.mediaBannerItems
+                                        refresh -> it.mediaBannerItems
+                                        else -> emptyList()
+                                    },
+                                mediaBannerAudienceScores =
+                                    when {
+                                        usedCache -> emptyMap()
+                                        refresh -> it.mediaBannerAudienceScores
+                                        else -> emptyMap()
+                                    },
                                 homeRows =
-                                    if (refresh) {
-                                        it.homeRows
-                                    } else {
-                                        settings.rows.map { row -> HomeRowLoadingState.Loading(row.title) }
+                                    when {
+                                        usedCache -> cached.homeRows
+                                        refresh -> it.homeRows
+                                        else ->
+                                            settings.rows.map { row ->
+                                                HomeRowLoadingState.Loading(row.title)
+                                            }
                                     },
                             )
                         }
 
-                        val semaphore = Semaphore(4)
+                        suspend fun fetchRow(row: HomeRowConfigDisplay): HomeRowLoadingState =
+                            try {
+                                homeSettingsService.fetchDataForRow(
+                                    row = row.config,
+                                    scope = viewModelScope,
+                                    prefs = prefs,
+                                    userDto = userDto,
+                                    libraries = libraries,
+                                    limit = HOME_PAGE_ROW_SIZE,
+                                    isRefresh = refresh || usedCache,
+                                )
+                            } catch (ex: Exception) {
+                                Timber.e(ex, "Error on row %s", row)
+                                HomeRowLoadingState.Error(row.title, exception = ex)
+                            }
+
+                        fun updateRow(
+                            rowIndex: Int,
+                            rowData: HomeRowLoadingState,
+                        ) {
+                            _state.update { current ->
+                                val newRows =
+                                    current.homeRows.toMutableList().apply {
+                                        if (rowIndex in indices) {
+                                            set(rowIndex, rowData)
+                                        }
+                                    }
+                                val firstRowReady =
+                                    rowIndex == 0 && rowData !is HomeRowLoadingState.Error
+                                current.copy(
+                                    homeRows = newRows,
+                                    loadingState =
+                                        if (
+                                            current.loadingState == LoadingState.Loading &&
+                                            firstRowReady
+                                        ) {
+                                            LoadingState.Success
+                                        } else {
+                                            current.loadingState
+                                        },
+                                )
+                            }
+                        }
+
                         val mediaBannerDeferred =
                             viewModelScope.async(Dispatchers.IO) {
                                 try {
@@ -132,74 +199,54 @@ class HomeViewModel
                                 }
                             }
 
-                        val deferred =
-                            settings.rows
-                                .map { row ->
-                                    viewModelScope.async(Dispatchers.IO) {
-                                        semaphore.withPermit {
-                                            Timber.v("Fetching row: %s", row)
-                                            try {
-                                                homeSettingsService.fetchDataForRow(
-                                                    row = row.config,
-                                                    scope = viewModelScope,
-                                                    prefs = prefs,
-                                                    userDto = userDto,
-                                                    libraries = libraries,
-                                                    limit = HOME_ROW_PAGE_SIZE,
-                                                    isRefresh = refresh,
-                                                )
-                                            } catch (ex: Exception) {
-                                                Timber.e(ex, "Error on row %s", row)
-                                                HomeRowLoadingState.Error(
-                                                    row.title,
-                                                    exception = ex,
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
+                        if (settings.rows.isNotEmpty()) {
+                            updateRow(0, fetchRow(settings.rows[0]))
+                        }
 
-                        // Replace rows as they complete so the home page becomes usable as soon as
-                        // the first row is ready instead of waiting for every home section.
-                        val remaining = deferred.withIndex().toMutableList()
-                        while (remaining.isNotEmpty()) {
-                            val (rowIndex, rowData) =
-                                select {
-                                    // "Return" the first remaining that is completed
-                                    remaining
-                                        .forEach { (rowIndex, deferred) ->
-                                            deferred.onAwait { rowIndex to it }
-                                        }
-                                }
-                            Timber.v("Got row data index=%s", rowIndex)
-                            remaining.removeIf { it.index == rowIndex }
-                            _state.update { state ->
-                                val newRows =
-                                    state.homeRows.toMutableList().apply {
-                                        if (rowIndex in indices) {
-                                            set(rowIndex, rowData)
+                        if (settings.rows.size > 1) {
+                            val semaphore = Semaphore(6)
+                            val remaining =
+                                settings.rows
+                                    .drop(1)
+                                    .mapIndexed { offset, row ->
+                                        val rowIndex = offset + 1
+                                        rowIndex to
+                                            viewModelScope.async(Dispatchers.IO) {
+                                                semaphore.withPermit {
+                                                    fetchRow(row)
+                                                }
+                                            }
+                                    }.toMutableList()
+                            while (remaining.isNotEmpty()) {
+                                val (rowIndex, rowData) =
+                                    select {
+                                        remaining.forEach { (index, deferred) ->
+                                            deferred.onAwait { index to it }
                                         }
                                     }
-                                state.copy(
-                                    homeRows = newRows,
-                                )
+                                remaining.removeIf { it.first == rowIndex }
+                                updateRow(rowIndex, rowData)
                             }
                         }
+
                         Timber.v("Got all rows")
+                        val mediaBannerItems =
+                            mediaBannerDeferred.await() ?: _state.value.mediaBannerItems
                         _state.update {
                             it.copy(
                                 loadingState = LoadingState.Success,
                                 refreshState = LoadingState.Success,
+                                mediaBannerItems = mediaBannerItems,
+                                mediaBannerAudienceScores = emptyMap(),
                             )
                         }
-
-                        mediaBannerDeferred.await()?.let { mediaBannerItems ->
-                            _state.update {
-                                it.copy(
-                                    mediaBannerItems = mediaBannerItems,
-                                    mediaBannerAudienceScores = emptyMap(),
-                                )
-                            }
+                        homeSettingsService.putHomePageCache(
+                            userId = userDto.id,
+                            settings = settings,
+                            homeRows = _state.value.homeRows,
+                            mediaBannerItems = mediaBannerItems,
+                        )
+                        if (mediaBannerItems.isNotEmpty()) {
                             loadMediaBannerAudienceScores(mediaBannerItems)
                         }
                         Timber.d("Home page load complete")
@@ -313,7 +360,7 @@ class HomeViewModel
                             prefs = prefs,
                             userDto = userDto,
                             libraries = libraries,
-                            limit = HOME_ROW_PAGE_SIZE,
+                            limit = HOME_PAGE_ROW_SIZE,
                             startIndex = currentRow.items.size,
                             isRefresh = false,
                         ) as? HomeRowLoadingState.Success

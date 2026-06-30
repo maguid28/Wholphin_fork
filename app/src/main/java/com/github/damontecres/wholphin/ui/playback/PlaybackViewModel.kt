@@ -233,6 +233,7 @@ class PlaybackViewModel
         private var currentLibraryTvProgram: LibraryTvProgram? = null
         private var pendingLibraryTvChannelIndex: Int? = null
         private var libraryTvTuneJob: Job? = null
+        private var playbackSession = 0
 
         val playlist = MutableLiveData<Playlist>(Playlist(listOf()))
         val libraryTvPlayback = MutableStateFlow<LibraryTvPlaybackInfo?>(null)
@@ -674,6 +675,7 @@ class PlaybackViewModel
             enableDirectPlay: Boolean = !this.forceTranscoding,
             enableDirectStream: Boolean = !this.forceTranscoding,
         ) = withContext(Dispatchers.IO) {
+            val session = playbackSession
             val itemId = item.id
 
             val currentPlayback = this@PlaybackViewModel.currentPlayback.value
@@ -853,6 +855,9 @@ class PlaybackViewModel
                         }
                 }
                 withContext(Dispatchers.Main) {
+                    if (session != playbackSession || currentPlayer.value == null) {
+                        return@withContext
+                    }
                     // TODO, don't need to release & recreate when switching streams
                     this@PlaybackViewModel.activityListener?.let {
                         it.release()
@@ -1697,6 +1702,7 @@ class PlaybackViewModel
 
         fun release() {
             Timber.v("release")
+            playbackSession++
             disconnectPlayer()
             activityListener = null
             screensaverService.keepScreenOn(false)

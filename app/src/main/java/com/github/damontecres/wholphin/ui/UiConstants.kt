@@ -43,6 +43,10 @@ object AppColors {
 
 const val DEFAULT_PAGE_SIZE = 100
 
+/** Initial and paginated item count for Home horizontal rows. */
+const val HOME_PAGE_ROW_SIZE = 10
+
+/** Paginated item count for non-Home horizontal rows (Movies, Shows, search, etc.). */
 const val HOME_ROW_PAGE_SIZE = 15
 
 /**

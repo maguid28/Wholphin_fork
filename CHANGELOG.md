@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Added an App Font setting under Interface with a selection of elegant Google Fonts (Inter, DM Sans, Outfit, Plus Jakarta Sans, Manrope, Poppins, Nunito Sans, and Playfair Display), plus System Default.
+- Speed up Home by fetching slimmer Jellyfin item payloads, loading row 0 before other rows, and caching the last Home snapshot in memory for 10 minutes.
+- Fixed combined Continue Watching rows showing more than 10 items and over-fetching next up when resume already filled the row.
+- Show the Home loading screen until the first row is ready, then display Home while remaining rows load.
+- Changed Home rows to show 10 items initially with a More button that loads 10 additional items per page, for faster Home loading.
+- Fixed Library TV playback crash when pressing Home or releasing the player while the playback page still reports a successful load.
 - Improved App Font so the selected typeface applies app-wide and font names in the picker are shown in their own style.
 - Fixed App Font to use bundled font files instead of Google Fonts downloads, so typefaces load reliably on Android TV.
 - Changed the default App Font to Outfit.
@@ -14,7 +18,6 @@
 - Fixed delete from long-press menus by verifying Jellyfin delete permission on a fresh item before calling the API, restoring delete visibility for admin accounts, and showing clearer messages when the server rejects deletion.
 - Fixed delete from long-press menus so Home, library, recommended, and collection lists remove the item immediately after a successful delete instead of leaving a stale entry that 404s when opened.
 - Added a full loading screen to Discover that stays visible until all category rows are ready.
-- Changed Home rows to show 15 items initially with a More button at the end of each row that loads 15 additional items.
 - Fixed Home row More button so paginated category rows (Recently added, Recently released, etc.) load additional items instead of returning an empty page and losing focus to the nav drawer.
 - Fixed Home row More button focus so selecting it stays on the same row while loading instead of jumping up to the row above.
 - Added More pagination (15 items per page) to Movies and Shows recommended tabs, box set collection rows, movie/series detail similar and season rows, person filmography rows, and search result rows for movies, shows, episodes, and collections.

@@ -161,13 +161,20 @@ fun PlaybackPage(
 
         LoadingState.Success -> {
             val playerState by viewModel.currentPlayer.collectAsState()
-            PlaybackPageContent(
-                playerState = playerState!!,
-                preferences = preferences,
-                destination = destination,
-                viewModel = viewModel,
-                modifier = modifier,
-            )
+            val readyPlayerState = playerState
+            if (readyPlayerState == null) {
+                // Player can be cleared while loading still reports Success during Library TV
+                // release/restart races (e.g. pressing Home while playback is active).
+                LoadingPage(modifier.background(Color.Black))
+            } else {
+                PlaybackPageContent(
+                    playerState = readyPlayerState,
+                    preferences = preferences,
+                    destination = destination,
+                    viewModel = viewModel,
+                    modifier = modifier,
+                )
+            }
         }
     }
 }

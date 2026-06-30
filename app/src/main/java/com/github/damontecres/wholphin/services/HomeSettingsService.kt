@@ -13,8 +13,7 @@ import com.github.damontecres.wholphin.data.model.createGenreDestination
 import com.github.damontecres.wholphin.data.model.createStudioDestination
 import com.github.damontecres.wholphin.preferences.DefaultUserConfiguration
 import com.github.damontecres.wholphin.preferences.HomePagePreferences
-import com.github.damontecres.wholphin.ui.DefaultItemFields
-import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
+import com.github.damontecres.wholphin.ui.HOME_PAGE_ROW_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.components.getGenreImageMap
 import com.github.damontecres.wholphin.ui.main.settings.Library
@@ -103,6 +102,51 @@ class HomeSettingsService
         private var mediaBannerUserId: UUID? = null
         private var mediaBannerItemsCache: List<BaseItem> = emptyList()
 
+        private data class HomePageCacheEntry(
+            val settings: HomePageResolvedSettings,
+            val homeRows: List<HomeRowLoadingState>,
+            val mediaBannerItems: List<BaseItem>,
+            val cachedAtMs: Long,
+        )
+
+        private var homePageCacheUserId: UUID? = null
+        private var homePageCache: HomePageCacheEntry? = null
+
+        fun getHomePageCache(
+            userId: UUID,
+            settings: HomePageResolvedSettings,
+        ): CachedHomePage? {
+            val entry = homePageCache ?: return null
+            if (homePageCacheUserId != userId) return null
+            if (entry.settings != settings) return null
+            if (System.currentTimeMillis() - entry.cachedAtMs > HOME_PAGE_CACHE_TTL_MS) return null
+            return CachedHomePage(
+                homeRows = entry.homeRows,
+                mediaBannerItems = entry.mediaBannerItems,
+            )
+        }
+
+        fun putHomePageCache(
+            userId: UUID,
+            settings: HomePageResolvedSettings,
+            homeRows: List<HomeRowLoadingState>,
+            mediaBannerItems: List<BaseItem>,
+        ) {
+            homePageCacheUserId = userId
+            homePageCache =
+                HomePageCacheEntry(
+                    settings = settings,
+                    homeRows = homeRows,
+                    mediaBannerItems = mediaBannerItems,
+                    cachedAtMs = System.currentTimeMillis(),
+                )
+        }
+
+        fun clearHomePageCache() {
+            homePageCacheUserId = null
+            homePageCache = null
+        }
+
         /**
          * Saves a [HomePageSettings] to the server for the user under the display preference ID
          *
@@ -116,6 +160,7 @@ class HomeSettingsService
             displayPreferencesService.updateDisplayPreferences(userId, displayPreferencesId) {
                 put(CUSTOM_PREF_ID, jsonParser.encodeToString(settings))
             }
+            clearHomePageCache()
         }
 
         /**
@@ -791,7 +836,7 @@ class HomeSettingsService
                                 includeItemTypes = listOf(itemKind),
                                 sortBy = listOf(ItemSortBy.RANDOM),
                                 limit = itemsPerLibrary,
-                                fields = DefaultItemFields,
+                                fields = homeRowItemFields,
                                 imageTypes = listOf(ImageType.BACKDROP),
                                 enableImageTypes =
                                     listOf(
@@ -910,7 +955,7 @@ class HomeSettingsService
             prefs: HomePagePreferences,
             userDto: UserDto,
             libraries: List<Library>,
-            limit: Int = HOME_ROW_PAGE_SIZE,
+            limit: Int = HOME_PAGE_ROW_SIZE,
             startIndex: Int = 0,
             isRefresh: Boolean,
             includeInactiveSeasonal: Boolean = false,
@@ -957,33 +1002,24 @@ class HomeSettingsService
                 }
 
                 is HomeRowConfig.ContinueWatchingCombined -> {
-                    val resume =
-                        latestNextUpService.getResume(
-                            userDto.id,
-                            limit,
-                            true,
-                            row.viewOptions.useSeries,
-                        )
-                    val nextUp =
-                        latestNextUpService.getNextUp(
-                            userDto.id,
-                            limit,
-                            prefs.enableRewatchingNextUp,
-                            false,
-                            prefs.maxDaysNextUp,
-                            row.viewOptions.useSeries,
+                    val (items, hasMore) =
+                        latestNextUpService.fetchCombinedContinueWatching(
+                            userId = userDto.id,
+                            limit = limit,
+                            startIndex = startIndex,
+                            includeEpisodes = true,
+                            enableRewatching = prefs.enableRewatchingNextUp,
+                            enableResumable = false,
+                            maxDays = prefs.maxDaysNextUp,
+                            useSeriesForPrimary = row.viewOptions.useSeries,
                         )
 
                     Success(
                         title = context.getString(R.string.continue_watching),
-                        items =
-                            latestNextUpService.buildCombined(
-                                resume,
-                                nextUp,
-                            ),
+                        items = items,
                         viewOptions = row.viewOptions,
                         rowType = row,
-                        hasMore = false,
+                        hasMore = hasMore,
                     )
                 }
 
@@ -1015,7 +1051,7 @@ class HomeSettingsService
                                             row.category.sortBy == ItemSortBy.PREMIERE_DATE
                                         },
                                     limit = fetchLimit,
-                                    fields = DefaultItemFields,
+                                    fields = homeRowItemFields,
                                     enableTotalRecordCount = false,
                                 )
                             val items =
@@ -1048,7 +1084,7 @@ class HomeSettingsService
                                     LocalDateTime.now().takeIf {
                                         row.category.sortBy == ItemSortBy.PREMIERE_DATE
                                     },
-                                fields = DefaultItemFields,
+                                fields = homeRowItemFields,
                             )
                         val (items, hasMore) =
                             fetchGetItemsPage(
@@ -1101,7 +1137,7 @@ class HomeSettingsService
                                                 includeItemTypes = listOf(itemKind),
                                                 genres = row.category.genres,
                                                 sortBy = listOf(ItemSortBy.RANDOM),
-                                                fields = DefaultItemFields,
+                                                fields = homeRowItemFields,
                                                 enableTotalRecordCount = false,
                                             ),
                                         )
@@ -1115,7 +1151,7 @@ class HomeSettingsService
                                                 includeItemTypes = listOf(itemKind),
                                                 searchTerm = searchTerm,
                                                 sortBy = listOf(ItemSortBy.RANDOM),
-                                                fields = DefaultItemFields,
+                                                fields = homeRowItemFields,
                                                 enableTotalRecordCount = false,
                                             ),
                                         )
@@ -1280,7 +1316,7 @@ class HomeSettingsService
                                 parentId = row.parentId,
                                 sortBy = listOf(ItemSortBy.DATE_CREATED),
                                 sortOrder = listOf(SortOrder.DESCENDING),
-                                fields = DefaultItemFields,
+                                fields = homeRowItemFields,
                                 recursive = true,
                                 includeItemTypes = listOf(itemKind),
                             )
@@ -1337,7 +1373,7 @@ class HomeSettingsService
                             parentId = row.parentId,
                             sortBy = listOf(ItemSortBy.PREMIERE_DATE),
                             sortOrder = listOf(SortOrder.DESCENDING),
-                            fields = DefaultItemFields,
+                            fields = homeRowItemFields,
                             recursive = true,
                         )
                     val (items, hasMore) =
@@ -1364,7 +1400,7 @@ class HomeSettingsService
                             recursive = row.recursive,
                             sortBy = row.sort?.let { listOf(it.sort) },
                             sortOrder = row.sort?.let { listOf(it.direction) },
-                            fields = DefaultItemFields,
+                            fields = homeRowItemFields,
                         )
                     val (items, hasMore) =
                         fetchGetItemsPage(
@@ -1426,7 +1462,7 @@ class HomeSettingsService
                             GetPersonsRequest(
                                 userId = userDto.id,
                                 limit = limit,
-                                fields = DefaultItemFields,
+                                fields = homeRowItemFields,
                                 isFavorite = true,
                                 enableImages = true,
                                 enableImageTypes = listOf(ImageType.PRIMARY),
@@ -1447,7 +1483,7 @@ class HomeSettingsService
                             GetItemsRequest(
                                 userId = userDto.id,
                                 recursive = true,
-                                fields = DefaultItemFields,
+                                fields = homeRowItemFields,
                                 includeItemTypes = listOf(row.kind),
                                 isFavorite = true,
                             )
@@ -1473,7 +1509,7 @@ class HomeSettingsService
                         GetRecordingsRequest(
                             userId = userDto.id,
                             isInProgress = true,
-                            fields = DefaultItemFields,
+                            fields = homeRowItemFields,
                             limit = limit,
                             enableImages = true,
                             enableUserData = true,
@@ -1496,7 +1532,7 @@ class HomeSettingsService
                     val request =
                         GetRecommendedProgramsRequest(
                             userId = userDto.id,
-                            fields = DefaultItemFields,
+                            fields = homeRowItemFields,
                             limit = limit,
                             enableUserData = true,
                             enableImages = true,
@@ -1521,7 +1557,7 @@ class HomeSettingsService
                     api.liveTvApi
                         .getLiveTvChannels(
                             userId = userDto.id,
-                            fields = DefaultItemFields,
+                            fields = homeRowItemFields,
                             limit = limit,
                             enableImages = true,
                         ).toBaseItems(api, row.viewOptions.useSeries)
@@ -1605,8 +1641,10 @@ class HomeSettingsService
 
         companion object {
             const val CUSTOM_PREF_ID = "home_settings"
-            private const val ROTATING_CATEGORY_POOL_MULTIPLIER = 5
-            private const val ROTATING_CATEGORY_MIN_POOL_SIZE = 50
+            private const val ROTATING_CATEGORY_POOL_MULTIPLIER = 3
+            private const val ROTATING_CATEGORY_MIN_POOL_SIZE = 20
+            private const val HOME_PAGE_CACHE_TTL_MS = 10 * 60 * 1000L
+            private val homeRowItemFields = SlimItemFields
         }
     }
 
@@ -1617,6 +1655,11 @@ data class HomeRowConfigDisplay(
     val id: Int,
     val title: String,
     val config: HomeRowConfig,
+)
+
+data class CachedHomePage(
+    val homeRows: List<HomeRowLoadingState>,
+    val mediaBannerItems: List<BaseItem>,
 )
 
 /**

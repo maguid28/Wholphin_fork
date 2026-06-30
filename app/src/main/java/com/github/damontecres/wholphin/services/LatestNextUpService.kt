@@ -229,6 +229,65 @@ class LatestNextUpService
         }
 
         /**
+         * Build a capped Continue Watching row that merges resume and next up without
+         * over-fetching next up when resume already fills the row.
+         */
+        suspend fun fetchCombinedContinueWatching(
+            userId: UUID,
+            limit: Int,
+            startIndex: Int,
+            includeEpisodes: Boolean,
+            enableRewatching: Boolean,
+            enableResumable: Boolean,
+            maxDays: Int,
+            useSeriesForPrimary: Boolean = true,
+        ): Pair<List<BaseItem>, Boolean> {
+            if (startIndex > 0) {
+                return getResumePage(
+                    userId = userId,
+                    limit = limit,
+                    startIndex = startIndex,
+                    includeEpisodes = includeEpisodes,
+                    useSeriesForPrimary = useSeriesForPrimary,
+                )
+            }
+
+            val resume =
+                getResume(
+                    userId = userId,
+                    limit = limit,
+                    includeEpisodes = includeEpisodes,
+                    useSeriesForPrimary = useSeriesForPrimary,
+                )
+            if (resume.size >= limit) {
+                return resume.take(limit) to true
+            }
+
+            val remaining = limit - resume.size
+            if (remaining <= 0) {
+                return resume to false
+            }
+
+            val nextUp =
+                getNextUp(
+                    userId = userId,
+                    limit = remaining,
+                    enableRewatching = enableRewatching,
+                    enableResumable = enableResumable,
+                    maxDays = maxDays,
+                    useSeriesForPrimary = useSeriesForPrimary,
+                )
+            val items =
+                if (nextUp.isEmpty()) {
+                    resume
+                } else {
+                    buildCombined(resume, nextUp).take(limit)
+                }
+            // Paginate via resume only so load-more offsets stay aligned with Jellyfin.
+            return items to (resume.size >= limit)
+        }
+
+        /**
          * Create the combined Continue Watching & Next Up items
          *
          * @see [DatePlayedService]
