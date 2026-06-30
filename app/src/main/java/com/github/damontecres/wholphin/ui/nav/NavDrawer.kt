@@ -424,17 +424,17 @@ fun NavDrawer(
         ),
     content: @Composable (
         onHomeBannerShown: () -> Unit,
-        takeHomeFocus: Boolean,
-        suppressHomeContentScroll: () -> Boolean,
+        takeContentFocus: (Destination) -> Boolean,
+        suppressContentScroll: () -> Boolean,
     ) -> Unit =
-        { onHomeBannerShown, takeHomeFocus, suppressHomeContentScroll ->
+        { onHomeBannerShown, takeContentFocus, suppressContentScroll ->
             DestinationContent(
                 destination = destination,
                 preferences = preferences,
                 onClearBackdrop = onClearBackdrop,
                 onHomeBannerShown = onHomeBannerShown,
-                takeHomeFocus = takeHomeFocus,
-                suppressHomeContentScroll = suppressHomeContentScroll,
+                takeContentFocus = takeContentFocus(destination),
+                suppressContentScroll = suppressContentScroll,
                 modifier =
                     Modifier
                         .fillMaxSize()
@@ -515,7 +515,17 @@ fun NavDrawer(
                         repeat(20) { attempt ->
                             delay(50)
                             if (contentHasFocus) {
-                                return@launch
+                                // Content briefly gains focus during handoff, then the drawer can
+                                // steal it back via restoreDrawerEntryFocus. Wait for focus to stick.
+                                repeat(5) {
+                                    withFrameNanos { }
+                                    if (!contentHasFocus) {
+                                        return@repeat
+                                    }
+                                }
+                                if (contentHasFocus) {
+                                    return@launch
+                                }
                             }
                             val moved = focusManager.moveFocus(FocusDirection.Right)
                             Timber.v(
@@ -530,10 +540,9 @@ fun NavDrawer(
                             Timber.w("Timed out handing drawer focus to content")
                         }
                     } finally {
-                        enteringContent = false
-                        // Keep suppressing briefly so the bring-into-view animation triggered by
-                        // the focus handoff completes without re-anchoring the content.
+                        // Keep suppressing and block drawer focus restore until the handoff settles.
                         delay(ContentScrollSuppressLingerMillis)
+                        enteringContent = false
                         suppressContentScrollState.value = false
                     }
                 }
@@ -640,6 +649,7 @@ fun NavDrawer(
         },
         drawerState = drawerState,
         retainOpenOnFocusLoss = retainOpenForPreview,
+        allowDrawerFocusRestore = !enteringContent,
         drawerEntryFocusRequester =
             previewFocusRequester
                 ?: drawerListFallbackFocusRequester,
@@ -930,7 +940,7 @@ fun NavDrawer(
             ) {
                 content(
                     closeForHomeBanner,
-                    !drawerState.isOpen,
+                    { it == destination && !drawerState.isOpen },
                     suppressContentScrollProvider,
                 )
             }

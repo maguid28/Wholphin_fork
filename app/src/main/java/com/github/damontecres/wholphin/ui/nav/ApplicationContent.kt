@@ -145,7 +145,7 @@ fun ApplicationContent(
                 onManualNavigation = { keepDrawerOpenForPreview = false },
                 onClearBackdrop = viewModel::clearBackdrop,
                 modifier = Modifier.fillMaxSize(),
-            ) { onHomeBannerShown, takeHomeFocus, suppressHomeContentScroll ->
+            ) { onHomeBannerShown, takeContentFocus, suppressContentScroll ->
                 NavDisplay(
                     backStack = navigationManager.backStack,
                     onBack = { navigationManager.goBack() },
@@ -170,8 +170,8 @@ fun ApplicationContent(
                                     preferences = preferences,
                                     onClearBackdrop = viewModel::clearBackdrop,
                                     onHomeBannerShown = onHomeBannerShown,
-                                    takeHomeFocus = takeHomeFocus,
-                                    suppressHomeContentScroll = suppressHomeContentScroll,
+                                    takeContentFocus = takeContentFocus(key),
+                                    suppressContentScroll = suppressContentScroll,
                                     libraryTvPlaybackViewModel = libraryTvPipViewModel,
                                     modifier = Modifier.fillMaxSize(),
                                 )

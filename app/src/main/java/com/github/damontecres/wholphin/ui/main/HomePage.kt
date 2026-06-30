@@ -398,6 +398,25 @@ fun HomePageContent(
     // the very first navigation scrolls normally instead of being swallowed.
     var contentScrollSuppressed by remember { mutableStateOf(false) }
 
+    fun savedFocusRowIndex(): Int? {
+        val liveRow = liveFocusedRow.intValue.takeIf { it >= 0 }
+        val savedRow =
+            position.row.takeIf {
+                val saved = homeRows.getOrNull(it) as? HomeRowLoadingState.Success
+                saved?.items?.isNotEmpty() == true
+            }
+        return liveRow ?: savedRow ?: firstFocusableRowIndex
+    }
+
+    suspend fun restoreFocusedHomeRow(debugTag: String) {
+        val targetRowIndex = savedFocusRowIndex() ?: return
+        listState.scrollToItem(targetRowIndex)
+        delay(50)
+        if (rowFocusRequesters.getOrNull(targetRowIndex)?.tryRequestFocus(debugTag) == true) {
+            firstFocused = true
+        }
+    }
+
     LaunchedEffect(takeFocus) {
         if (!takeFocus) {
             firstFocused = false
@@ -418,48 +437,21 @@ fun HomePageContent(
             .collect { suppressing ->
                 if (suppressing) {
                     contentScrollSuppressed = true
-                    val targetRow = liveFocusedRow.intValue
-                    if (targetRow >= 0) {
-                        // Request focus on the row the user left immediately. The drawer's handoff
-                        // waits ~50ms before its first spatial moveFocus(Right) and skips it once the
-                        // content already has focus, so grabbing focus here both lands on the correct
-                        // row and prevents the wrong spatial landing.
-                        rowFocusRequesters
-                            .getOrNull(targetRow)
-                            ?.tryRequestFocus("drawer_return_row")
-                    }
+                    restoreFocusedHomeRow("drawer_return_row")
                 }
             }
     }
 
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
-    val focusedPositionJob = remember { arrayOfNulls<Job>(1) }
     fun scheduleFocusedPosition(rowColumn: RowColumn) {
-        focusedPositionJob[0]?.cancel()
-        focusedPositionJob[0] =
-            coroutineScope.launch {
-                delay(HomeFocusSettleDelayMillis)
-                currentOnFocusPosition(rowColumn)
-            }
+        currentOnFocusPosition(rowColumn)
     }
 
     if (takeFocus) {
-        LaunchedEffect(homeRows, position) {
+        LaunchedEffect(homeRows, position, liveFocusedRow.intValue) {
             if (!firstFocused && homeRows.isNotEmpty()) {
-                val savedRowIndex =
-                    position
-                        .row
-                        .takeIf {
-                            val savedRow = homeRows.getOrNull(it) as? HomeRowLoadingState.Success
-                            savedRow?.items?.isNotEmpty() == true
-                        }
-                val targetRowIndex = savedRowIndex ?: firstFocusableRowIndex
-                targetRowIndex?.let { rowIndex ->
-                    listState.scrollToItem(rowIndex)
-                    rowFocusRequesters.getOrNull(rowIndex)?.tryRequestFocus("home_initial_row")
-                    firstFocused = true
-                }
+                restoreFocusedHomeRow("home_initial_row")
             }
         }
     }
@@ -502,7 +494,6 @@ fun HomePageContent(
     DisposableEffect(Unit) {
         onDispose {
             idleBannerJob[0]?.cancel()
-            focusedPositionJob[0]?.cancel()
         }
     }
     Box(

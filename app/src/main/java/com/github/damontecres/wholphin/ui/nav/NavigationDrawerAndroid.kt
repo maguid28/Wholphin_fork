@@ -72,6 +72,7 @@ fun ModalNavigationDrawer(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = rememberDrawerState(DrawerValue.Closed),
     retainOpenOnFocusLoss: Boolean = false,
+    allowDrawerFocusRestore: Boolean = true,
     drawerEntryFocusRequester: FocusRequester? = null,
     content: @Composable () -> Unit,
 ) {
@@ -83,6 +84,7 @@ fun ModalNavigationDrawer(
                     .padding(start = DrawerStartInset),
             drawerState = drawerState,
             retainOpenOnFocusLoss = retainOpenOnFocusLoss,
+            allowDrawerFocusRestore = allowDrawerFocusRestore,
             drawerEntryFocusRequester = drawerEntryFocusRequester,
             content = drawerContent,
         )
@@ -96,6 +98,7 @@ private fun DrawerSheet(
     modifier: Modifier = Modifier,
     drawerState: DrawerState = remember { DrawerState() },
     retainOpenOnFocusLoss: Boolean = false,
+    allowDrawerFocusRestore: Boolean = true,
     drawerEntryFocusRequester: FocusRequester? = null,
     content: @Composable NavigationDrawerScope.(DrawerValue) -> Unit,
 ) {
@@ -105,9 +108,14 @@ private fun DrawerSheet(
     var focusState by remember { mutableStateOf<FocusState?>(null) }
     val focusRequester = remember { FocusRequester() }
     val currentDrawerEntryFocusRequester by rememberUpdatedState(drawerEntryFocusRequester)
+    val currentAllowDrawerFocusRestore by rememberUpdatedState(allowDrawerFocusRestore)
 
-    fun restoreDrawerEntryFocus(): Boolean =
-        currentDrawerEntryFocusRequester?.tryRequestFocus("nav_drawer_entry") == true
+    fun restoreDrawerEntryFocus(): Boolean {
+        if (!currentAllowDrawerFocusRestore) {
+            return false
+        }
+        return currentDrawerEntryFocusRequester?.tryRequestFocus("nav_drawer_entry") == true
+    }
 
     LaunchedEffect(drawerState.currentValue, retainOpenOnFocusLoss, initializationComplete) {
         if (!initializationComplete) {

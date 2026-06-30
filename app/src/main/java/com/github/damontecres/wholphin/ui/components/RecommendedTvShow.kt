@@ -372,6 +372,8 @@ fun RecommendedTvShow(
     parentId: UUID,
     onFocusPosition: (RowColumn) -> Unit,
     modifier: Modifier = Modifier,
+    takeFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     viewModel: RecommendedTvShowViewModel =
         hiltViewModel<RecommendedTvShowViewModel, RecommendedTvShowViewModel.Factory>(
             viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
@@ -383,6 +385,8 @@ fun RecommendedTvShow(
         preferences = preferences,
         viewModel = viewModel,
         onFocusPosition = onFocusPosition,
+        takeFocus = takeFocus,
+        suppressContentScroll = suppressContentScroll,
         modifier = modifier,
     )
 }

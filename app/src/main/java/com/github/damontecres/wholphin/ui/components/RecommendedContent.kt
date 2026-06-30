@@ -259,6 +259,8 @@ fun RecommendedContent(
     playlistViewModel: AddPlaylistViewModel = hiltViewModel(),
     metadataRematchViewModel: MetadataRematchViewModel = hiltViewModel(),
     onFocusPosition: ((RowColumn) -> Unit)? = null,
+    takeFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
 ) {
     var showContextMenu by remember { mutableStateOf<ContextMenu?>(null) }
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
@@ -266,11 +268,12 @@ fun RecommendedContent(
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
     val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
     val isAdministrator = currentUserDto?.policy?.isAdministrator == true
+    var position by rememberPosition()
 
     LaunchedEffect(Unit) {
         viewModel.initIfNeeded()
     }
-    val loading by viewModel.loading.observeAsState(LoadingState.Loading)
+    val loading by viewModel.loading.observeAsState(viewModel.loading.value ?: LoadingState.Loading)
     val rows by viewModel.rows.collectAsState()
     val showContent = loading == LoadingState.Success
 
@@ -284,7 +287,6 @@ fun RecommendedContent(
         }
 
         else -> {
-            var position by rememberPosition()
             fun contextActionsFor(rowColumn: RowColumn) =
                 ContextMenuActions(
                     navigateTo = viewModel.navigationManager::navigateTo,
@@ -365,6 +367,8 @@ fun RecommendedContent(
                 onUpdateBackdrop = viewModel::updateBackdrop,
                 onLoadMoreRow = viewModel::loadMoreRow,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                takeFocus = takeFocus,
+                suppressContentScroll = suppressContentScroll,
                 modifier = modifier,
                 headerComposable = { focusedItem ->
                     HomePageHeader(

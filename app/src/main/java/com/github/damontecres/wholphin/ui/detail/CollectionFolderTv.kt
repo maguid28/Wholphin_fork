@@ -35,7 +35,6 @@ import com.github.damontecres.wholphin.ui.data.SeriesSortOptions
 import com.github.damontecres.wholphin.ui.logTab
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.preferences.PreferencesViewModel
-import com.github.damontecres.wholphin.ui.tryRequestFocus
 import org.jellyfin.sdk.model.api.BaseItemKind
 
 @Composable
@@ -43,6 +42,8 @@ fun CollectionFolderTv(
     preferences: UserPreferences,
     destination: Destination.MediaItem,
     modifier: Modifier = Modifier,
+    takeContentFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     preferencesViewModel: PreferencesViewModel = hiltViewModel(),
 ) {
     val rememberedTabIndex =
@@ -64,7 +65,6 @@ fun CollectionFolderTv(
     val tabFocusRequesters = remember(tabs) { tabs.map { tabFocusRequesterById.getValue(it.id) } }
 
     val firstTabFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstTabFocusRequester.tryRequestFocus() }
 
     LaunchedEffect(savedTabOrder) {
         val ordered = orderedLibraryTabs(DefaultTvLibraryTabs, savedTabOrder)
@@ -115,6 +115,8 @@ fun CollectionFolderTv(
                     onFocusPosition = { pos ->
                         showHeader = pos.row < 1
                     },
+                    takeFocus = takeContentFocus,
+                    suppressContentScroll = suppressContentScroll,
                     modifier =
                         Modifier
                             .fillMaxSize()

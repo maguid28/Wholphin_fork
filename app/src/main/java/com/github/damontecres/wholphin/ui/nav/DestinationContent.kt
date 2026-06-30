@@ -65,8 +65,8 @@ fun DestinationContent(
     onClearBackdrop: () -> Unit,
     modifier: Modifier = Modifier,
     onHomeBannerShown: () -> Unit = {},
-    takeHomeFocus: Boolean = true,
-    suppressHomeContentScroll: () -> Boolean = { false },
+    takeContentFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     libraryTvPlaybackViewModel: PlaybackViewModel? = null,
 ) {
     if (destination.fullScreen) {
@@ -77,8 +77,8 @@ fun DestinationContent(
             HomePage(
                 preferences = preferences,
                 onBannerShown = onHomeBannerShown,
-                takeFocus = takeHomeFocus,
-                suppressContentScroll = suppressHomeContentScroll,
+                takeFocus = takeContentFocus,
+                suppressContentScroll = suppressContentScroll,
                 modifier = modifier,
             )
         }
@@ -202,6 +202,8 @@ fun DestinationContent(
                         collectionType = destination.collectionType,
                         usePostersOverride = null,
                         recursiveOverride = null,
+                        takeContentFocus = takeContentFocus,
+                        suppressContentScroll = suppressContentScroll,
                         modifier = modifier,
                     )
                 }
@@ -214,6 +216,8 @@ fun DestinationContent(
                         collectionType = destination.collectionType,
                         usePostersOverride = true,
                         recursiveOverride = null,
+                        takeContentFocus = takeContentFocus,
+                        suppressContentScroll = suppressContentScroll,
                         modifier = modifier,
                     )
                 }
@@ -226,6 +230,8 @@ fun DestinationContent(
                         collectionType = destination.collectionType,
                         usePostersOverride = null,
                         recursiveOverride = true,
+                        takeContentFocus = takeContentFocus,
+                        suppressContentScroll = suppressContentScroll,
                         modifier = modifier,
                     )
                 }
@@ -360,7 +366,7 @@ fun DestinationContent(
             LaunchedEffect(Unit) { onClearBackdrop.invoke() }
             LibraryTvPage(
                 preferences = preferences,
-                restoreFocusOnDrawerReturn = suppressHomeContentScroll,
+                restoreFocusOnDrawerReturn = suppressContentScroll,
                 pipPlaybackViewModel = libraryTvPlaybackViewModel,
                 modifier = modifier,
             )
@@ -426,21 +432,27 @@ fun CollectionFolder(
     usePostersOverride: Boolean?,
     recursiveOverride: Boolean?,
     modifier: Modifier = Modifier,
+    takeContentFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
 ) {
     when (collectionType) {
         CollectionType.TVSHOWS -> {
             CollectionFolderTv(
-                preferences,
-                destination,
-                modifier,
+                preferences = preferences,
+                destination = destination,
+                takeContentFocus = takeContentFocus,
+                suppressContentScroll = suppressContentScroll,
+                modifier = modifier,
             )
         }
 
         CollectionType.MOVIES -> {
             CollectionFolderMovie(
-                preferences,
-                destination,
-                modifier,
+                preferences = preferences,
+                destination = destination,
+                takeContentFocus = takeContentFocus,
+                suppressContentScroll = suppressContentScroll,
+                modifier = modifier,
             )
         }
 

@@ -42,6 +42,8 @@ fun CollectionFolderMovie(
     preferences: UserPreferences,
     destination: Destination.MediaItem,
     modifier: Modifier = Modifier,
+    takeContentFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     preferencesViewModel: PreferencesViewModel = hiltViewModel(),
 ) {
     val rememberedTabIndex =
@@ -114,6 +116,8 @@ fun CollectionFolderMovie(
                     onFocusPosition = { pos ->
                         showHeader = pos.row < 1
                     },
+                    takeFocus = takeContentFocus,
+                    suppressContentScroll = suppressContentScroll,
                     modifier =
                         Modifier
                             .fillMaxSize()

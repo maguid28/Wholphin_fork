@@ -287,6 +287,8 @@ fun RecommendedMovie(
     parentId: UUID,
     onFocusPosition: (RowColumn) -> Unit,
     modifier: Modifier = Modifier,
+    takeFocus: Boolean = true,
+    suppressContentScroll: () -> Boolean = { false },
     viewModel: RecommendedMovieViewModel =
         hiltViewModel<RecommendedMovieViewModel, RecommendedMovieViewModel.Factory>(
             viewModelStoreOwner = checkNotNull(LocalView.current.findViewTreeViewModelStoreOwner()),
@@ -298,6 +300,8 @@ fun RecommendedMovie(
         preferences = preferences,
         viewModel = viewModel,
         onFocusPosition = onFocusPosition,
+        takeFocus = takeFocus,
+        suppressContentScroll = suppressContentScroll,
         modifier = modifier,
     )
 }
