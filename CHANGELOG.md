@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Speed up Movies and TV Shows recommended tabs with slimmer Jellyfin payloads, 10-item rows, row-0-first loading, and a 10-minute in-memory cache per library.
+- Show the Movies and TV Shows recommended loading screen until the first row is ready, then display content while remaining rows load.
+- Fixed combined Continue Watching on TV Shows recommended when merge-with-next-up is enabled, capping the row at 10 items and scoping resume/next-up to the library.
 - Speed up Home by fetching slimmer Jellyfin item payloads, loading row 0 before other rows, and caching the last Home snapshot in memory for 10 minutes.
 - Fixed combined Continue Watching rows showing more than 10 items and over-fetching next up when resume already filled the row.
 - Show the Home loading screen until the first row is ready, then display Home while remaining rows load.

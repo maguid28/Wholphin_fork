@@ -21,10 +21,11 @@ import com.github.damontecres.wholphin.services.MediaManagementService
 import com.github.damontecres.wholphin.services.MediaReportService
 import com.github.damontecres.wholphin.services.MusicService
 import com.github.damontecres.wholphin.services.NavigationManager
+import com.github.damontecres.wholphin.services.RecommendedLibraryCacheService
 import com.github.damontecres.wholphin.services.RecommendedRowPagingService
 import com.github.damontecres.wholphin.services.SuggestionService
 import com.github.damontecres.wholphin.services.SuggestionsResource
-import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
+import com.github.damontecres.wholphin.ui.HOME_PAGE_ROW_SIZE
 import com.github.damontecres.wholphin.ui.data.RowColumn
 import com.github.damontecres.wholphin.ui.setValueOnMain
 import com.github.damontecres.wholphin.util.ExceptionHandler
@@ -37,13 +38,14 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -60,6 +62,7 @@ class RecommendedTvShowViewModel
         serverRepository: ServerRepository,
         private val preferencesDataStore: DataStore<AppPreferences>,
         private val latestNextUpService: LatestNextUpService,
+        private val recommendedLibraryCacheService: RecommendedLibraryCacheService,
         private val recommendedRowPagingService: RecommendedRowPagingService,
         private val suggestionService: SuggestionService,
         @Assisted val parentId: UUID,
@@ -88,6 +91,7 @@ class RecommendedTvShowViewModel
         private var combineContinueNext = false
         private var enableRewatchingNextUp = false
         private var maxDaysNextUp = 0
+        private var cachedUserId: UUID? = null
 
         override val rows =
             MutableStateFlow<List<HomeRowLoadingState>>(
@@ -101,24 +105,51 @@ class RecommendedTvShowViewModel
         override suspend fun fetchMoreForRow(
             kind: PaginatedRowKind,
             startIndex: Int,
-        ): Pair<List<BaseItem>, Boolean>? =
-            when (kind) {
+        ): Pair<List<BaseItem>, Boolean>? {
+            val userId = serverRepository.currentUser.value?.id ?: return null
+            return when (kind) {
                 PaginatedRowKind.SUGGESTIONS -> {
-                    val next = suggestionItems.drop(startIndex).take(HOME_ROW_PAGE_SIZE)
+                    val next = suggestionItems.drop(startIndex).take(HOME_PAGE_ROW_SIZE)
                     next to (startIndex + next.size < suggestionItems.size)
                 }
+
+                PaginatedRowKind.RESUME ->
+                    if (combineContinueNext) {
+                        latestNextUpService.fetchCombinedContinueWatching(
+                            userId = userId,
+                            limit = HOME_PAGE_ROW_SIZE,
+                            startIndex = startIndex,
+                            includeEpisodes = true,
+                            enableRewatching = enableRewatchingNextUp,
+                            enableResumable = false,
+                            maxDays = maxDaysNextUp,
+                            useSeriesForPrimary = true,
+                            parentId = parentId,
+                        )
+                    } else {
+                        recommendedRowPagingService.fetchTvRowPage(
+                            kind = kind,
+                            parentId = parentId,
+                            userId = userId,
+                            startIndex = startIndex,
+                            combineContinueNext = false,
+                            enableRewatchingNextUp = enableRewatchingNextUp,
+                            maxDaysNextUp = maxDaysNextUp,
+                        )
+                    }
 
                 else ->
                     recommendedRowPagingService.fetchTvRowPage(
                         kind = kind,
                         parentId = parentId,
-                        userId = serverRepository.currentUser.value?.id,
+                        userId = userId,
                         startIndex = startIndex,
                         combineContinueNext = combineContinueNext,
                         enableRewatchingNextUp = enableRewatchingNextUp,
                         maxDaysNextUp = maxDaysNextUp,
                     )
             }
+        }
 
         override fun init() {
             viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {
@@ -128,9 +159,52 @@ class RecommendedTvShowViewModel
                 enableRewatchingNextUp = preferences.homePagePreferences.enableRewatchingNextUp
                 maxDaysNextUp = preferences.homePagePreferences.maxDaysNextUp
                 val userId = serverRepository.currentUser.value?.id
+                if (userId == null) {
+                    withContext(Dispatchers.Main) {
+                        loading.value = LoadingState.Error(IllegalStateException("No current user"))
+                    }
+                    return@launch
+                }
+
+                recommendedLibraryCacheService.get(userId, parentId)?.let { cachedRows ->
+                    cachedUserId = userId
+                    rows.value = cachedRows
+                    loading.setValueOnMain(LoadingState.Success)
+                    launchSuggestions()
+                    return@launch
+                }
+
+                cachedUserId = userId
+
                 try {
-                    val resumeItemsDeferred =
-                        async(Dispatchers.IO) {
+                    if (combineContinueNext) {
+                        val (combined, hasMore) =
+                            latestNextUpService.fetchCombinedContinueWatching(
+                                userId = userId,
+                                limit = HOME_PAGE_ROW_SIZE,
+                                startIndex = 0,
+                                includeEpisodes = true,
+                                enableRewatching = enableRewatchingNextUp,
+                                enableResumable = false,
+                                maxDays = maxDaysNextUp,
+                                useSeriesForPrimary = true,
+                                parentId = parentId,
+                            )
+                        update(
+                            R.string.continue_watching,
+                            HomeRowLoadingState.Success(
+                                context.getString(R.string.continue_watching),
+                                combined,
+                                paginationKind = PaginatedRowKind.RESUME,
+                                hasMore = hasMore,
+                            ),
+                        )
+                        update(
+                            R.string.next_up,
+                            HomeRowLoadingState.Success(context.getString(R.string.next_up), listOf()),
+                        )
+                    } else {
+                        val (resumeItems, resumeHasMore) =
                             recommendedRowPagingService.fetchTvRowPage(
                                 kind = PaginatedRowKind.RESUME,
                                 parentId = parentId,
@@ -140,38 +214,6 @@ class RecommendedTvShowViewModel
                                 enableRewatchingNextUp = enableRewatchingNextUp,
                                 maxDaysNextUp = maxDaysNextUp,
                             ) ?: (emptyList<BaseItem>() to false)
-                        }
-
-                    val nextUpItemsDeferred =
-                        async(Dispatchers.IO) {
-                            recommendedRowPagingService.fetchTvRowPage(
-                                kind = PaginatedRowKind.NEXT_UP,
-                                parentId = parentId,
-                                userId = userId,
-                                startIndex = 0,
-                                combineContinueNext = false,
-                                enableRewatchingNextUp = enableRewatchingNextUp,
-                                maxDaysNextUp = maxDaysNextUp,
-                            ) ?: (emptyList<BaseItem>() to false)
-                        }
-
-                    val (resumeItems, resumeHasMore) = resumeItemsDeferred.await()
-                    val (nextUpItems, nextUpHasMore) = nextUpItemsDeferred.await()
-
-                    if (combineContinueNext) {
-                        val combined = latestNextUpService.buildCombined(resumeItems, nextUpItems)
-                        update(
-                            R.string.continue_watching,
-                            HomeRowLoadingState.Success(
-                                context.getString(R.string.continue_watching),
-                                combined,
-                            ),
-                        )
-                        update(
-                            R.string.next_up,
-                            HomeRowLoadingState.Success(context.getString(R.string.next_up), listOf()),
-                        )
-                    } else {
                         update(
                             R.string.continue_watching,
                             HomeRowLoadingState.Success(
@@ -181,119 +223,117 @@ class RecommendedTvShowViewModel
                                 hasMore = resumeHasMore,
                             ),
                         )
-                        update(
-                            R.string.next_up,
-                            HomeRowLoadingState.Success(
-                                context.getString(R.string.next_up),
-                                nextUpItems,
-                                paginationKind = PaginatedRowKind.NEXT_UP,
-                                hasMore = nextUpHasMore,
-                            ),
-                        )
                     }
+                    loading.setValueOnMain(LoadingState.Success)
 
-                    if (resumeItems.isNotEmpty() || nextUpItems.isNotEmpty()) {
-                        loading.setValueOnMain(LoadingState.Success)
-                    }
+                    val semaphore = Semaphore(6)
+                    val remainingRows =
+                        buildList {
+                            if (!combineContinueNext) {
+                                add(R.string.next_up to PaginatedRowKind.NEXT_UP)
+                            }
+                            add(R.string.recently_released to PaginatedRowKind.RECENTLY_RELEASED)
+                            add(R.string.recently_added to PaginatedRowKind.RECENTLY_ADDED)
+                            add(R.string.top_unwatched to PaginatedRowKind.TOP_UNWATCHED)
+                        }
+                    remainingRows
+                        .map { (title, kind) ->
+                            async(Dispatchers.IO) {
+                                semaphore.withPermit {
+                                    loadPaginatedRowSync(title, kind)
+                                }
+                            }
+                        }.forEach { it.await() }
+
+                    launchSuggestions()
+
+                    cacheCurrentRows()
                 } catch (ex: Exception) {
                     Timber.e(ex, "Exception fetching tv recommendations")
                     withContext(Dispatchers.Main) {
                         loading.value = LoadingState.Error(ex)
                     }
                 }
+            }
+        }
 
-                val jobs = mutableListOf<Deferred<HomeRowLoadingState>>()
-                loadPaginatedRow(R.string.recently_released, PaginatedRowKind.RECENTLY_RELEASED).also(jobs::add)
-                loadPaginatedRow(R.string.recently_added, PaginatedRowKind.RECENTLY_ADDED).also(jobs::add)
-                loadPaginatedRow(R.string.top_unwatched, PaginatedRowKind.TOP_UNWATCHED).also(jobs::add)
-
-                viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        suggestionService
-                            .getSuggestionsFlow(parentId, BaseItemKind.SERIES)
-                            .collect { resource ->
-                                val state =
-                                    when (resource) {
-                                        is SuggestionsResource.Loading -> {
-                                            HomeRowLoadingState.Loading(
-                                                context.getString(R.string.suggestions),
-                                            )
-                                        }
-
-                                        is SuggestionsResource.Success -> {
-                                            suggestionItems = resource.items
-                                            val items = resource.items.take(HOME_ROW_PAGE_SIZE)
-                                            HomeRowLoadingState.Success(
-                                                context.getString(R.string.suggestions),
-                                                items,
-                                                paginationKind = PaginatedRowKind.SUGGESTIONS,
-                                                hasMore = resource.items.size > HOME_ROW_PAGE_SIZE,
-                                            )
-                                        }
-
-                                        is SuggestionsResource.Empty -> {
-                                            suggestionItems = emptyList()
-                                            HomeRowLoadingState.Success(
-                                                context.getString(R.string.suggestions),
-                                                emptyList(),
-                                            )
-                                        }
+        private fun launchSuggestions() {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    suggestionService
+                        .getSuggestionsFlow(parentId, BaseItemKind.SERIES)
+                        .collect { resource ->
+                            val state =
+                                when (resource) {
+                                    is SuggestionsResource.Loading -> {
+                                        HomeRowLoadingState.Loading(
+                                            context.getString(R.string.suggestions),
+                                        )
                                     }
-                                update(R.string.suggestions, state)
-                            }
-                    } catch (ex: CancellationException) {
-                        throw ex
-                    } catch (ex: Exception) {
-                        Timber.e(ex, "Failed to fetch suggestions")
-                        update(
-                            R.string.suggestions,
-                            HomeRowLoadingState.Error(
-                                title = context.getString(R.string.suggestions),
-                                exception = ex,
-                            ),
-                        )
-                    }
-                }
 
-                if (loading.value == LoadingState.Loading || loading.value == LoadingState.Pending) {
-                    for (i in 0..<jobs.size) {
-                        val result = jobs[i].await()
-                        if (result is HomeRowLoadingState.Success) {
-                            loading.setValueOnMain(LoadingState.Success)
+                                    is SuggestionsResource.Success -> {
+                                        suggestionItems = resource.items
+                                        val items = resource.items.take(HOME_PAGE_ROW_SIZE)
+                                        HomeRowLoadingState.Success(
+                                            context.getString(R.string.suggestions),
+                                            items,
+                                            paginationKind = PaginatedRowKind.SUGGESTIONS,
+                                            hasMore = resource.items.size > HOME_PAGE_ROW_SIZE,
+                                        )
+                                    }
+
+                                    is SuggestionsResource.Empty -> {
+                                        suggestionItems = emptyList()
+                                        HomeRowLoadingState.Success(
+                                            context.getString(R.string.suggestions),
+                                            emptyList(),
+                                        )
+                                    }
+                                }
+                            update(R.string.suggestions, state)
+                            cacheCurrentRows()
                         }
-                        break
-                    }
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Failed to fetch suggestions")
+                    update(
+                        R.string.suggestions,
+                        HomeRowLoadingState.Error(
+                            title = context.getString(R.string.suggestions),
+                            exception = ex,
+                        ),
+                    )
                 }
             }
         }
 
-        private fun loadPaginatedRow(
+        private suspend fun loadPaginatedRowSync(
             @StringRes title: Int,
             kind: PaginatedRowKind,
-        ): Deferred<HomeRowLoadingState> =
-            viewModelScope.async(Dispatchers.IO) {
-                val titleStr = context.getString(title)
-                try {
-                    val (items, hasMore) =
-                        recommendedRowPagingService.fetchTvRowPage(
-                            kind = kind,
-                            parentId = parentId,
-                            userId = serverRepository.currentUser.value?.id,
-                            startIndex = 0,
-                            combineContinueNext = combineContinueNext,
-                            enableRewatchingNextUp = enableRewatchingNextUp,
-                            maxDaysNextUp = maxDaysNextUp,
-                        ) ?: (emptyList<BaseItem>() to false)
-                    HomeRowLoadingState.Success(
-                        titleStr,
-                        items,
-                        paginationKind = kind,
-                        hasMore = hasMore,
-                    )
-                } catch (ex: Exception) {
-                    HomeRowLoadingState.Error(titleStr, null, ex)
-                }.also { update(title, it) }
-            }
+        ): HomeRowLoadingState {
+            val titleStr = context.getString(title)
+            return try {
+                val (items, hasMore) =
+                    recommendedRowPagingService.fetchTvRowPage(
+                        kind = kind,
+                        parentId = parentId,
+                        userId = serverRepository.currentUser.value?.id,
+                        startIndex = 0,
+                        combineContinueNext = combineContinueNext,
+                        enableRewatchingNextUp = enableRewatchingNextUp,
+                        maxDaysNextUp = maxDaysNextUp,
+                    ) ?: (emptyList<BaseItem>() to false)
+                HomeRowLoadingState.Success(
+                    titleStr,
+                    items,
+                    paginationKind = kind,
+                    hasMore = hasMore,
+                )
+            } catch (ex: Exception) {
+                HomeRowLoadingState.Error(titleStr, null, ex)
+            }.also { update(title, it) }
+        }
 
         override fun update(
             @StringRes title: Int,
@@ -303,6 +343,11 @@ class RecommendedTvShowViewModel
                 current.toMutableList().apply { set(rowTitles[title]!!, row) }
             }
             return row
+        }
+
+        private fun cacheCurrentRows() {
+            val userId = cachedUserId ?: return
+            recommendedLibraryCacheService.put(userId, parentId, rows.value)
         }
 
         companion object {

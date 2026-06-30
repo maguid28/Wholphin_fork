@@ -1,7 +1,7 @@
 package com.github.damontecres.wholphin.services
 
 import com.github.damontecres.wholphin.data.model.BaseItem
-import com.github.damontecres.wholphin.ui.HOME_ROW_PAGE_SIZE
+import com.github.damontecres.wholphin.ui.HOME_PAGE_ROW_SIZE
 import com.github.damontecres.wholphin.ui.SlimItemFields
 import com.github.damontecres.wholphin.ui.toBaseItems
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
@@ -43,7 +43,7 @@ class RecommendedRowPagingService
                             includeItemTypes = listOf(BaseItemKind.MOVIE),
                             enableUserData = true,
                             startIndex = startIndex,
-                            limit = HOME_ROW_PAGE_SIZE,
+                            limit = HOME_PAGE_ROW_SIZE,
                             enableTotalRecordCount = true,
                         )
                     val response = GetResumeItemsRequestHandler.execute(api, request)
@@ -52,7 +52,7 @@ class RecommendedRowPagingService
                     items to
                         RowPaging.hasMore(
                             items.size,
-                            HOME_ROW_PAGE_SIZE,
+                            HOME_PAGE_ROW_SIZE,
                             startIndex,
                             content.totalRecordCount,
                         )
@@ -113,7 +113,7 @@ class RecommendedRowPagingService
                             includeItemTypes = listOf(BaseItemKind.EPISODE),
                             enableUserData = true,
                             startIndex = startIndex,
-                            limit = HOME_ROW_PAGE_SIZE,
+                            limit = HOME_PAGE_ROW_SIZE,
                             enableTotalRecordCount = true,
                         )
                     val response = GetResumeItemsRequestHandler.execute(api, request)
@@ -122,7 +122,7 @@ class RecommendedRowPagingService
                     items to
                         RowPaging.hasMore(
                             items.size,
-                            HOME_ROW_PAGE_SIZE,
+                            HOME_PAGE_ROW_SIZE,
                             startIndex,
                             content.totalRecordCount,
                         )
@@ -137,7 +137,7 @@ class RecommendedRowPagingService
                             imageTypeLimit = 1,
                             parentId = parentId,
                             startIndex = startIndex,
-                            limit = HOME_ROW_PAGE_SIZE,
+                            limit = HOME_PAGE_ROW_SIZE,
                             enableTotalRecordCount = true,
                             enableResumable = false,
                             enableUserData = true,
@@ -149,7 +149,7 @@ class RecommendedRowPagingService
                     items to
                         RowPaging.hasMore(
                             items.size,
-                            HOME_ROW_PAGE_SIZE,
+                            HOME_PAGE_ROW_SIZE,
                             startIndex,
                             content.totalRecordCount,
                         )
@@ -211,6 +211,7 @@ class RecommendedRowPagingService
                 api = api,
                 request = request,
                 startIndex = startIndex,
+                limit = HOME_PAGE_ROW_SIZE,
                 useSeriesForPrimary = useSeries,
             )
         }

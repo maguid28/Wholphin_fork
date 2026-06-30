@@ -54,22 +54,15 @@ class LatestNextUpService
             limit: Int,
             includeEpisodes: Boolean,
             useSeriesForPrimary: Boolean = true,
+            parentId: UUID? = null,
         ): List<BaseItem> {
             val request =
                 GetResumeItemsRequest(
                     userId = userId,
+                    parentId = parentId,
                     fields = SlimItemFields,
                     limit = limit,
-                    includeItemTypes =
-                        if (includeEpisodes) {
-                            supportItemKinds
-                        } else {
-                            supportItemKinds
-                                .toMutableSet()
-                                .apply {
-                                    remove(BaseItemKind.EPISODE)
-                                }
-                        },
+                    includeItemTypes = resumeItemTypes(includeEpisodes, parentId),
                 )
             val items =
                 api.itemsApi
@@ -96,16 +89,7 @@ class LatestNextUpService
                     limit = limit,
                     startIndex = startIndex,
                     enableTotalRecordCount = true,
-                    includeItemTypes =
-                        if (includeEpisodes) {
-                            supportItemKinds
-                        } else {
-                            supportItemKinds
-                                .toMutableSet()
-                                .apply {
-                                    remove(BaseItemKind.EPISODE)
-                                }
-                        },
+                    includeItemTypes = resumeItemTypes(includeEpisodes, parentId),
                 )
             val response = api.itemsApi.getResumeItems(request).content
             val items =
@@ -186,6 +170,7 @@ class LatestNextUpService
             enableResumable: Boolean,
             maxDays: Int,
             useSeriesForPrimary: Boolean = true,
+            parentId: UUID? = null,
         ): List<BaseItem> {
             val removedSeries = getRemovedFromNextUp(userId)
             val nextUpDateCutoff =
@@ -195,7 +180,7 @@ class LatestNextUpService
                     userId = userId,
                     fields = SlimItemFields,
                     imageTypeLimit = 1,
-                    parentId = null,
+                    parentId = parentId,
                     limit = limit,
                     enableResumable = enableResumable,
                     enableUserData = true,
@@ -241,6 +226,7 @@ class LatestNextUpService
             enableResumable: Boolean,
             maxDays: Int,
             useSeriesForPrimary: Boolean = true,
+            parentId: UUID? = null,
         ): Pair<List<BaseItem>, Boolean> {
             if (startIndex > 0) {
                 return getResumePage(
@@ -249,6 +235,7 @@ class LatestNextUpService
                     startIndex = startIndex,
                     includeEpisodes = includeEpisodes,
                     useSeriesForPrimary = useSeriesForPrimary,
+                    parentId = parentId,
                 )
             }
 
@@ -258,6 +245,7 @@ class LatestNextUpService
                     limit = limit,
                     includeEpisodes = includeEpisodes,
                     useSeriesForPrimary = useSeriesForPrimary,
+                    parentId = parentId,
                 )
             if (resume.size >= limit) {
                 return resume.take(limit) to true
@@ -276,6 +264,7 @@ class LatestNextUpService
                     enableResumable = enableResumable,
                     maxDays = maxDays,
                     useSeriesForPrimary = useSeriesForPrimary,
+                    parentId = parentId,
                 )
             val items =
                 if (nextUp.isEmpty()) {
@@ -426,6 +415,28 @@ class LatestNextUpService
 
         companion object {
             const val REMOVED_KEY = "removeNextUp"
+        }
+
+        private fun resumeItemTypes(
+            includeEpisodes: Boolean,
+            parentId: UUID?,
+        ): List<BaseItemKind> {
+            if (parentId != null) {
+                return if (includeEpisodes) {
+                    listOf(BaseItemKind.EPISODE)
+                } else {
+                    listOf(BaseItemKind.MOVIE)
+                }
+            }
+            return if (includeEpisodes) {
+                supportItemKinds.toList()
+            } else {
+                supportItemKinds
+                    .toMutableSet()
+                    .apply {
+                        remove(BaseItemKind.EPISODE)
+                    }.toList()
+            }
         }
     }
 

@@ -272,7 +272,7 @@ fun RecommendedContent(
     }
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
     val rows by viewModel.rows.collectAsState()
-    val showContent = loading == LoadingState.Success || rows.any { it.completed }
+    val showContent = loading == LoadingState.Success
 
     when {
         loading is LoadingState.Error && !showContent -> {
