@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -417,18 +418,25 @@ fun HomePageContent(
         if (position.row >= 0) {
             liveFocusedRow.intValue = position.row
         }
-        val visibleRows = listState.layoutInfo.visibleItemsInfo
-        val targetRowVisible =
-            visibleRows.isNotEmpty() &&
-                targetRowIndex in visibleRows.first().index..visibleRows.last().index
-        if (!targetRowVisible) {
-            listState.scrollToItem(targetRowIndex)
-            delay(50)
-        }
-        if (rowFocusRequesters.getOrNull(targetRowIndex)?.tryRequestFocus(debugTag) == true) {
-            firstFocused = true
-            delay(50)
-            awaitingColumnRestore = false
+        repeat(15) { attempt ->
+            if (attempt == 0) {
+                val visibleRows = listState.layoutInfo.visibleItemsInfo
+                val targetRowVisible =
+                    visibleRows.isNotEmpty() &&
+                        targetRowIndex in visibleRows.first().index..visibleRows.last().index
+                if (!targetRowVisible) {
+                    listState.scrollToItem(targetRowIndex)
+                }
+            }
+            if (attempt > 0) {
+                delay(50)
+            }
+            withFrameNanos { }
+            withFrameNanos { }
+            if (rowFocusRequesters.getOrNull(targetRowIndex)?.tryRequestFocus("$debugTag:$attempt") == true) {
+                firstFocused = true
+                return
+            }
         }
     }
 

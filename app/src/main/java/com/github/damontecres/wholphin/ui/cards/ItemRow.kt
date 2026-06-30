@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +50,7 @@ import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.components.CircularProgress
 import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.tryRequestFocus
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -129,6 +131,22 @@ fun <T> ItemRow(
         if (!showLoadMore && position >= loadMoreIndex && items.isNotEmpty()) {
             position = items.lastIndex
             firstFocus.tryRequestFocus()
+        }
+    }
+
+    LaunchedEffect(restoreFocusedIndex, showLoadMore, items.size) {
+        val index = restoreFocusedIndex?.takeIf { it in 0..maxFocusIndex } ?: return@LaunchedEffect
+        position = index
+        repeat(10) {
+            if (it > 0) {
+                delay(50)
+            }
+            state.scrollToItem(index)
+            withFrameNanos { }
+            val focusTarget = if (index == loadMoreIndex && showLoadMore) moreFocus else firstFocus
+            if (focusTarget.tryRequestFocus("item_row_restore")) {
+                return@LaunchedEffect
+            }
         }
     }
 
