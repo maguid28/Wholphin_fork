@@ -65,6 +65,7 @@ val DefaultItemFields =
         ItemFields.MEDIA_SOURCE_COUNT,
         ItemFields.PARENT_ID,
         ItemFields.CAN_DELETE,
+        ItemFields.PROVIDER_IDS,
     )
 
 /**
@@ -80,6 +81,7 @@ val SlimItemFields =
         ItemFields.MEDIA_SOURCE_COUNT,
         ItemFields.PARENT_ID,
         ItemFields.CAN_DELETE,
+        ItemFields.PROVIDER_IDS,
     )
 
 val PhotoItemFields =

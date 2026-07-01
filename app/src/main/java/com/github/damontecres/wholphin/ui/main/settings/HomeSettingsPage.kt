@@ -350,6 +350,7 @@ fun HomeSettingsPage(
             takeFocus = false,
             showEmptyRows = true,
             showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+            interfacePreferences = preferences.appPreferences.interfacePreferences,
             modifier =
                 Modifier
                     .fillMaxHeight()

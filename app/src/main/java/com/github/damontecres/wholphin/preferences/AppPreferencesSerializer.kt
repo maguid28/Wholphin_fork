@@ -103,6 +103,9 @@ class AppPreferencesSerializer
                                 customThemeSecondary = AppPreference.CustomThemeSecondary.defaultValue
                                 customThemeTertiary = AppPreference.CustomThemeTertiary.defaultValue
 
+                                clearDisplayedRatings()
+                                addAllDisplayedRatings(AppPreference.DisplayedRatings.defaultValue)
+
                                 subtitlesPreferences =
                                     SubtitlePreferences
                                         .newBuilder()

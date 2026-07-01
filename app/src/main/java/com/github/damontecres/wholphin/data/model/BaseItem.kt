@@ -1,6 +1,5 @@
 package com.github.damontecres.wholphin.data.model
 
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.text.AnnotatedString
@@ -25,7 +24,6 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.extensions.ticks
-import java.util.Locale
 import java.util.UUID
 import kotlin.time.Duration
 
@@ -155,13 +153,6 @@ data class BaseItem(
                         if (index != details.lastIndex) {
                             dot()
                         }
-                    }
-                    // TODO time remaining
-
-                    data.communityRating?.let {
-                        dot()
-                        append(String.format(Locale.getDefault(), "%.1f", it))
-                        appendInlineContent(id = "star")
                     }
                 },
         )

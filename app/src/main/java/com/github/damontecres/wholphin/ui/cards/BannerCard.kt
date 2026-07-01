@@ -40,10 +40,12 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.FontAwesome
+import com.github.damontecres.wholphin.ui.components.ItemDisplayedRatings
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.enableMarquee
 import org.jellyfin.sdk.model.api.ImageType
@@ -210,6 +212,9 @@ fun BannerCardWithTitle(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    interfacePreferences: InterfacePreferences = InterfacePreferences.getDefaultInstance(),
+    rtAudienceScore: Float? = null,
+    rtCriticScore: Float? = null,
     cornerText: String? = null,
     played: Boolean = false,
     favorite: Boolean = false,
@@ -275,6 +280,16 @@ fun BannerCardWithTitle(
                         .fillMaxWidth()
                         .padding(horizontal = 4.dp)
                         .enableMarquee(focusedAfterDelay),
+            )
+            ItemDisplayedRatings(
+                item = item,
+                interfacePreferences = interfacePreferences,
+                rtAudienceScore = rtAudienceScore,
+                rtCriticScore = rtCriticScore,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
             )
         }
     }

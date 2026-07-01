@@ -15,6 +15,8 @@ import com.github.damontecres.wholphin.data.model.ItemPlayback
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.preferences.shouldFetchRtAudience
+import com.github.damontecres.wholphin.preferences.shouldFetchRtCritic
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.ExtrasService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
@@ -133,6 +135,7 @@ class SeriesViewModel
         val similarHasMore = MutableLiveData(false)
         val canDeleteSeries = MutableStateFlow(false)
         val rottenTomatoesAudienceScore = MutableStateFlow<Float?>(null)
+        val rottenTomatoesCriticScore = MutableStateFlow<Float?>(null)
         val metadataRematchResults =
             MutableStateFlow<DataLoadingState<List<RemoteSearchResult>>>(DataLoadingState.Pending)
 
@@ -158,8 +161,21 @@ class SeriesViewModel
                 canDeleteSeries.update { mediaManagementService.canDelete(item) }
                 backdropService.submit(item)
                 viewModelScope.launchIO {
+                    val interfacePreferences =
+                        userPreferencesService.getCurrent().appPreferences.interfacePreferences
                     rottenTomatoesAudienceScore.update {
-                        mdbListRatingsService.getRottenTomatoesAudienceScore(item)
+                        if (interfacePreferences.shouldFetchRtAudience()) {
+                            mdbListRatingsService.getRottenTomatoesAudienceScore(item)
+                        } else {
+                            null
+                        }
+                    }
+                    rottenTomatoesCriticScore.update {
+                        if (interfacePreferences.shouldFetchRtCritic()) {
+                            mdbListRatingsService.getRottenTomatoesCriticScore(item)
+                        } else {
+                            null
+                        }
                     }
                 }
 

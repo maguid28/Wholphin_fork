@@ -279,6 +279,7 @@ fun DiscoverSeriesDetailsContent(
                                 .bringIntoViewRequester(bringIntoViewRequester),
                     ) {
                         DiscoverSeriesDetailsHeader(
+                            preferences = preferences,
                             series = series,
                             rating = rating,
                             overviewOnClick = overviewOnClick,
@@ -435,6 +436,7 @@ fun DiscoverSeriesDetailsContent(
 
 @Composable
 fun DiscoverSeriesDetailsHeader(
+    preferences: UserPreferences,
     series: TvDetails,
     rating: DiscoverRating?,
     overviewOnClick: () -> Unit,
@@ -473,6 +475,7 @@ fun DiscoverSeriesDetailsHeader(
                             it,
                             rating?.audienceRating,
                             rating?.criticRating?.toFloat(),
+                            preferences.appPreferences.interfacePreferences,
                         )
                     }
                 }

@@ -23,6 +23,7 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ChosenStreams
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.displayQuickDetails
 import com.github.damontecres.wholphin.ui.components.EpisodeName
 import com.github.damontecres.wholphin.ui.components.OverviewText
 import com.github.damontecres.wholphin.ui.components.QuickDetails
@@ -55,7 +56,10 @@ fun EpisodeDetailsHeader(
             modifier = Modifier.fillMaxWidth(.60f),
         ) {
             val padding = 8.dp
-            QuickDetails(ep.ui.quickDetails, ep.timeRemainingOrRuntime)
+            QuickDetails(
+                ep.displayQuickDetails(preferences.appPreferences.interfacePreferences),
+                ep.timeRemainingOrRuntime,
+            )
 
             VideoStreamDetails(
                 chosenStreams = chosenStreams,

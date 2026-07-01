@@ -419,6 +419,7 @@ fun RecommendedContent(
                 onUpdateBackdrop = viewModel::updateBackdrop,
                 onLoadMoreRow = viewModel::loadMoreRow,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                interfacePreferences = preferences.appPreferences.interfacePreferences,
                 takeFocus = takeFocus,
                 suppressContentScroll = suppressContentScroll,
                 pendingDetailReturn = pendingDetailReturn,
@@ -430,6 +431,7 @@ fun RecommendedContent(
                     HomePageHeader(
                         item = focusedItem,
                         showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                        interfacePreferences = preferences.appPreferences.interfacePreferences,
                         modifier =
                             Modifier
                                 .padding(RecommendedLibraryHeaderPadding)

@@ -96,6 +96,7 @@ fun DiscoverMovieDetailsHeader(
                             it,
                             rating?.audienceRating,
                             rating?.criticRating?.toFloat(),
+                            preferences.appPreferences.interfacePreferences,
                         )
                     }
                 }

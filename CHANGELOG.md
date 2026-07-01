@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a Displayed ratings setting under Interface so you can choose which ratings (Community, RT Audience, and RT Critic) appear on item details, banners, and Discover. Default is Community + RT Audience only; enable RT Critic in settings if you want the Tomatometer.
+- Fixed displayed ratings not appearing on Home row cards and headers by fetching community ratings and provider IDs with list items, loading external RT scores for row items, and showing enabled ratings under each poster card title.
+- Removed the play button hint below the overview text on the screensaver media banner.
 - Added genre rows to Home customization so you can pick specific genres (e.g. Comedy, Sci-Fi) from a library and show them as content rows on the home screen.
 - Added rotating genre rows to Home customization that cycle through a library's genres every 6 hours.
 - Fixed Home and other horizontal rows so the focused item scrolls into view instead of staying pinned to the left edge near the nav drawer until the end of the row, by animating the row to the focused index on each focus change (matching TabRow scroll behavior) instead of relying on bring-into-view alone.

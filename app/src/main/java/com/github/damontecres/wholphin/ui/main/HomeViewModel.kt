@@ -7,6 +7,8 @@ import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.preferences.shouldFetchRtAudience
+import com.github.damontecres.wholphin.preferences.shouldFetchRtCritic
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
 import com.github.damontecres.wholphin.services.HomePageResolvedSettings
@@ -124,10 +126,14 @@ class HomeViewModel
                                         refresh -> it.mediaBannerItems
                                         else -> emptyList()
                                     },
-                                mediaBannerAudienceScores =
+                                itemAudienceScores =
                                     when {
-                                        usedCache -> emptyMap()
-                                        refresh -> it.mediaBannerAudienceScores
+                                        usedCache || refresh -> it.itemAudienceScores
+                                        else -> emptyMap()
+                                    },
+                                itemCriticScores =
+                                    when {
+                                        usedCache || refresh -> it.itemCriticScores
                                         else -> emptyMap()
                                     },
                                 homeRows =
@@ -237,7 +243,8 @@ class HomeViewModel
                                 loadingState = LoadingState.Success,
                                 refreshState = LoadingState.Success,
                                 mediaBannerItems = mediaBannerItems,
-                                mediaBannerAudienceScores = emptyMap(),
+                                itemAudienceScores = emptyMap(),
+                                itemCriticScores = emptyMap(),
                             )
                         }
                         homeSettingsService.putHomePageCache(
@@ -246,9 +253,9 @@ class HomeViewModel
                             homeRows = _state.value.homeRows,
                             mediaBannerItems = mediaBannerItems,
                         )
-                        if (mediaBannerItems.isNotEmpty()) {
-                            loadMediaBannerAudienceScores(mediaBannerItems)
-                        }
+                        loadExternalRatings(
+                            items = collectRatingItems(_state.value.homeRows, mediaBannerItems),
+                        )
                         Timber.d("Home page load complete")
                     }
                 } catch (ex: Exception) {
@@ -265,18 +272,41 @@ class HomeViewModel
             }
         }
 
-        private fun loadMediaBannerAudienceScores(items: List<BaseItem>) {
+        private fun collectRatingItems(
+            homeRows: List<HomeRowLoadingState>,
+            mediaBannerItems: List<BaseItem>,
+        ): List<BaseItem> =
+            buildList {
+                homeRows.forEach { row ->
+                    if (row is HomeRowLoadingState.Success) {
+                        addAll(row.items.filterNotNull())
+                    }
+                }
+                addAll(mediaBannerItems)
+            }.distinctBy { it.id }
+
+        private fun loadExternalRatings(items: List<BaseItem>) {
+            if (items.isEmpty()) return
             viewModelScope.launchIO {
-                val scores =
-                    items
-                        .mapNotNull { item ->
-                            mdbListRatingsService
-                                .getRottenTomatoesAudienceScore(item)
-                                ?.takeIf { it > 0f }
-                                ?.let { item.id to it }
-                        }.toMap()
+                val interfacePreferences =
+                    userPreferencesService.getCurrent().appPreferences.interfacePreferences
+                val audienceScores =
+                    if (interfacePreferences.shouldFetchRtAudience()) {
+                        mdbListRatingsService.loadAudienceScores(items)
+                    } else {
+                        emptyMap()
+                    }
+                val criticScores =
+                    if (interfacePreferences.shouldFetchRtCritic()) {
+                        mdbListRatingsService.loadCriticScores(items)
+                    } else {
+                        emptyMap()
+                    }
                 _state.update {
-                    it.copy(mediaBannerAudienceScores = scores)
+                    it.copy(
+                        itemAudienceScores = audienceScores,
+                        itemCriticScores = criticScores,
+                    )
                 }
             }
         }
@@ -489,7 +519,8 @@ data class HomeState(
     val refreshState: LoadingState,
     val homeRows: List<HomeRowLoadingState>,
     val mediaBannerItems: List<BaseItem>,
-    val mediaBannerAudienceScores: Map<UUID, Float>,
+    val itemAudienceScores: Map<UUID, Float>,
+    val itemCriticScores: Map<UUID, Float>,
     val settings: HomePageResolvedSettings,
 ) {
     companion object {
@@ -499,6 +530,7 @@ data class HomeState(
                 LoadingState.Pending,
                 listOf(),
                 listOf(),
+                emptyMap(),
                 emptyMap(),
                 HomePageResolvedSettings.EMPTY,
             )

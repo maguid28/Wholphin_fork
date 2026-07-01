@@ -373,6 +373,7 @@ fun MovieDetailsContent(
                         movie = movie,
                         chosenStreams = state.chosenStreams,
                         rottenTomatoesAudienceScore = state.rottenTomatoesAudienceScore,
+                        rottenTomatoesCriticScore = state.rottenTomatoesCriticScore,
                         bringIntoViewRequester = bringIntoViewRequester,
                         overviewOnClick = overviewOnClick,
                         modifier =

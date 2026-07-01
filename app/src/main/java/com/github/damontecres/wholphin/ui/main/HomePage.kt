@@ -64,7 +64,9 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.data.model.HomeRowConfig
 import com.github.damontecres.wholphin.data.model.HomeRowViewOptions
+import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.displayQuickDetails
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.cards.BannerCard
 import com.github.damontecres.wholphin.ui.cards.BannerCardWithTitle
@@ -165,7 +167,8 @@ fun HomePage(
     val loading = state.loadingState
     val homeRows = state.homeRows
     val mediaBannerItems = state.mediaBannerItems
-    val mediaBannerAudienceScores = state.mediaBannerAudienceScores
+    val itemAudienceScores = state.itemAudienceScores
+    val itemCriticScores = state.itemCriticScores
 
     when (val state = loading) {
         is LoadingState.Error -> {
@@ -270,7 +273,8 @@ fun HomePage(
             HomePageContent(
                 homeRows = homeRows,
                 mediaBannerItems = mediaBannerItems,
-                mediaBannerAudienceScores = mediaBannerAudienceScores,
+                itemAudienceScores = itemAudienceScores,
+                itemCriticScores = itemCriticScores,
                 position = position,
                 onFocusPosition = onFocusPosition,
                 onClickItem = onClickItem,
@@ -280,6 +284,7 @@ fun HomePage(
                 onUpdateBackdrop = viewModel::updateBackdrop,
                 onLoadMoreRow = viewModel::loadMoreRow,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                interfacePreferences = preferences.appPreferences.interfacePreferences,
                 inAppScreensaverEnabled =
                     preferences.appPreferences.interfacePreferences.screensaverPreference.enabled,
                 onBannerShown = onBannerShown,
@@ -331,7 +336,8 @@ fun HomePage(
 fun HomePageContent(
     homeRows: List<HomeRowLoadingState>,
     mediaBannerItems: List<BaseItem> = emptyList(),
-    mediaBannerAudienceScores: Map<UUID, Float> = emptyMap(),
+    itemAudienceScores: Map<UUID, Float> = emptyMap(),
+    itemCriticScores: Map<UUID, Float> = emptyMap(),
     position: RowColumn,
     onFocusPosition: (RowColumn) -> Unit,
     onClickItem: (RowColumn, BaseItem) -> Unit,
@@ -341,6 +347,7 @@ fun HomePageContent(
     onUpdateBackdrop: (BaseItem) -> Unit,
     onLoadMoreRow: suspend (Int) -> Unit = {},
     showLogo: Boolean,
+    interfacePreferences: InterfacePreferences,
     inAppScreensaverEnabled: Boolean = false,
     onBannerShown: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -355,6 +362,9 @@ fun HomePageContent(
         HomePageHeader(
             item = focusedItem,
             showLogo = showLogo,
+            interfacePreferences = interfacePreferences,
+            rtAudienceScore = focusedItem?.id?.let { itemAudienceScores[it] },
+            rtCriticScore = focusedItem?.id?.let { itemCriticScores[it] },
             modifier = HeaderUtils.modifier,
         )
     },
@@ -822,6 +832,9 @@ fun HomePageContent(
                                                         onClick = onClick,
                                                         onLongClick = onLongClick,
                                                         viewOptions = viewOptions,
+                                                        interfacePreferences = interfacePreferences,
+                                                        itemAudienceScores = itemAudienceScores,
+                                                        itemCriticScores = itemCriticScores,
                                                         modifier =
                                                             cardModifier
                                                                 .onFocusChanged { onFocus(it.isFocused) }
@@ -847,8 +860,10 @@ fun HomePageContent(
         if (renderBannerHero && mediaBannerItems.isNotEmpty()) {
             HomeMediaBanner(
                 items = mediaBannerItems,
-                audienceScores = mediaBannerAudienceScores,
+                audienceScores = itemAudienceScores,
+                criticScores = itemCriticScores,
                 showLogo = showLogo,
+                interfacePreferences = interfacePreferences,
                 onFocusedItem = { bannerFocusedItem = it },
                 onClickItem = {
                     onClickItem(RowColumn(-1, mediaBannerItems.indexOf(it)), it)
@@ -875,6 +890,9 @@ fun HomePageContent(
 fun HomePageHeader(
     item: BaseItem?,
     showLogo: Boolean,
+    interfacePreferences: InterfacePreferences,
+    rtAudienceScore: Float? = null,
+    rtCriticScore: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val isEpisode = item?.type == BaseItemKind.EPISODE
@@ -884,7 +902,12 @@ fun HomePageHeader(
         subtitle = if (isEpisode) dto?.name else null,
         overview = dto?.overview,
         overviewTwoLines = isEpisode,
-        quickDetails = item?.ui?.quickDetails ?: AnnotatedString(""),
+        quickDetails =
+            item?.displayQuickDetails(
+                interfacePreferences = interfacePreferences,
+                rottenTomatoesAudienceScore = rtAudienceScore,
+                rottenTomatoesCriticScore = rtCriticScore,
+            ) ?: AnnotatedString(""),
         timeRemaining = item?.timeRemainingOrRuntime,
         showLogo = showLogo,
         logoImageUrl =
@@ -957,6 +980,9 @@ fun HomePageCardContent(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     viewOptions: HomeRowViewOptions,
+    interfacePreferences: InterfacePreferences,
+    itemAudienceScores: Map<UUID, Float>,
+    itemCriticScores: Map<UUID, Float>,
     modifier: Modifier,
 ) {
     when (item?.type) {
@@ -1012,6 +1038,9 @@ fun HomePageCardContent(
                     title = item?.title,
                     subtitle = item?.subtitle,
                     item = item,
+                    interfacePreferences = interfacePreferences,
+                    rtAudienceScore = item?.id?.let { itemAudienceScores[it] },
+                    rtCriticScore = item?.id?.let { itemCriticScores[it] },
                     aspectRatio = ratio,
                     imageType = imageType,
                     imageContentScale = scale,

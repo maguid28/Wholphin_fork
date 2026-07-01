@@ -16,6 +16,8 @@ import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.preferences.AppPreferences
 import com.github.damontecres.wholphin.preferences.ThemeSongVolume
+import com.github.damontecres.wholphin.preferences.shouldFetchRtAudience
+import com.github.damontecres.wholphin.preferences.shouldFetchRtCritic
 import com.github.damontecres.wholphin.services.BackdropService
 import com.github.damontecres.wholphin.services.ExtrasService
 import com.github.damontecres.wholphin.services.FavoriteWatchManager
@@ -143,6 +145,7 @@ class MovieViewModel
                     it.copy(
                         loading = DataLoadingState.Success(movie),
                         rottenTomatoesAudienceScore = null,
+                        rottenTomatoesCriticScore = null,
                         chosenStreams = chosenStreams,
                         trailers = remoteTrailers,
                         chapters = chapters,
@@ -150,10 +153,24 @@ class MovieViewModel
                 }
                 backdropService.submit(movie)
                 viewModelScope.launchIO {
-                    val audienceScore = mdbListRatingsService.getRottenTomatoesAudienceScore(movie)
+                    val interfacePreferences =
+                        userPreferencesService.getCurrent().appPreferences.interfacePreferences
+                    val audienceScore =
+                        if (interfacePreferences.shouldFetchRtAudience()) {
+                            mdbListRatingsService.getRottenTomatoesAudienceScore(movie)
+                        } else {
+                            null
+                        }
+                    val criticScore =
+                        if (interfacePreferences.shouldFetchRtCritic()) {
+                            mdbListRatingsService.getRottenTomatoesCriticScore(movie)
+                        } else {
+                            null
+                        }
                     _state.update {
                         it.copy(
                             rottenTomatoesAudienceScore = audienceScore,
+                            rottenTomatoesCriticScore = criticScore,
                         )
                     }
                 }
@@ -390,6 +407,7 @@ class MovieViewModel
                         it.copy(
                             loading = DataLoadingState.Success(updatedMovie),
                             rottenTomatoesAudienceScore = null,
+                        rottenTomatoesCriticScore = null,
                         )
                     }
                     backdropService.submit(updatedMovie)
@@ -430,6 +448,7 @@ data class MovieState(
     val discovered: List<DiscoverItem> = emptyList(),
     val chosenStreams: ChosenStreams? = null,
     val rottenTomatoesAudienceScore: Float? = null,
+    val rottenTomatoesCriticScore: Float? = null,
     val canDelete: Boolean = false,
     val metadataRematchResults: DataLoadingState<List<RemoteSearchResult>> =
         DataLoadingState.Pending,

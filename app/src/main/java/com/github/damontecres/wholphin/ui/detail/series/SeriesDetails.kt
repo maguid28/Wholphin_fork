@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -49,7 +48,9 @@ import com.github.damontecres.wholphin.data.model.DiscoverItem
 import com.github.damontecres.wholphin.data.model.Person
 import com.github.damontecres.wholphin.data.model.Trailer
 import com.github.damontecres.wholphin.data.model.studioNames
+import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.displayQuickDetails
 import com.github.damontecres.wholphin.services.TrailerService
 import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.RequestOrRestoreFocus
@@ -85,7 +86,6 @@ import com.github.damontecres.wholphin.ui.detail.PlaylistLoadingState
 import com.github.damontecres.wholphin.ui.detail.rematch.MetadataRematchDialog
 import com.github.damontecres.wholphin.ui.discover.DiscoverRow
 import com.github.damontecres.wholphin.ui.discover.DiscoverRowData
-import com.github.damontecres.wholphin.ui.dot
 import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberInt
@@ -132,6 +132,7 @@ fun SeriesDetails(
     val discovered by viewModel.discovered.collectAsState()
     val discoverSeries by viewModel.discoverSeries.collectAsState()
     val rottenTomatoesAudienceScore by viewModel.rottenTomatoesAudienceScore.collectAsState()
+    val rottenTomatoesCriticScore by viewModel.rottenTomatoesCriticScore.collectAsState()
     val metadataRematchResults by viewModel.metadataRematchResults.collectAsState()
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
@@ -227,6 +228,7 @@ fun SeriesDetails(
                     canRematchMetadata = currentUserDto?.policy?.isAdministrator == true,
                     canDeleteItem = { viewModel.canDelete(it, preferences.appPreferences) },
                     rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
+                    rottenTomatoesCriticScore = rottenTomatoesCriticScore,
                     modifier = modifier,
                     onClickItem = { index, item ->
                         viewModel.navigateTo(item.destination())
@@ -390,6 +392,7 @@ fun SeriesDetailsContent(
     canRematchMetadata: Boolean,
     canDeleteItem: (BaseItem) -> Boolean,
     rottenTomatoesAudienceScore: Float?,
+    rottenTomatoesCriticScore: Float?,
     onClickItem: (Int, BaseItem) -> Unit,
     onClickPerson: (Person) -> Unit,
     onLongClickItem: (Int, BaseItem) -> Unit,
@@ -435,7 +438,9 @@ fun SeriesDetailsContent(
                     SeriesDetailsHeader(
                         series = series,
                         showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                        interfacePreferences = preferences.appPreferences.interfacePreferences,
                         rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
+                        rottenTomatoesCriticScore = rottenTomatoesCriticScore,
                         overviewOnClick = overviewOnClick,
                         bringIntoViewRequester = bringIntoViewRequester,
                         modifier =
@@ -737,7 +742,9 @@ fun SeriesDetailsContent(
 fun SeriesDetailsHeader(
     series: BaseItem,
     showLogo: Boolean,
+    interfacePreferences: InterfacePreferences,
     rottenTomatoesAudienceScore: Float?,
+    rottenTomatoesCriticScore: Float?,
     overviewOnClick: () -> Unit,
     bringIntoViewRequester: BringIntoViewRequester,
     modifier: Modifier = Modifier,
@@ -745,14 +752,12 @@ fun SeriesDetailsHeader(
     val scope = rememberCoroutineScope()
     val dto = series.data
     val quickDetails =
-        remember(series.ui.quickDetails, rottenTomatoesAudienceScore) {
-            buildAnnotatedString {
-                append(series.ui.quickDetails)
-                rottenTomatoesAudienceScore?.takeIf { it > 0f }?.let {
-                    if (length > 0) dot()
-                    append("RT Audience ${it.roundToInt()}%")
-                }
-            }
+        remember(series, rottenTomatoesAudienceScore, rottenTomatoesCriticScore, interfacePreferences) {
+            series.displayQuickDetails(
+                interfacePreferences = interfacePreferences,
+                rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
+                rottenTomatoesCriticScore = rottenTomatoesCriticScore,
+            )
         }
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),

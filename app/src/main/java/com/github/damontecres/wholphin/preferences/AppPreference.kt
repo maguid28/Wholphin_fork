@@ -1087,6 +1087,28 @@ sealed interface AppPreference<Pref, T> {
                 destination = Destination.LibraryTvChannels,
             )
 
+        val DisplayedRatings =
+            AppMultiChoicePreference<AppPreferences, DisplayedRatingType>(
+                title = R.string.displayed_ratings,
+                summary = R.string.displayed_ratings_summary,
+                defaultValue = DEFAULT_DISPLAYED_RATING_TYPES,
+                allValues = ALL_DISPLAYED_RATING_TYPES,
+                displayValues = R.array.displayed_rating_types,
+                getter = { prefs ->
+                    val stored =
+                        prefs.interfacePreferences.displayedRatingsList.filter {
+                            it != DisplayedRatingType.UNRECOGNIZED
+                        }
+                    if (stored.isEmpty()) DEFAULT_DISPLAYED_RATING_TYPES else stored
+                },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences {
+                        clearDisplayedRatings()
+                        addAllDisplayedRatings(value)
+                    }
+                },
+            )
+
         val SeerrIntegration =
             AppClickablePreference<AppPreferences>(
                 title = R.string.seerr_integration,
@@ -1169,6 +1191,7 @@ val basicPreferences =
                     AppPreference.SubtitleStyle,
                     AppPreference.ThemeColors,
                     AppPreference.AppFontPref,
+                    AppPreference.DisplayedRatings,
                     AppPreference.LibraryTvEnabled,
                     AppPreference.LibraryTvChannels,
                     AppPreference.ScreensaverSettings,

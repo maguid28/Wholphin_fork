@@ -21,6 +21,10 @@
     <string name="collections">Collections</string>
     <string name="commercial">Commercial</string>
     <string name="community_rating">Community Rating</string>
+    <string name="displayed_ratings">Displayed ratings</string>
+    <string name="displayed_ratings_summary">Choose which ratings appear on item details and banners. Uncheck Critic Rating to show RT Audience only.</string>
+    <string name="rt_audience_rating">RT Audience</string>
+    <string name="rt_critic_rating">RT Critic</string>
     <string name="compose_error_message_title">An error occurred! Press the button to send logs to your server.</string>
     <string name="confirm">Confirm</string>
     <string name="continue_watching">Continue watching</string>
@@ -967,6 +971,12 @@
         <item>@string/movies</item>
         <item>@string/tv_shows</item>
         <item>@string/photos</item>
+    </string-array>
+
+    <string-array name="displayed_rating_types">
+        <item>@string/community_rating</item>
+        <item>@string/rt_audience_rating</item>
+        <item>@string/rt_critic_rating</item>
     </string-array>
 
     <string name="search_for">Search %s</string>

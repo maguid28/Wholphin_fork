@@ -361,6 +361,7 @@ fun CollectionDetailsContent(
                             HomePageHeader(
                                 item = focusedItem,
                                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                                interfacePreferences = preferences.appPreferences.interfacePreferences,
                                 modifier =
                                     Modifier
                                         .padding(

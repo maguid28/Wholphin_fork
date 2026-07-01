@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -22,11 +21,11 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ChosenStreams
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.UserPreferences
+import com.github.damontecres.wholphin.preferences.displayQuickDetails
 import com.github.damontecres.wholphin.ui.components.GenreText
 import com.github.damontecres.wholphin.ui.components.HeaderUtils
 import com.github.damontecres.wholphin.ui.components.OverviewText
 import com.github.damontecres.wholphin.ui.components.QuickDetails
-import com.github.damontecres.wholphin.ui.dot
 import com.github.damontecres.wholphin.ui.components.TitleOrLogo
 import com.github.damontecres.wholphin.ui.components.VideoStreamDetails
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
@@ -34,7 +33,6 @@ import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.PersonKind
-import kotlin.math.roundToInt
 
 @Composable
 fun MovieDetailsHeader(
@@ -42,6 +40,7 @@ fun MovieDetailsHeader(
     movie: BaseItem,
     chosenStreams: ChosenStreams?,
     rottenTomatoesAudienceScore: Float?,
+    rottenTomatoesCriticScore: Float?,
     bringIntoViewRequester: BringIntoViewRequester,
     overviewOnClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -49,15 +48,14 @@ fun MovieDetailsHeader(
     val dto = movie.data
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val interfacePreferences = preferences.appPreferences.interfacePreferences
     val quickDetails =
-        remember(movie.ui.quickDetails, rottenTomatoesAudienceScore) {
-            buildAnnotatedString {
-                append(movie.ui.quickDetails)
-                rottenTomatoesAudienceScore?.takeIf { it > 0f }?.let {
-                    if (length > 0) dot()
-                    append("RT Audience ${it.roundToInt()}%")
-                }
-            }
+        remember(movie, rottenTomatoesAudienceScore, rottenTomatoesCriticScore, interfacePreferences) {
+            movie.displayQuickDetails(
+                interfacePreferences = interfacePreferences,
+                rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
+                rottenTomatoesCriticScore = rottenTomatoesCriticScore,
+            )
         }
     Column(
         verticalArrangement = Arrangement.spacedBy(4.dp),

@@ -6,6 +6,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.preferences.DisplayedRatingType
+import com.github.damontecres.wholphin.preferences.InterfacePreferences
+import com.github.damontecres.wholphin.preferences.showsRating
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaSegmentType
@@ -176,26 +179,32 @@ fun AnnotatedString.Builder.dot() = append("  \u2022  ")
 
 fun listToDotString(
     strings: List<String>,
-    communityRating: Float?,
+    starRating: Float?,
     criticRating: Float?,
+    interfacePreferences: InterfacePreferences,
+    starRatingType: DisplayedRatingType = DisplayedRatingType.RT_AUDIENCE,
 ): AnnotatedString =
     buildAnnotatedString {
         strings.forEachIndexed { index, string ->
             append(string)
             if (index != strings.lastIndex) dot()
         }
-        communityRating?.let {
-            dot()
-            append(String.format(Locale.getDefault(), "%.1f", it))
-            appendInlineContent(id = "star")
+        if (interfacePreferences.showsRating(starRatingType)) {
+            starRating?.let {
+                dot()
+                append(String.format(Locale.getDefault(), "%.1f", it))
+                appendInlineContent(id = "star")
+            }
         }
-        criticRating?.let {
-            dot()
-            append("${it.toInt()}%")
-            if (it >= 60f) {
-                appendInlineContent(id = "fresh")
-            } else {
-                appendInlineContent(id = "rotten")
+        if (interfacePreferences.showsRating(DisplayedRatingType.RT_CRITIC)) {
+            criticRating?.let {
+                dot()
+                append("${it.toInt()}%")
+                if (it >= 60f) {
+                    appendInlineContent(id = "fresh")
+                } else {
+                    appendInlineContent(id = "rotten")
+                }
             }
         }
     }

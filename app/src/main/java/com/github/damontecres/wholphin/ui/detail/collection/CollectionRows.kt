@@ -85,6 +85,7 @@ fun CollectionRows(
                 headerComposable = {},
                 takeFocus = false,
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                interfacePreferences = preferences.appPreferences.interfacePreferences,
                 modifier = Modifier,
             )
         }

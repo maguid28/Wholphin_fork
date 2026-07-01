@@ -35,6 +35,27 @@ class MdbListRatingsService
                 ?.let(::findAudienceScore)
                 ?.let(::normalizePercent)
 
+        suspend fun getRottenTomatoesCriticScore(item: BaseItem): Float? =
+            getRatings(item)
+                ?.let(::findCriticScore)
+                ?.let(::normalizePercent)
+
+        suspend fun loadAudienceScores(items: List<BaseItem>): Map<java.util.UUID, Float> =
+            items
+                .mapNotNull { item ->
+                    getRottenTomatoesAudienceScore(item)
+                        ?.takeIf { it > 0f }
+                        ?.let { item.id to it }
+                }.toMap()
+
+        suspend fun loadCriticScores(items: List<BaseItem>): Map<java.util.UUID, Float> =
+            items
+                .mapNotNull { item ->
+                    getRottenTomatoesCriticScore(item)
+                        ?.takeIf { it > 0f }
+                        ?.let { item.id to it }
+                }.toMap()
+
         private suspend fun getRatings(item: BaseItem): Map<String, Float>? =
             withContext(Dispatchers.IO) {
                 val tmdbId = item.data.providerIds?.get("Tmdb") ?: return@withContext null
@@ -125,6 +146,18 @@ class MdbListRatingsService
                 ?: ratings.entries
                     .firstOrNull { (source, _) ->
                         source.contains("audience") || source.contains("popcorn")
+                    }?.value
+
+        private fun findCriticScore(ratings: Map<String, Float>): Float? =
+            ratings["tomatoes"]
+                ?: ratings["rt_critic"]
+                ?: ratings["rottentomatoes"]
+                ?: ratings["tomatoes_critic"]
+                ?: ratings.entries
+                    .firstOrNull { (source, _) ->
+                        (source.contains("tomato") || source.contains("rt")) &&
+                            !source.contains("audience") &&
+                            !source.contains("popcorn")
                     }?.value
     }
 

@@ -11,7 +11,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +59,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.preferences.InterfacePreferences
+import com.github.damontecres.wholphin.preferences.appendCommunityRating
+import com.github.damontecres.wholphin.preferences.appendRtAudienceScore
+import com.github.damontecres.wholphin.preferences.appendRtCriticScore
 import com.github.damontecres.wholphin.ui.LocalImageUrlService
 import com.github.damontecres.wholphin.ui.components.QuickDetails
 import com.github.damontecres.wholphin.ui.components.rememberLogoUrl
@@ -76,9 +79,7 @@ import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.extensions.ticks
-import java.util.Locale
 import java.util.UUID
-import kotlin.math.roundToInt
 import kotlin.time.Duration
 
 private const val AutoAdvanceMillis = 12_000L
@@ -101,7 +102,9 @@ private const val FullScreenLogoImageMaxHeight = 192
 fun HomeMediaBanner(
     items: List<BaseItem>,
     audienceScores: Map<UUID, Float>,
+    criticScores: Map<UUID, Float> = emptyMap(),
     showLogo: Boolean,
+    interfacePreferences: InterfacePreferences,
     onFocusedItem: (BaseItem?) -> Unit,
     onClickItem: (BaseItem) -> Unit,
     onHoldItem: (BaseItem) -> Unit,
@@ -344,6 +347,8 @@ fun HomeMediaBanner(
             HomeMediaBannerContent(
                 item = targetItem,
                 rottenTomatoesAudienceScore = audienceScores[targetItem.id],
+                rottenTomatoesCriticScore = criticScores[targetItem.id],
+                interfacePreferences = interfacePreferences,
                 showLogo = showLogo,
                 fullScreen = fullScreen,
                 modifier = Modifier.fillMaxSize(),
@@ -405,13 +410,19 @@ private fun HomeMediaBannerBackdrop(
 private fun HomeMediaBannerContent(
     item: BaseItem,
     rottenTomatoesAudienceScore: Float?,
+    rottenTomatoesCriticScore: Float?,
+    interfacePreferences: InterfacePreferences,
     showLogo: Boolean,
     fullScreen: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val bannerDetails =
-        remember(item, rottenTomatoesAudienceScore) {
-            item.bannerDetailsWithoutParentalRating(rottenTomatoesAudienceScore)
+        remember(item, rottenTomatoesAudienceScore, rottenTomatoesCriticScore, interfacePreferences) {
+            item.bannerDetailsWithoutParentalRating(
+                rottenTomatoesAudienceScore = rottenTomatoesAudienceScore,
+                rottenTomatoesCriticScore = rottenTomatoesCriticScore,
+                interfacePreferences = interfacePreferences,
+            )
         }
 
     Column(
@@ -446,7 +457,7 @@ private fun HomeMediaBannerContent(
                 modifier = Modifier.widthIn(max = if (fullScreen) 900.dp else 520.dp),
             )
         }
-        if (item.type.playable) {
+        if (item.type.playable && !fullScreen) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -511,7 +522,11 @@ private fun HomeMediaBannerTitle(
     }
 }
 
-private fun BaseItem.bannerDetailsWithoutParentalRating(rottenTomatoesAudienceScore: Float?): AnnotatedString =
+private fun BaseItem.bannerDetailsWithoutParentalRating(
+    rottenTomatoesAudienceScore: Float?,
+    rottenTomatoesCriticScore: Float?,
+    interfacePreferences: InterfacePreferences,
+): AnnotatedString =
     buildAnnotatedString {
         val details =
             buildList {
@@ -543,13 +558,7 @@ private fun BaseItem.bannerDetailsWithoutParentalRating(rottenTomatoesAudienceSc
             append(detail)
             if (index != details.lastIndex) dot()
         }
-        data.communityRating?.let {
-            dot()
-            append(String.format(Locale.getDefault(), "%.1f", it))
-            appendInlineContent(id = "star")
-        }
-        rottenTomatoesAudienceScore?.takeIf { it > 0f }?.let {
-            dot()
-            append("RT Audience ${it.roundToInt()}%")
-        }
+        appendCommunityRating(data.communityRating, interfacePreferences)
+        appendRtAudienceScore(rottenTomatoesAudienceScore, interfacePreferences)
+        appendRtCriticScore(rottenTomatoesCriticScore, interfacePreferences)
     }

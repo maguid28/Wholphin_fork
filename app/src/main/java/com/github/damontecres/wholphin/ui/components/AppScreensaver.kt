@@ -55,6 +55,7 @@ import coil3.request.transitionFactory
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
+import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.services.ScreensaverService
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.CrossFadeFactory
@@ -109,6 +110,7 @@ fun AppScreensaver(
         currentItem = currentItem,
         showClock = prefs.interfacePreferences.screensaverPreference.showClock,
         showLogo = prefs.interfacePreferences.showLogos,
+        interfacePreferences = prefs.interfacePreferences,
         duration = prefs.interfacePreferences.screensaverPreference.duration.milliseconds,
         animate = prefs.interfacePreferences.screensaverPreference.animate,
         modifier = modifier,
@@ -121,6 +123,7 @@ fun AppScreensaverContent(
     currentItem: ScreensaverItem?,
     showClock: Boolean,
     showLogo: Boolean,
+    interfacePreferences: InterfacePreferences,
     duration: Duration,
     animate: Boolean,
     modifier: Modifier = Modifier,
@@ -165,6 +168,7 @@ fun AppScreensaverContent(
                     items = currentItem.items,
                     audienceScores = currentItem.audienceScores,
                     showLogo = showLogo,
+                    interfacePreferences = interfacePreferences,
                     onFocusedItem = {},
                     onClickItem = {},
                     onHoldItem = {},

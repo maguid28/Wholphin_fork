@@ -1,6 +1,7 @@
 package com.github.damontecres.wholphin.services
 
 import com.github.damontecres.wholphin.data.model.BaseItem
+import com.github.damontecres.wholphin.preferences.shouldFetchRtAudience
 import com.github.damontecres.wholphin.services.hilt.DefaultCoroutineScope
 import com.github.damontecres.wholphin.ui.components.ScreensaverItem
 import com.github.damontecres.wholphin.ui.launchDefault
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
@@ -171,14 +173,20 @@ class ScreensaverService
                 }
             }.flowOn(Dispatchers.IO).cancellable()
 
-        private suspend fun loadMediaBannerAudienceScores(items: List<BaseItem>) =
-            items
+        private suspend fun loadMediaBannerAudienceScores(items: List<BaseItem>): Map<UUID, Float> {
+            val interfacePreferences =
+                userPreferencesService.getCurrent().appPreferences.interfacePreferences
+            if (!interfacePreferences.shouldFetchRtAudience()) {
+                return emptyMap()
+            }
+            return items
                 .mapNotNull { item ->
                     mdbListRatingsService
                         .getRottenTomatoesAudienceScore(item)
                         ?.takeIf { it > 0f }
                         ?.let { item.id to it }
                 }.toMap()
+        }
     }
 
 data class ScreensaverState(
