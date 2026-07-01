@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -186,12 +187,14 @@ fun HomePage(
             val currentUserDto by viewModel.serverRepository.currentUserDto.observeAsState()
             val isAdministrator = currentUserDto?.policy?.isAdministrator == true
             var position by rememberPosition()
+            var pendingDetailReturn by rememberSaveable { mutableStateOf(false) }
 
             val onFocusPosition = remember { { it: RowColumn -> position = it } }
             val onClickItem =
                 remember {
                     { clickedPosition: RowColumn, item: BaseItem ->
                         position = clickedPosition
+                        pendingDetailReturn = true
                         viewModel.navigationManager.navigateTo(item.destination())
                     }
                 }
@@ -283,6 +286,8 @@ fun HomePage(
                 modifier = modifier,
                 takeFocus = takeFocus,
                 suppressContentScroll = suppressContentScroll,
+                pendingDetailReturn = pendingDetailReturn,
+                onPendingDetailReturnHandled = { pendingDetailReturn = false },
             )
             overviewDialog?.let { info ->
                 ItemDetailsDialog(
@@ -343,6 +348,8 @@ fun HomePageContent(
     onListScrollPosition: ((firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int) -> Unit)? = null,
     takeFocus: Boolean = true,
     suppressContentScroll: () -> Boolean = { false },
+    pendingDetailReturn: Boolean = false,
+    onPendingDetailReturnHandled: () -> Unit = {},
     showEmptyRows: Boolean = false,
     headerComposable: @Composable (focusedItem: BaseItem?) -> Unit = { focusedItem ->
         HomePageHeader(
@@ -397,8 +404,17 @@ fun HomePageContent(
     // The row that currently has focus within the content, updated synchronously as focus moves.
     // Used to restore focus to the correct row when returning from the nav drawer (see below).
     val liveFocusedRow = remember { mutableIntStateOf(-1) }
-    var awaitingColumnRestore by remember(position.row, position.column) {
-        mutableStateOf(position.row >= 0)
+    val isPersistentPage = onListScrollPosition == null
+    var focusSessionEstablished by if (isPersistentPage) {
+        rememberSaveable { mutableStateOf(false) }
+    } else {
+        remember { mutableStateOf(false) }
+    }
+    var awaitingColumnRestore by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!isPersistentPage && position.row >= 0) {
+            awaitingColumnRestore = true
+        }
     }
     // Content-local re-anchor suppression. Set true when returning from the nav drawer and held until
     // the user presses a key. While true the bring-into-view spec performs no scroll, so the restored
@@ -406,6 +422,10 @@ fun HomePageContent(
     // cleared on the first key event (see onPreviewKeyEvent below) - BEFORE that key moves focus - so
     // the very first navigation scrolls normally instead of being swallowed.
     var contentScrollSuppressed by remember { mutableStateOf(false) }
+    var horizontalScrollSuppressed by remember { mutableStateOf(false) }
+    var detailReturnFocusSignal by remember { mutableIntStateOf(0) }
+    var suppressFocusPositionUpdates by remember { mutableStateOf(false) }
+    val currentOnPendingDetailReturnHandled by rememberUpdatedState(onPendingDetailReturnHandled)
 
     fun savedFocusRowIndex(): Int? {
         val liveRow = liveFocusedRow.intValue.takeIf { it >= 0 }
@@ -439,6 +459,7 @@ fun HomePageContent(
             withFrameNanos { }
             if (rowFocusRequesters.getOrNull(targetRowIndex)?.tryRequestFocus("$debugTag:$attempt") == true) {
                 firstFocused = true
+                focusSessionEstablished = true
                 return
             }
         }
@@ -472,10 +493,6 @@ fun HomePageContent(
     LaunchedEffect(takeFocus) {
         if (!takeFocus) {
             persistListScrollPosition()
-            firstFocused = false
-        } else if (position.row >= 0) {
-            awaitingColumnRestore = true
-            liveFocusedRow.intValue = position.row
         }
     }
 
@@ -493,6 +510,12 @@ fun HomePageContent(
             .collect { suppressing ->
                 if (suppressing) {
                     contentScrollSuppressed = true
+                    firstFocused = false
+                    currentOnPendingDetailReturnHandled()
+                    if (position.row >= 0) {
+                        awaitingColumnRestore = true
+                        liveFocusedRow.intValue = position.row
+                    }
                     restoreFocusedHomeRow("drawer_return_row")
                 }
             }
@@ -501,15 +524,43 @@ fun HomePageContent(
     val currentOnFocusPosition by rememberUpdatedState(onFocusPosition)
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
     fun scheduleFocusedPosition(rowColumn: RowColumn) {
+        if (suppressFocusPositionUpdates) {
+            return
+        }
         currentOnFocusPosition(rowColumn)
+        focusSessionEstablished = true
         if (rowColumn.row >= 0) {
             awaitingColumnRestore = false
         }
     }
 
     if (takeFocus) {
-        LaunchedEffect(homeRows, position, liveFocusedRow.intValue) {
-            if (!firstFocused && homeRows.isNotEmpty()) {
+        LaunchedEffect(homeRows, takeFocus, pendingDetailReturn, firstFocused, position.row, position.column) {
+            if (!takeFocus || homeRows.isEmpty() || suppressContentScroll()) {
+                return@LaunchedEffect
+            }
+            if (pendingDetailReturn && position.row >= 0) {
+                currentOnPendingDetailReturnHandled()
+                firstFocused = true
+                liveFocusedRow.intValue = position.row
+                val visibleRows = listState.layoutInfo.visibleItemsInfo
+                val targetRowVisible =
+                    visibleRows.isNotEmpty() &&
+                        position.row in visibleRows.first().index..visibleRows.last().index
+                if (!targetRowVisible) {
+                    listState.scrollToItem(position.row)
+                }
+                horizontalScrollSuppressed = true
+                suppressFocusPositionUpdates = true
+                detailReturnFocusSignal++
+                delay(250)
+                suppressFocusPositionUpdates = false
+                return@LaunchedEffect
+            }
+            if (!firstFocused && !focusSessionEstablished) {
+                if (position.row >= 0) {
+                    awaitingColumnRestore = true
+                }
                 restoreFocusedHomeRow("home_initial_row")
             }
         }
@@ -571,6 +622,7 @@ fun HomePageContent(
                         // (and subsequent) key presses scroll normally. Cleared before the event is
                         // dispatched to focus, so the first navigation isn't swallowed.
                         contentScrollSuppressed = false
+                        horizontalScrollSuppressed = false
                         if (event.nativeKeyEvent.repeatCount == 0) {
                             restartIdleBannerTimer()
                         }
@@ -684,6 +736,16 @@ fun HomePageContent(
                                                         .focusRequester(rowFocusRequesters[rowIndex])
                                                         .animateItem(),
                                                 horizontalPadding = viewOptions.spacing.dp,
+                                                savedFocusedColumn =
+                                                    position
+                                                        .column
+                                                        .takeIf {
+                                                            rowIndex == position.row &&
+                                                                (
+                                                                    position.column in row.items.indices ||
+                                                                        (row.hasMore && position.column == row.items.size)
+                                                                )
+                                                        },
                                                 restoreFocusedIndex =
                                                     position
                                                         .column
@@ -695,6 +757,21 @@ fun HomePageContent(
                                                                         (row.hasMore && position.column == row.items.size)
                                                                 )
                                                         },
+                                                detailReturnFocusSignal =
+                                                    detailReturnFocusSignal.takeIf {
+                                                        rowIndex == position.row
+                                                    } ?: 0,
+                                                detailReturnFocusColumn =
+                                                    position
+                                                        .column
+                                                        .takeIf {
+                                                            rowIndex == position.row &&
+                                                                (
+                                                                    position.column in row.items.indices ||
+                                                                        (row.hasMore && position.column == row.items.size)
+                                                                )
+                                                        },
+                                                suppressHorizontalScroll = horizontalScrollSuppressed,
                                                 cardContent = { index, item, cardModifier, onClick, onLongClick ->
                                                     val onFocus =
                                                         remember(rowIndex, index) {

@@ -20,5 +20,16 @@ suspend fun LazyListState.scrollFocusedItemIntoRow(
         animateScrollToItem(index)
         return
     }
-    animateScrollToItem(index, -(viewportWidth * leadingMarginFraction).toInt())
+    val targetScrollOffset = -(viewportWidth * leadingMarginFraction).toInt()
+    val visibleItem = layoutInfo.visibleItemsInfo.find { it.index == index }
+    if (visibleItem != null) {
+        // Re-scrolling an already visible item (e.g. after backing out of details) can nudge the
+        // row and move TV focus to the adjacent item.
+        val targetLeadingOffset = -targetScrollOffset
+        val tolerance = (viewportWidth * 0.1f).toInt().coerceAtLeast(1)
+        if (kotlin.math.abs(visibleItem.offset - targetLeadingOffset) <= tolerance) {
+            return
+        }
+    }
+    animateScrollToItem(index, targetScrollOffset)
 }

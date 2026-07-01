@@ -35,7 +35,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -75,6 +74,10 @@ fun <T> ItemRow(
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 16.dp,
     restoreFocusedIndex: Int? = null,
+    savedFocusedColumn: Int? = null,
+    detailReturnFocusSignal: Int = 0,
+    detailReturnFocusColumn: Int? = null,
+    suppressHorizontalScroll: Boolean = false,
     showLoadMore: Boolean = false,
     onClickLoadMore: suspend () -> Unit = {},
     onLoadMoreFocus: (Int) -> Unit = {},
@@ -85,8 +88,10 @@ fun <T> ItemRow(
     val loadMoreIndex = items.size
     val maxFocusIndex = if (showLoadMore) loadMoreIndex else items.lastIndex.coerceAtLeast(0)
     val initialPosition =
-        remember(items.size, showLoadMore, restoreFocusedIndex) {
-            restoreFocusedIndex?.takeIf { it in 0..maxFocusIndex } ?: 0
+        remember(items.size, showLoadMore, restoreFocusedIndex, savedFocusedColumn) {
+            restoreFocusedIndex?.takeIf { it in 0..maxFocusIndex }
+                ?: savedFocusedColumn?.takeIf { it in 0..maxFocusIndex }
+                ?: 0
         }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = initialPosition.coerceAtMost(maxFocusIndex))
     var position by rememberInt(initialPosition.coerceAtMost(maxFocusIndex))
@@ -116,11 +121,8 @@ fun <T> ItemRow(
     val currentOnClickLoadMore by rememberUpdatedState(onClickLoadMore)
 
     val onMore = position >= loadMoreIndex && showLoadMore
-    val focusRestorerTarget =
-        itemFocusRequesters.getOrElse(position.coerceIn(0, itemFocusRequesters.lastIndex)) {
-            itemFocusRequesters.first()
-        }
     var pendingMoreFocus by remember { mutableStateOf(false) }
+    var suppressFocusScroll by remember { mutableStateOf(false) }
 
     fun focusRequesterFor(index: Int): FocusRequester =
         itemFocusRequesters.getOrElse(index) { itemFocusRequesters.first() }
@@ -135,7 +137,9 @@ fun <T> ItemRow(
         if (position != index) {
             position = index
         }
-        scrollRowToFocusedItem(index)
+        if (!suppressFocusScroll && !suppressHorizontalScroll) {
+            scrollRowToFocusedItem(index)
+        }
     }
 
     LaunchedEffect(showLoadMore, items.size) {
@@ -176,15 +180,40 @@ fun <T> ItemRow(
         val index = restoreFocusedIndex?.takeIf { it in 0..maxFocusIndex } ?: return@LaunchedEffect
         position = index
         repeat(10) {
-            if (it > 0) {
-                delay(50)
-            }
+            delay(50)
             state.scrollFocusedItemIntoRow(index)
             withFrameNanos { }
             val focusTarget = if (index == loadMoreIndex && showLoadMore) moreFocus else focusRequesterFor(index)
             if (focusTarget.tryRequestFocus("item_row_restore")) {
                 return@LaunchedEffect
             }
+        }
+    }
+
+    LaunchedEffect(detailReturnFocusSignal, detailReturnFocusColumn) {
+        if (detailReturnFocusSignal == 0) return@LaunchedEffect
+        val index = detailReturnFocusColumn?.takeIf { it in 0..maxFocusIndex } ?: return@LaunchedEffect
+        position = index
+        suppressFocusScroll = true
+        try {
+            repeat(15) { attempt ->
+                if (attempt > 0) {
+                    delay(50)
+                }
+                withFrameNanos { }
+                val focusTarget =
+                    if (index == loadMoreIndex && showLoadMore) {
+                        moreFocus
+                    } else {
+                        focusRequesterFor(index)
+                    }
+                if (focusTarget.tryRequestFocus("detail_return")) {
+                    return@LaunchedEffect
+                }
+            }
+        } finally {
+            delay(100)
+            suppressFocusScroll = false
         }
     }
 
@@ -215,7 +244,6 @@ fun <T> ItemRow(
                     Modifier
                         .fillMaxWidth()
                         .focusGroup()
-                        .focusRestorer(focusRestorerTarget)
                         .focusProperties {
                             onExit = {
                                 if (loadingMore) {

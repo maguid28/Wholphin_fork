@@ -10,6 +10,7 @@
 - Fixed returning to Home after visiting another section so focus and scroll position restore to the row you left instead of landing off-screen or on the collapsed nav drawer.
 - Fixed Movies and TV Shows recommended tabs so focus and scroll position restore to the row you left when returning from another section, using an in-memory UI state cache that preserves list scroll offset across nav backstack changes.
 - Fixed Movies and TV Shows recommended tabs so focus restores to the saved item within a row after scroll position is restored.
+- Fixed Home so backing out of an item no longer shifts focus left in the row you opened it from, by skipping the initial row-restore pass after detail return, suppressing horizontal row scroll until the next key press, and avoiding re-scroll when the focused item is already visible.
 - Speed up Movies and TV Shows recommended tabs with slimmer Jellyfin payloads, 10-item rows, row-0-first loading, and a 10-minute in-memory cache per library.
 - Show the Movies and TV Shows recommended loading screen until the first row is ready, then display content while remaining rows load.
 - Fixed combined Continue Watching on TV Shows recommended when merge-with-next-up is enabled, capping the row at 10 items and scoping resume/next-up to the library.
