@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -306,6 +307,7 @@ fun RecommendedContent(
     val isAdministrator = currentUserDto?.policy?.isAdministrator == true
     val savedUiState = remember(viewModel.libraryParentId) { viewModel.savedListUiState() }
     var position by remember(viewModel.libraryParentId) { mutableStateOf(savedUiState.focus) }
+    var pendingDetailReturn by rememberSaveable(viewModel.libraryParentId) { mutableStateOf(false) }
     val listState =
         rememberLazyListState(
             initialFirstVisibleItemIndex = savedUiState.firstVisibleItemIndex.coerceAtLeast(0),
@@ -364,7 +366,10 @@ fun RecommendedContent(
             HomePageContent(
                 homeRows = rows,
                 position = position,
-                onClickItem = { _, item ->
+                onClickItem = { rowColumn, item ->
+                    position = rowColumn
+                    viewModel.saveFocusPosition(rowColumn)
+                    pendingDetailReturn = true
                     viewModel.navigationManager.navigateTo(item.destination())
                 },
                 onLongClickItem = { rowColumn, item ->
@@ -416,6 +421,8 @@ fun RecommendedContent(
                 showLogo = preferences.appPreferences.interfacePreferences.showLogos,
                 takeFocus = takeFocus,
                 suppressContentScroll = suppressContentScroll,
+                pendingDetailReturn = pendingDetailReturn,
+                onPendingDetailReturnHandled = { pendingDetailReturn = false },
                 listState = listState,
                 onListScrollPosition = viewModel::saveScrollPosition,
                 modifier = modifier,

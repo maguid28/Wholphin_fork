@@ -551,6 +551,7 @@ fun HomePageContent(
                     listState.scrollToItem(position.row)
                 }
                 horizontalScrollSuppressed = true
+                contentScrollSuppressed = true
                 suppressFocusPositionUpdates = true
                 detailReturnFocusSignal++
                 delay(250)
