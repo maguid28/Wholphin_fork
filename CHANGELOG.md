@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Updated the GitHub README for Ndorfin with current features, installation, server setup, and a screenshot gallery placeholder.
+- Updated the GitHub README for Ndorfin with current features, installation, server setup, and a screenshot gallery.
 - Fixed local Jellyfin server discovery staying on "Searching…" indefinitely by using a bounded UDP discovery flow, ensuring the search state always clears, and showing servers from broadcast responses without blocking on HTTP verification.
 - Improved local Jellyfin server discovery on Android by enabling UDP broadcast, probing subnet broadcast addresses, and preferring reachable endpoint addresses over localhost-only advertisements.
 - Fixed local Jellyfin server discovery on subnets such as 192.168.18.0/24 by computing the directed broadcast address (for example 192.168.18.255) when Android does not provide one.

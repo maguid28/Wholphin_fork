@@ -10,26 +10,25 @@ Android TV client for [Jellyfin](https://jellyfin.org/), forked from [Wholphin](
 
 ## Screenshots
 
-Screenshots will be added to [`docs/screenshots/`](docs/screenshots/). See that folder for the list of images to capture and the `adb` command to pull them from a device.
-
-<!-- Uncomment once screenshots are committed:
-
 <p align="center">
-  <img src="docs/screenshots/home.png" alt="Home screen" width="820"/>
+  <img src="docs/screenshots/home.png" alt="Home screen with continue watching and recently added rows" width="900"/>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/discover.png" alt="Discover" width="820"/>
+  <img src="docs/screenshots/discover.png" alt="Seerr Discover with movie and TV request rows" width="440"/>
   &nbsp;
-  <img src="docs/screenshots/library-tv.png" alt="Library TV" width="820"/>
+  <img src="docs/screenshots/library-tv.png" alt="Library TV channel guide with picture-in-picture" width="440"/>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/movies.png" alt="Movies" width="820"/>
+  <img src="docs/screenshots/movies.png" alt="Movies recommended rows" width="440"/>
   &nbsp;
-  <img src="docs/screenshots/shows.png" alt="TV Shows" width="820"/>
+  <img src="docs/screenshots/shows.png" alt="TV Shows recommended rows" width="440"/>
 </p>
--->
+
+<p align="center">
+  <img src="docs/screenshots/playback.png" alt="Playback with dual subtitles" width="900"/>
+</p>
 
 ## Features
 
