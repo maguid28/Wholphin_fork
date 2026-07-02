@@ -874,6 +874,18 @@ sealed interface AppPreference<Pref, T> {
                 destination = Destination.SubtitleSettings(false),
             )
 
+        val EnableDualSubtitles =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.dual_subtitles,
+                defaultValue = false,
+                getter = { it.playbackPreferences.enableDualSubtitles },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackPreferences { enableDualSubtitles = value }
+                },
+                summaryOn = R.string.dual_subtitles_summary,
+                summaryOff = R.string.disabled,
+            )
+
         val RefreshRateSwitching =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.refresh_rate_switching,
@@ -1189,6 +1201,7 @@ val basicPreferences =
                     AppPreference.PlayThemeMusic,
                     AppPreference.RememberSelectedTab,
                     AppPreference.SubtitleStyle,
+                    AppPreference.EnableDualSubtitles,
                     AppPreference.ThemeColors,
                     AppPreference.AppFontPref,
                     AppPreference.DisplayedRatings,

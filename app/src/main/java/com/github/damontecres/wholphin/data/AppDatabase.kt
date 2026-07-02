@@ -42,7 +42,7 @@ import java.util.UUID
         LibraryTvWatchedEpisode::class,
 
     ],
-    version = 32,
+    version = 33,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(3, 4),
@@ -58,6 +58,7 @@ import java.util.UUID
         AutoMigration(20, 30),
         AutoMigration(30, 31),
         AutoMigration(31, 32),
+        AutoMigration(32, 33),
     ],
 )
 @TypeConverters(Converters::class)

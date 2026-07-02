@@ -55,6 +55,7 @@ class AppPreferencesSerializer
                                     AppPreference.RefreshRateSwitching.defaultValue
                                 resolutionSwitching = AppPreference.ResolutionSwitching.defaultValue
                                 cinemaMode = AppPreference.CinemaMode.defaultValue
+                                enableDualSubtitles = AppPreference.EnableDualSubtitles.defaultValue
 
                                 overrides =
                                     PlaybackOverrides

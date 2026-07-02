@@ -14,6 +14,7 @@ data class SimpleMediaStream(
     val index: Int,
     val streamTitle: String?,
     val displayTitle: String,
+    val supportsDualSecondary: Boolean = true,
 ) {
     companion object {
         fun from(
@@ -25,6 +26,7 @@ data class SimpleMediaStream(
                 index = mediaStream.index,
                 streamTitle = mediaStream.title?.takeIf { it.isNotNullOrBlank() },
                 displayTitle = mediaStreamDisplayTitle(context, mediaStream, includeFlags),
+                supportsDualSecondary = isTextSubtitleStream(mediaStream),
             )
     }
 }

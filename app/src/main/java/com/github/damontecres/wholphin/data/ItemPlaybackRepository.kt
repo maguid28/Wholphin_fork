@@ -161,6 +161,30 @@ class ItemPlaybackRepository
                 toSave
             }
 
+        suspend fun saveSecondarySubtitleSelection(
+            item: BaseItem,
+            itemPlayback: ItemPlayback?,
+            trackIndex: Int,
+        ): ItemPlayback =
+            serverRepository.current.value!!.let { current ->
+                val source =
+                    itemPlayback?.sourceId?.let { sourceId ->
+                        item.data.mediaSources?.firstOrNull { it.id?.toUUIDOrNull() == sourceId }
+                    } ?: streamChoiceService.chooseSource(item.data, null)
+                if (source == null) {
+                    Timber.w("Could not find media source for ${item.id}")
+                    throw IllegalArgumentException("Could not find media source for ${item.id}")
+                }
+                val toSave =
+                    (itemPlayback ?: ItemPlayback(
+                        userId = current.user.rowId,
+                        itemId = item.id,
+                        sourceId = source.id?.toUUIDOrNull(),
+                    )).copy(secondarySubtitleIndex = trackIndex)
+                Timber.v("Saving secondary subtitle selection %s", toSave)
+                saveItemPlayback(toSave)
+            }
+
         /**
          * Saves the [ItemPlayback] into the database, returning the same object with the rowId updated if needed
          */

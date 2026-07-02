@@ -102,6 +102,10 @@ sealed interface PlaybackAction {
         val index: Int,
     ) : PlaybackAction
 
+    data class ToggleSecondaryCaptions(
+        val index: Int,
+    ) : PlaybackAction
+
     data class ToggleAudio(
         val index: Int,
     ) : PlaybackAction

@@ -358,6 +358,9 @@ fun PlaybackPageContent(
     val analyticsState by viewModel.analyticsState.collectAsState()
 
     val cues by viewModel.subtitleCues.observeAsState(listOf())
+    val secondaryCues by viewModel.secondarySubtitleCues.observeAsState(listOf())
+    val secondarySubtitlesActive by viewModel.secondarySubtitlesActive.observeAsState(false)
+    val dualSubtitlesEnabled = preferences.appPreferences.playbackPreferences.enableDualSubtitles
     var showDebugInfo by remember { mutableStateOf(prefs.showDebugInfo) }
 
     val nextUp by viewModel.nextUp.observeAsState(null)
@@ -396,6 +399,14 @@ fun PlaybackPageContent(
     val subtitleDelay = currentPlayback?.subtitleDelay ?: Duration.ZERO
     LaunchedEffect(subtitleDelay) {
         (player as? MpvPlayer)?.subtitleDelay = subtitleDelay
+    }
+
+    LaunchedEffect(player, secondarySubtitlesActive) {
+        if (player is MpvPlayer || !secondarySubtitlesActive) return@LaunchedEffect
+        while (true) {
+            viewModel.updateSecondaryCuePosition(player.currentPosition)
+            delay(100)
+        }
     }
 
     val presentationState = rememberPresentationState(player, false)
@@ -523,6 +534,10 @@ fun PlaybackPageContent(
 
             is PlaybackAction.ToggleCaptions -> {
                 viewModel.changeSubtitleStream(it.index)
+            }
+
+            is PlaybackAction.ToggleSecondaryCaptions -> {
+                viewModel.changeSecondarySubtitleStream(it.index)
             }
 
             PlaybackAction.SearchCaptions -> {
@@ -756,6 +771,41 @@ fun PlaybackPageContent(
                             .ifElse(isImageSubtitles, Modifier.alpha(subtitleImageOpacity)),
                 )
             }
+
+            if (
+                skipIndicatorDuration == 0L &&
+                dualSubtitlesEnabled &&
+                secondarySubtitlesActive &&
+                currentItemPlayback.subtitleIndexEnabled &&
+                player !is MpvPlayer &&
+                !presentationState.coverSurface
+            ) {
+                val maxSize by animateFloatAsState(if (controllerViewState.controlsVisible) .7f else 1f)
+                AndroidView(
+                    factory = { context ->
+                        SubtitleView(context).apply {
+                            subtitleSettings.let {
+                                setStyle(it.toSubtitleStyle())
+                                setFixedTextSize(Dimension.SP, (it.fontSize * 0.85f))
+                                setBottomPaddingFraction((it.margin + 12).toFloat() / 100f)
+                            }
+                        }
+                    },
+                    update = {
+                        it.setCues(secondaryCues)
+                        Media3SubtitleOverride(subtitleSettings.calculateEdgeSize(density))
+                            .apply(it)
+                    },
+                    onReset = {
+                        it.setCues(null)
+                    },
+                    modifier =
+                        Modifier
+                            .fillMaxSize(maxSize)
+                            .align(Alignment.TopCenter)
+                            .background(Color.Transparent),
+                )
+            }
         }
 
         // Ask to skip intros, etc button
@@ -901,11 +951,13 @@ fun PlaybackPageContent(
                     audioIndex = currentItemPlayback?.audioIndex,
                     audioStreams = mediaInfo?.audioStreams.orEmpty(),
                     subtitleIndex = currentItemPlayback?.subtitleIndex,
+                    secondarySubtitleIndex = currentItemPlayback?.secondarySubtitleIndex,
                     subtitleStreams = mediaInfo?.subtitleStreams.orEmpty(),
                     playbackSpeed = playbackSpeed,
                     contentScale = contentScale,
                     subtitleDelay = subtitleDelay,
                     hasSubtitleDownloadPermission = hasSubtitleDownloadPermission,
+                    dualSubtitlesEnabled = dualSubtitlesEnabled,
                     // TODO Passing through audio prevents changing playback speed
                     // See https://github.com/damontecres/Wholphin/issues/164
                     playbackSpeedEnabled = playerBackend == PlayerBackend.MPV || currentPlayback?.audioDecoder != null,

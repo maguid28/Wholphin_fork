@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Added a Displayed ratings setting under Interface so you can choose which ratings (Community, RT Audience, and RT Critic) appear on item details, banners, and Discover. Default is Community + RT Audience only; enable RT Critic in settings if you want the Tomatometer.
+- Added a Dual subtitles setting under Interface that enables choosing a secondary subtitle track during video playback from the captions menu.
+- Fixed secondary subtitles not appearing during ExoPlayer playback by correcting Jellyfin subtitle URL/format handling, keeping the overlay visible while a secondary track is active, and polling cue timing continuously.
+- Fixed secondary subtitles failing on TV episodes by fetching subtitle data through the Jellyfin API with format fallbacks, and showing a clear message when the selected track uses unsupported image subtitles (PGS).
+- Fixed secondary subtitle load failures during ExoPlayer playback by fetching through authenticated subtitle URLs (including deliveryUrl), trying multiple media source ID formats, and parsing with the delivery format that succeeded.
+- Fixed secondary subtitles failing for all tracks by adding raw API, HLS playlist, and DataSource fetch fallbacks, libass parsing for ASS tracks, and filtering the secondary picker to text-based tracks only.
 - Fixed displayed ratings not appearing on Home row cards and headers by fetching community ratings and provider IDs with list items, loading external RT scores for row items, and showing enabled ratings under each poster card title.
 - Removed the play button hint below the overview text on the screensaver media banner.
 - Added genre rows to Home customization so you can pick specific genres (e.g. Comedy, Sci-Fi) from a library and show them as content rows on the home screen.

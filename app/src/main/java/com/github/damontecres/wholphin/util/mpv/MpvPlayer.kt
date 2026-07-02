@@ -338,6 +338,7 @@ class MpvPlayer(
             // Subtitles disabled
             Timber.v("TrackSelection: disabling subtitles")
             sendCommand(MpvCommand.SET_TRACK_SELECTION, TrackSelection("sid", "no"))
+            sendCommand(MpvCommand.SET_SECONDARY_TRACK_SELECTION, "no")
         }
         if (C.TRACK_TYPE_AUDIO in parameters.disabledTrackTypes) {
             // Audio disabled
@@ -526,6 +527,10 @@ class MpvPlayer(
     }
 
     override fun getSurfaceSize(): Size = surfaceHolder?.surfaceFrame?.let { Size(it.width(), it.height()) } ?: Size.UNKNOWN
+
+    fun setSecondarySubtitleTrack(trackId: String) {
+        sendCommand(MpvCommand.SET_SECONDARY_TRACK_SELECTION, trackId)
+    }
 
     override fun getCurrentCues(): CueGroup = CueGroup.EMPTY_TIME_ZERO
 
@@ -1035,6 +1040,12 @@ class MpvPlayer(
                 updateTracksAndNotify()
             }
 
+            MpvCommand.SET_SECONDARY_TRACK_SELECTION -> {
+                val trackId = obj as String
+                MPVLib.setPropertyString("secondary-sid", trackId)
+                updateTracksAndNotify()
+            }
+
             MpvCommand.SEEK -> {
                 val positionMs = obj as Long
                 MPVLib.setPropertyDouble("time-pos", positionMs / 1000.0)
@@ -1230,6 +1241,7 @@ enum class MpvCommand(
     PLAY_PAUSE(false),
     SEEK(false),
     SET_TRACK_SELECTION(false),
+    SET_SECONDARY_TRACK_SELECTION(false),
     SET_SPEED(false),
     SET_SUBTITLE_DELAY(false),
     LOAD_FILE(false),

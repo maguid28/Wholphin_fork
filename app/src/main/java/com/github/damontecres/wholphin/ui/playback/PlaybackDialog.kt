@@ -50,6 +50,7 @@ enum class PlaybackDialogType {
     PLAYBACK_SPEED,
     VIDEO_SCALE,
     SUBTITLE_DELAY,
+    SECONDARY_CAPTIONS,
 }
 
 data class PlaybackSettings(
@@ -57,12 +58,14 @@ data class PlaybackSettings(
     val audioIndex: Int?,
     val audioStreams: List<SimpleMediaStream>,
     val subtitleIndex: Int?,
+    val secondarySubtitleIndex: Int?,
     val subtitleStreams: List<SimpleMediaStream>,
     val playbackSpeed: Float,
     val contentScale: ContentScale,
     val subtitleDelay: Duration,
     val hasSubtitleDownloadPermission: Boolean,
     val playbackSpeedEnabled: Boolean,
+    val dualSubtitlesEnabled: Boolean,
 )
 
 /**
@@ -111,6 +114,15 @@ fun PlaybackDialog(
         }
 
         PlaybackDialogType.CAPTIONS -> {
+            val showSecondaryOption =
+                DualSubtitleUtils.shouldShowSecondarySubtitleOption(
+                    settings.dualSubtitlesEnabled,
+                    settings.subtitleIndex,
+                )
+            val currentSecondary =
+                remember(settings) {
+                    settings.subtitleStreams.firstOrNull { it.index == settings.secondarySubtitleIndex }
+                }
             SubtitleChoiceBottomDialog(
                 choices = settings.subtitleStreams,
                 currentChoice = settings.subtitleIndex,
@@ -133,6 +145,49 @@ fun PlaybackDialog(
                     onDismissRequest.invoke()
                     onPlaybackActionClick.invoke(PlaybackAction.SearchCaptions)
                 },
+                extraItems =
+                    if (showSecondaryOption) {
+                        listOf(
+                            BottomDialogItem(
+                                data = PlaybackDialogType.SECONDARY_CAPTIONS,
+                                headline = stringResource(R.string.secondary_subtitles),
+                                supporting = currentSecondary?.displayTitle,
+                            ),
+                        )
+                    } else {
+                        emptyList()
+                    },
+                onSelectExtraItem = { item ->
+                    onDismissRequest.invoke()
+                    onClickPlaybackDialogType(item.data)
+                },
+                gravity = Gravity.END,
+            )
+        }
+
+        PlaybackDialogType.SECONDARY_CAPTIONS -> {
+            SubtitleChoiceBottomDialog(
+                choices =
+                    settings.subtitleStreams.filter {
+                        it.index != settings.subtitleIndex && it.supportsDualSecondary
+                    },
+                currentChoice = settings.secondarySubtitleIndex,
+                hasDownloadPermission = false,
+                showOnlyForced = false,
+                showSearch = false,
+                onDismissRequest = {
+                    onControllerInteraction.invoke()
+                    onDismissRequest.invoke()
+                },
+                onSelectChoice = { subtitleIndex ->
+                    onDismissRequest.invoke()
+                    if (subtitleIndex >= 0) {
+                        onPlaybackActionClick.invoke(PlaybackAction.ToggleSecondaryCaptions(subtitleIndex))
+                    } else if (subtitleIndex == TrackIndex.DISABLED) {
+                        onPlaybackActionClick.invoke(PlaybackAction.ToggleSecondaryCaptions(TrackIndex.DISABLED))
+                    }
+                },
+                onSelectSearch = {},
                 gravity = Gravity.END,
             )
         }
@@ -299,6 +354,10 @@ fun SubtitleChoiceBottomDialog(
     gravity: Int,
     hasDownloadPermission: Boolean,
     currentChoice: Int? = null,
+    showOnlyForced: Boolean = true,
+    showSearch: Boolean = true,
+    extraItems: List<BottomDialogItem<PlaybackDialogType>> = emptyList(),
+    onSelectExtraItem: (BottomDialogItem<PlaybackDialogType>) -> Unit = {},
 ) {
     // TODO enforcing a width ends up ignore the gravity
     Dialog(
@@ -347,22 +406,40 @@ fun SubtitleChoiceBottomDialog(
                         supportingContent = {},
                     )
                 }
-                item {
-                    ListItem(
-                        selected = currentChoice == TrackIndex.ONLY_FORCED,
-                        onClick = {
-                            onSelectChoice(TrackIndex.ONLY_FORCED)
-                        },
-                        leadingContent = {
-                            SelectedLeadingContent(currentChoice == TrackIndex.ONLY_FORCED)
-                        },
-                        headlineContent = {
-                            Text(
-                                text = stringResource(R.string.only_forced_subtitles),
-                            )
-                        },
-                        supportingContent = {},
-                    )
+                if (showOnlyForced) {
+                    item {
+                        ListItem(
+                            selected = currentChoice == TrackIndex.ONLY_FORCED,
+                            onClick = {
+                                onSelectChoice(TrackIndex.ONLY_FORCED)
+                            },
+                            leadingContent = {
+                                SelectedLeadingContent(currentChoice == TrackIndex.ONLY_FORCED)
+                            },
+                            headlineContent = {
+                                Text(
+                                    text = stringResource(R.string.only_forced_subtitles),
+                                )
+                            },
+                            supportingContent = {},
+                        )
+                    }
+                }
+                extraItems.forEach { extraItem ->
+                    item {
+                        HorizontalDivider()
+                        ListItem(
+                            selected = false,
+                            onClick = { onSelectExtraItem(extraItem) },
+                            leadingContent = {},
+                            headlineContent = {
+                                Text(text = extraItem.headline)
+                            },
+                            supportingContent = {
+                                extraItem.supporting?.let { Text(it) }
+                            },
+                        )
+                    }
                 }
                 itemsIndexed(choices) { index, choice ->
                     val interactionSource = remember { MutableInteractionSource() }
@@ -385,20 +462,22 @@ fun SubtitleChoiceBottomDialog(
                         interactionSource = interactionSource,
                     )
                 }
-                item {
-                    HorizontalDivider()
-                    ListItem(
-                        selected = false,
-                        enabled = hasDownloadPermission,
-                        onClick = onSelectSearch,
-                        leadingContent = {},
-                        headlineContent = {
-                            Text(
-                                text = stringResource(R.string.search_and_download),
-                            )
-                        },
-                        supportingContent = {},
-                    )
+                if (showSearch) {
+                    item {
+                        HorizontalDivider()
+                        ListItem(
+                            selected = false,
+                            enabled = hasDownloadPermission,
+                            onClick = onSelectSearch,
+                            leadingContent = {},
+                            headlineContent = {
+                                Text(
+                                    text = stringResource(R.string.search_and_download),
+                                )
+                            },
+                            supportingContent = {},
+                        )
+                    }
                 }
             }
         }

@@ -87,6 +87,7 @@ message PlaybackPreferences {
   bool resolution_switching = 23;
   string external_player = 24;
   bool cinema_mode = 25;
+  bool enable_dual_subtitles = 26;
 }
 
 message HomePagePreferences{

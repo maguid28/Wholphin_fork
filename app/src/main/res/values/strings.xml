@@ -474,6 +474,11 @@
     <string name="enable_library_tv">Enable Library TV</string>
     <string name="enable_library_tv_summary">Adds a guide that schedules your library like TV channels</string>
     <string name="subtitle_delay">Subtitle delay</string>
+    <string name="dual_subtitles">Dual subtitles</string>
+    <string name="dual_subtitles_summary">Show a second subtitle track alongside the primary track during playback</string>
+    <string name="secondary_subtitles">Secondary subtitles</string>
+    <string name="secondary_subtitles_failed">Could not load secondary subtitles for this track</string>
+    <string name="secondary_subtitles_image_not_supported">Secondary subtitles only work with text-based tracks (SRT, ASS, VTT), not image subtitles like PGS</string>
     <string name="backdrop_display">Backdrop style</string>
     <string name="resolution_switching">Resolution switching</string>
     <string name="local">Local</string>

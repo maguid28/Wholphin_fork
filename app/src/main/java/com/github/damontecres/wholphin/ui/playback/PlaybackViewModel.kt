@@ -28,6 +28,7 @@ import androidx.media3.session.MediaSession
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.size.Size
+import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.ItemPlaybackDao
 import com.github.damontecres.wholphin.data.ItemPlaybackRepository
 import com.github.damontecres.wholphin.data.LibraryTvWatchedEpisodeDao
@@ -56,6 +57,7 @@ import com.github.damontecres.wholphin.services.RefreshRateService
 import com.github.damontecres.wholphin.services.ScreensaverService
 import com.github.damontecres.wholphin.services.StreamChoiceService
 import com.github.damontecres.wholphin.services.UserPreferencesService
+import com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient
 import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvChannel
 import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvGuideMemoryCache
 import com.github.damontecres.wholphin.ui.detail.librarytv.LibraryTvGuideService
@@ -79,7 +81,10 @@ import com.github.damontecres.wholphin.util.TrackActivityPlaybackListener
 import com.github.damontecres.wholphin.util.checkForSupport
 import com.github.damontecres.wholphin.util.mpv.mpvDeviceProfile
 import com.github.damontecres.wholphin.util.profile.Codec
+import com.github.damontecres.wholphin.util.mpv.MpvPlayer
 import com.github.damontecres.wholphin.util.subtitleMimeTypes
+import org.jellyfin.sdk.api.client.extensions.subtitleApi
+import org.jellyfin.sdk.model.api.MediaStream
 import com.github.damontecres.wholphin.util.supportItemKinds
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -101,6 +106,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.mediaInfoApi
 import org.jellyfin.sdk.api.client.extensions.mediaSegmentsApi
@@ -182,6 +188,7 @@ class PlaybackViewModel
         private val screensaverService: ScreensaverService,
         private val musicService: MusicService,
         private val libraryTvGuideService: LibraryTvGuideService,
+        @AuthOkHttpClient private val authOkHttpClient: OkHttpClient,
         @Assisted private val destination: Destination,
     ) : ViewModel(),
         Player.Listener,
@@ -213,6 +220,10 @@ class PlaybackViewModel
         val analyticsState = MutableStateFlow(AnalyticsState())
 
         val subtitleCues = MutableLiveData<List<Cue>>(listOf())
+        val secondarySubtitleCues = MutableLiveData<List<Cue>>(listOf())
+        val secondarySubtitlesActive = MutableLiveData(false)
+
+        private var loadedSecondaryCues: List<TimedSubtitleCue> = emptyList()
 
         private lateinit var preferences: UserPreferences
         internal lateinit var itemId: UUID
@@ -492,6 +503,7 @@ class PlaybackViewModel
                 // New item, so we can clear the media segment tracker & subtitle cues
                 resetSegmentState()
                 this@PlaybackViewModel.subtitleCues.setValueOnMain(listOf())
+                clearSecondarySubtitles()
 
                 viewModelScope.launchIO {
                     // Starting playback, so want to invalidate the last played timestamp for this item
@@ -809,6 +821,25 @@ class PlaybackViewModel
                         }
                     }
 
+                val secondarySubtitle =
+                    if (preferences.appPreferences.playbackPreferences.enableDualSubtitles) {
+                        val secondaryIndex = currentItemPlayback.secondarySubtitleIndex
+                        if (secondaryIndex >= 0 && secondaryIndex != subtitleIndex) {
+                            source.mediaStreams
+                                ?.firstOrNull { it.index == secondaryIndex && it.type == MediaStreamType.SUBTITLE }
+                                ?.takeUnless { isImageSubtitleStream(it) }
+                                ?.let { stream ->
+                                    source.id?.let { mediaSourceId ->
+                                        buildSecondarySubtitleConfiguration(itemId, mediaSourceId, stream)
+                                    }
+                                }
+                        } else {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+
                 Timber.v("subtitleIndex=$subtitleIndex, externalSubtitleCount=$externalSubtitleCount, externalSubtitle=$externalSubtitle")
 
                 val mediaItem =
@@ -824,7 +855,7 @@ class PlaybackViewModel
                                 ),
                             ),
                         ).setUri(mediaUrl.toUri())
-                        .setSubtitleConfigurations(listOfNotNull(externalSubtitle))
+                        .setSubtitleConfigurations(listOfNotNull(externalSubtitle, secondarySubtitle))
                         .apply {
                             when (source.container) {
                                 Codec.Container.HLS -> setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -1034,17 +1065,29 @@ class PlaybackViewModel
         fun changeSubtitleStream(index: Int): Job =
             viewModelScope.launchIO {
                 Timber.d("Changing subtitle track to %s", index)
+                val currentPlayback = currentItemPlayback.value!!
+                val secondaryIndex =
+                    if (index < 0 || index == currentPlayback.secondarySubtitleIndex) {
+                        TrackIndex.DISABLED
+                    } else {
+                        currentPlayback.secondarySubtitleIndex
+                    }
                 val itemPlayback =
-                    itemPlaybackRepository.saveTrackSelection(
+                    itemPlaybackRepository.saveSecondarySubtitleSelection(
                         item = currentItem.item,
-                        itemPlayback = currentItemPlayback.value!!,
-                        trackIndex = index,
-                        type = MediaStreamType.SUBTITLE,
+                        itemPlayback =
+                            itemPlaybackRepository.saveTrackSelection(
+                                item = currentItem.item,
+                                itemPlayback = currentPlayback,
+                                trackIndex = index,
+                                type = MediaStreamType.SUBTITLE,
+                            ),
+                        trackIndex = secondaryIndex,
                     )
                 this@PlaybackViewModel.currentItemPlayback.setValueOnMain(itemPlayback)
 
                 // Resolve ONLY_FORCED to actual track index for playback
-                val source = currentPlayback.value?.mediaSourceInfo
+                val source = this@PlaybackViewModel.currentPlayback.value?.mediaSourceInfo
                 val resolvedIndex =
                     if (source != null) {
                         streamChoiceService.resolveSubtitleIndex(
@@ -1067,6 +1110,188 @@ class PlaybackViewModel
                     true,
                 )
             }
+
+        fun changeSecondarySubtitleStream(index: Int): Job =
+            viewModelScope.launchIO {
+                Timber.d("Changing secondary subtitle track to %s", index)
+                val itemPlayback =
+                    itemPlaybackRepository.saveSecondarySubtitleSelection(
+                        item = currentItem.item,
+                        itemPlayback = currentItemPlayback.value!!,
+                        trackIndex = index,
+                    )
+                this@PlaybackViewModel.currentItemPlayback.setValueOnMain(itemPlayback)
+                applySecondarySubtitle(itemPlayback)
+            }
+
+        fun updateSecondaryCuePosition(positionMs: Long) {
+            if (loadedSecondaryCues.isEmpty()) return
+            secondarySubtitleCues.postValue(SecondarySubtitleParser.cuesAtPosition(loadedSecondaryCues, positionMs))
+        }
+
+        private fun clearSecondarySubtitles() {
+            loadedSecondaryCues = emptyList()
+            secondarySubtitleCues.postValue(listOf())
+            secondarySubtitlesActive.postValue(false)
+            if (::player.isInitialized) {
+                (player as? MpvPlayer)?.setSecondarySubtitleTrack("no")
+            }
+        }
+
+        internal suspend fun applySecondarySubtitle(itemPlayback: ItemPlayback = currentItemPlayback.value!!) {
+            if (!preferences.appPreferences.playbackPreferences.enableDualSubtitles) {
+                clearSecondarySubtitles()
+                return
+            }
+            if (!itemPlayback.subtitleIndexEnabled) {
+                clearSecondarySubtitles()
+                return
+            }
+            val secondaryIndex = itemPlayback.secondarySubtitleIndex
+            if (secondaryIndex < 0) {
+                clearSecondarySubtitles()
+                return
+            }
+            if (secondaryIndex == itemPlayback.subtitleIndex) {
+                clearSecondarySubtitles()
+                return
+            }
+
+            val source = currentPlayback.value?.mediaSourceInfo ?: return
+            val stream =
+                source.mediaStreams?.firstOrNull { it.index == secondaryIndex && it.type == MediaStreamType.SUBTITLE }
+                    ?: currentItem.item.data.mediaSources
+                        ?.asSequence()
+                        ?.flatMap { it.mediaStreams.orEmpty().asSequence() }
+                        ?.firstOrNull { it.index == secondaryIndex && it.type == MediaStreamType.SUBTITLE }
+            if (stream != null && isImageSubtitleStream(stream)) {
+                Timber.w("Secondary subtitle track $secondaryIndex is image-based and unsupported")
+                clearSecondarySubtitles()
+                notifySecondarySubtitleFailed(R.string.secondary_subtitles_image_not_supported)
+                return
+            }
+            val playerBackend = currentPlayer.value?.backend ?: return
+            val supportsDirectPlay = currentPlayback.value?.playMethod == PlayMethod.DIRECT_PLAY
+            val subtitleUrl = buildSubtitleUrl(itemPlayback.itemId, source.id, secondaryIndex, stream)
+
+            if (player is MpvPlayer) {
+                withContext(Dispatchers.Main) {
+                    DualSubtitleUtils.applySecondarySubtitleToMpv(
+                        mpvPlayer = player as MpvPlayer,
+                        tracks = player.currentTracks,
+                        playerBackend = playerBackend,
+                        supportsDirectPlay = supportsDirectPlay,
+                        secondarySubtitleIndex = secondaryIndex,
+                        source = source,
+                        subtitleUrl = subtitleUrl,
+                        stream = stream,
+                    )
+                }
+                loadedSecondaryCues = emptyList()
+                secondarySubtitleCues.postValue(listOf())
+                secondarySubtitlesActive.postValue(true)
+                return
+            }
+
+            val mediaSourceId = source.id ?: run {
+                clearSecondarySubtitles()
+                notifySecondarySubtitleFailed(R.string.secondary_subtitles_failed)
+                return
+            }
+            val additionalSourceIds =
+                currentItem.item.data.mediaSources?.mapNotNull { it.id }.orEmpty()
+            val fetched =
+                SecondarySubtitleFetcher.fetch(
+                    api = api,
+                    context = context,
+                    httpClient = authOkHttpClient,
+                    itemId = itemPlayback.itemId,
+                    mediaSourceIds =
+                        mediaSourceIdsToTry(
+                            sourceId = mediaSourceId,
+                            savedSourceId = itemPlayback.sourceId,
+                            additionalSourceIds = additionalSourceIds,
+                        ),
+                    subtitleIndex = secondaryIndex,
+                    stream = stream,
+                )
+            if (fetched == null) {
+                Timber.w("Failed to fetch secondary subtitle bytes for index $secondaryIndex")
+                clearSecondarySubtitles()
+                notifySecondarySubtitleFailed(R.string.secondary_subtitles_failed)
+                return
+            }
+            loadedSecondaryCues =
+                SecondarySubtitleParser.parse(
+                    bytes = fetched.bytes,
+                    deliveryFormat = fetched.format,
+                    stream = stream,
+                    assHandler = currentPlayer.value?.assHandler,
+                )
+            Timber.d("Loaded ${loadedSecondaryCues.size} secondary cues")
+            if (loadedSecondaryCues.isEmpty()) {
+                clearSecondarySubtitles()
+                notifySecondarySubtitleFailed(R.string.secondary_subtitles_failed)
+                return
+            }
+            secondarySubtitlesActive.postValue(true)
+            withContext(Dispatchers.Main) {
+                updateSecondaryCuePosition(player.currentPosition)
+            }
+        }
+
+        private suspend fun notifySecondarySubtitleFailed(messageRes: Int) {
+            withContext(Dispatchers.Main) {
+                showToast(context, context.getString(messageRes), Toast.LENGTH_LONG)
+            }
+        }
+
+        private fun buildSecondarySubtitleConfiguration(
+            itemId: UUID,
+            mediaSourceId: String,
+            stream: MediaStream,
+        ): MediaItem.SubtitleConfiguration? {
+            val uri =
+                stream.deliveryUrl?.let { api.createUrl(it).toUri() }
+                    ?: buildSubtitleUrl(itemId, mediaSourceId, stream.index, stream)?.toUri()
+                    ?: return null
+            var flags = 0
+            if (stream.isForced) flags = flags.or(C.SELECTION_FLAG_FORCED)
+            if (stream.isDefault) flags = flags.or(C.SELECTION_FLAG_DEFAULT)
+            return MediaItem.SubtitleConfiguration
+                .Builder(uri)
+                .setId("s:${stream.index}")
+                .setMimeType(subtitleMimeTypes[stream.codec])
+                .setLanguage(stream.language)
+                .setLabel(stream.title ?: "Secondary")
+                .setSelectionFlags(flags)
+                .build()
+        }
+
+        private fun buildSubtitleUrl(
+            itemId: UUID,
+            mediaSourceId: String?,
+            subtitleIndex: Int,
+            stream: org.jellyfin.sdk.model.api.MediaStream?,
+        ): String? {
+            if (mediaSourceId == null) return null
+            val format = subtitleDeliveryFormat(stream)
+            val normalizedSourceId = mediaSourceId.normalizeMediaSourceId()
+            return try {
+                api.createUrl(
+                    api.subtitleApi
+                        .getSubtitleUrl(
+                            routeItemId = itemId,
+                            routeMediaSourceId = normalizedSourceId,
+                            routeIndex = subtitleIndex,
+                            routeFormat = format,
+                        ),
+                )
+            } catch (ex: Exception) {
+                Timber.e(ex, "Failed to build subtitle URL for index $subtitleIndex")
+                null
+            }
+        }
 
         private suspend fun prefetchTrickplay(
             duration: Duration,
@@ -1909,6 +2134,7 @@ class PlaybackViewModel
                         currentPlayback.update { it?.copy(subtitleDelay = result.delayMs.milliseconds) }
                     }
                 }
+                applySecondarySubtitle(it)
             }
         }
 

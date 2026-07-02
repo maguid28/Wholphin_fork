@@ -2,6 +2,7 @@
 
 package com.github.damontecres.wholphin.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Ignore
@@ -38,6 +39,8 @@ data class ItemPlayback(
     val sourceId: UUID? = null,
     val audioIndex: Int = TrackIndex.UNSPECIFIED,
     val subtitleIndex: Int = TrackIndex.UNSPECIFIED,
+    @ColumnInfo(defaultValue = "-1")
+    val secondarySubtitleIndex: Int = TrackIndex.UNSPECIFIED,
 ) {
     @Transient
     @Ignore
@@ -46,6 +49,10 @@ data class ItemPlayback(
     @Transient
     @Ignore
     val subtitleIndexEnabled = subtitleIndex >= 0
+
+    @Transient
+    @Ignore
+    val secondarySubtitleIndexEnabled = secondarySubtitleIndex >= 0
 }
 
 object TrackIndex {
