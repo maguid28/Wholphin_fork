@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.1.0 (2026-07-02)
+
+- Improved README intro to highlight Library TV channels and dual subtitles.
 - Improved README screenshot captions and removed Movies/TV Shows gallery images.
 - Updated the GitHub README screenshot gallery to use a uniform display width for all captures.
 - Updated the GitHub README for Ndorfin with current features, installation, server setup, and a screenshot gallery.

@@ -1,6 +1,6 @@
 # Ndorfin
 
-Android TV client for [Jellyfin](https://jellyfin.org/), forked from [Wholphin](https://github.com/damontecres/Wholphin). Ndorfin targets lean-back devices (Android TV, Google TV, NVIDIA Shield, Fire TV) with a Plex-style interface, deep library browsing, and ExoPlayer or MPV playback.
+Android TV client for [Jellyfin](https://jellyfin.org/), forked from [Wholphin](https://github.com/damontecres/Wholphin). Ndorfin tries to emulate and improve upon Plex, with **TV channels built from your Jellyfin libraries**, dual subtitles during playback, and a highly customisable interface.
 
 <p align="center">
 <a href="https://github.com/maguid28/Wholphin_fork/releases">
