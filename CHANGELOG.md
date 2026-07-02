@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 1.1.0 (2026-07-02)
+## 1.0.1 (2026-07-02)
 
 - Improved README intro to highlight Library TV channels and dual subtitles.
 - Improved README screenshot captions and removed Movies/TV Shows gallery images.
