@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed local Jellyfin server discovery staying on "Searching…" indefinitely by using a bounded UDP discovery flow, ensuring the search state always clears, and showing servers from broadcast responses without blocking on HTTP verification.
+- Improved local Jellyfin server discovery on Android by enabling UDP broadcast, probing subnet broadcast addresses, and preferring reachable endpoint addresses over localhost-only advertisements.
+- Fixed local Jellyfin server discovery on subnets such as 192.168.18.0/24 by computing the directed broadcast address (for example 192.168.18.255) when Android does not provide one.
+- Added subnet HTTP scanning fallback for local Jellyfin server discovery so Docker-hosted servers that do not respond to UDP auto-discovery (port 7359) can still be found on the LAN IP, such as 192.168.18.151:8096.
+
 ## 1.0.0 (2026-07-01)
 
 - Rebranded the app from Wholphin to Ndorfin, including user-facing strings, crash reporting, Jellyfin display client name, and application ID `com.ndorfin.app`.

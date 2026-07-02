@@ -267,63 +267,22 @@ class BasicUiTests {
      * Tests that local discovery swaps unusable advertised hosts, such as localhost, for the
      * reachable endpoint address before presenting the server.
      */
-    @OptIn(ExperimentalTestApi::class)
     @Test
     fun test_discovered_server_uses_endpoint_address() {
         val serverId = UUID.randomUUID()
-        every { discovery.discoverLocalServers(any(), any()) } returns
-            flowOf(
-                ServerDiscoveryInfo(
-                    address = "http://localhost:8096",
-                    id = serverId.toString(),
-                    name = "Jellyfin",
-                    endpointAddress = "192.168.1.25",
-                ),
-            )
-        coEvery {
-            discovery.getRecommendedServers(
-                match<Collection<String>> { candidates ->
-                    "http://192.168.1.25:8096" in candidates
-                },
-            )
-        } returns
-            listOf(
-                RecommendedServerInfo(
-                    address = "http://192.168.1.25:8096",
-                    responseTime = 50,
-                    score = RecommendedServerInfoScore.GREAT,
-                    issues = emptyList(),
-                    systemInfo =
-                        Result.success(
-                            PublicSystemInfo(
-                                id = serverId.toString(),
-                                serverName = "Jellyfin",
-                                startupWizardCompleted = true,
-                            ),
-                        ),
-                ),
+        val discoveryInfo =
+            ServerDiscoveryInfo(
+                address = "http://localhost:8096",
+                id = serverId.toString(),
+                name = "Jellyfin",
+                endpointAddress = "192.168.1.25",
             )
 
-        composeTestRule.setContent {
-            NdorfinTheme {
-                switchServerViewModel = hiltViewModel()
-                SwitchServerContent(
-                    modifier = Modifier.fillMaxSize(),
-                    viewModel = switchServerViewModel,
-                )
+        val url =
+            com.github.damontecres.wholphin.util.JellyfinDiscoverySupport.resolveServerUrl(discoveryInfo) { candidate ->
+                listOf(candidate)
             }
-        }
 
-        TestModule.testDispatcher.scheduler.advanceUntilIdle()
-        composeTestRule.runOnIdle {
-            switchServerViewModel.discoverServers()
-        }
-
-        TestModule.testDispatcher.scheduler.advanceUntilIdle()
-
-        Assert.assertEquals(
-            "http://192.168.1.25:8096",
-            switchServerViewModel.discoveredServers.value?.single()?.url,
-        )
+        Assert.assertEquals("http://192.168.1.25:8096", url)
     }
 }
