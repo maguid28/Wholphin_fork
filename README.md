@@ -10,25 +10,14 @@ Android TV client for [Jellyfin](https://jellyfin.org/), forked from [Wholphin](
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/screenshots/home.png" alt="Home screen with continue watching and recently added rows" width="900"/>
-</p>
+All captures are 3840×2160; displayed at a uniform width below.
 
-<p align="center">
-  <img src="docs/screenshots/discover.png" alt="Seerr Discover with movie and TV request rows" width="440"/>
-  &nbsp;
-  <img src="docs/screenshots/library-tv.png" alt="Library TV channel guide with picture-in-picture" width="440"/>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/movies.png" alt="Movies recommended rows" width="440"/>
-  &nbsp;
-  <img src="docs/screenshots/shows.png" alt="TV Shows recommended rows" width="440"/>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/playback.png" alt="Playback with dual subtitles" width="900"/>
-</p>
+<p align="center"><img src="docs/screenshots/home.png" alt="Home screen with continue watching and recently added rows" width="800"/></p>
+<p align="center"><img src="docs/screenshots/discover.png" alt="Seerr Discover with movie and TV request rows" width="800"/></p>
+<p align="center"><img src="docs/screenshots/library-tv.png" alt="Library TV channel guide with picture-in-picture" width="800"/></p>
+<p align="center"><img src="docs/screenshots/movies.png" alt="Movies recommended rows" width="800"/></p>
+<p align="center"><img src="docs/screenshots/shows.png" alt="TV Shows recommended rows" width="800"/></p>
+<p align="center"><img src="docs/screenshots/playback.png" alt="Playback with dual subtitles" width="800"/></p>
 
 ## Features
 
