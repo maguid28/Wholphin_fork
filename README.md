@@ -10,14 +10,21 @@ Android TV client for [Jellyfin](https://jellyfin.org/), forked from [Wholphin](
 
 ## Screenshots
 
-All captures are 3840×2160; displayed at a uniform width below.
+**Home** — Plex-style landing page with a featured in-progress episode, **Next up** and **Recently added** rows, and quick access to your Jellyfin libraries from the sidebar.
 
-<p align="center"><img src="docs/screenshots/home.png" alt="Home screen with continue watching and recently added rows" width="800"/></p>
-<p align="center"><img src="docs/screenshots/discover.png" alt="Seerr Discover with movie and TV request rows" width="800"/></p>
-<p align="center"><img src="docs/screenshots/library-tv.png" alt="Library TV channel guide with picture-in-picture" width="800"/></p>
-<p align="center"><img src="docs/screenshots/movies.png" alt="Movies recommended rows" width="800"/></p>
-<p align="center"><img src="docs/screenshots/shows.png" alt="TV Shows recommended rows" width="800"/></p>
-<p align="center"><img src="docs/screenshots/playback.png" alt="Playback with dual subtitles" width="800"/></p>
+<p align="center"><img src="docs/screenshots/home.png" alt="Ndorfin Home screen showing The Simpsons hero banner, Next up row, and Recently added movies" width="800"/></p>
+
+**Discover** — Built-in [Jellyseerr](https://github.com/Fallenbagel/jellyseerr) / Seerr integration to browse trending movies and TV, view details, and request new content without leaving the app.
+
+<p align="center"><img src="docs/screenshots/discover.png" alt="Seerr Discover tab with featured movie, Movies row, and TV Shows row" width="800"/></p>
+
+**Library TV** — A streaming-style channel guide built from your Jellyfin libraries, with service logos, an EPG timeline, program details, and picture-in-picture when you return from playback.
+
+<p align="center"><img src="docs/screenshots/library-tv.png" alt="Library TV guide showing Paramount+ channel row, program grid, and live preview window" width="800"/></p>
+
+**Dual subtitles** — Play video with a primary and secondary subtitle track at the same time (for example English and Spanish), with standard playback controls and progress info.
+
+<p align="center"><img src="docs/screenshots/playback.png" alt="Disenchantment playback with English and Spanish subtitles shown together" width="800"/></p>
 
 ## Features
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Improved README screenshot captions and removed Movies/TV Shows gallery images.
 - Updated the GitHub README screenshot gallery to use a uniform display width for all captures.
 - Updated the GitHub README for Ndorfin with current features, installation, server setup, and a screenshot gallery.
 - Fixed local Jellyfin server discovery staying on "Searching…" indefinitely by using a bounded UDP discovery flow, ensuring the search state always clears, and showing servers from broadcast responses without blocking on HTTP verification.
