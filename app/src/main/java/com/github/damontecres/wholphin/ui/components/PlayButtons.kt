@@ -58,7 +58,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.data.SortAndDirection
 import com.github.damontecres.wholphin.ui.ifElse
 import com.github.damontecres.wholphin.ui.theme.PreviewInteractionSource
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import kotlin.time.Duration
@@ -438,7 +438,7 @@ fun DeleteButton(
 @PreviewTvSpec
 @Composable
 private fun ExpandablePlayButtonsPreview() {
-    WholphinTheme(true) {
+    NdorfinTheme(true) {
         ExpandablePlayButtons(
             title = "Movie",
             resumePosition = 10.seconds,
@@ -462,7 +462,7 @@ private fun ExpandablePlayButtonsPreview() {
 @Composable
 private fun ViewOptionsPreview() {
     val source = remember { PreviewInteractionSource() }
-    WholphinTheme {
+    NdorfinTheme {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(16.dp),

@@ -32,7 +32,7 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.data.model.VideoFilter
 import com.github.damontecres.wholphin.ui.components.SliderBar
 import com.github.damontecres.wholphin.ui.components.SliderColors
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 
 const val DRAG_THROTTLE_DELAY = 50L
 
@@ -281,7 +281,7 @@ fun ImageFilterDialog(
 @Preview
 @Composable
 private fun ImageFilterSlidersPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         ImageFilterSliders(
             filter = VideoFilter(),
             showVideoOptions = true,

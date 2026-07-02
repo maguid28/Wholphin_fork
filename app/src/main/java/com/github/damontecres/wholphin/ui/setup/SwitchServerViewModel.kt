@@ -462,6 +462,6 @@ class SwitchServerViewModel
             private const val DISCOVERY_TIMEOUT_MS = 2_500
             private const val DISCOVERY_MAX_SERVERS = 15
             private const val JELLYFIN_HTTP_PORT = 8096
-            private const val MULTICAST_LOCK_TAG = "WholphinServerDiscovery"
+            private const val MULTICAST_LOCK_TAG = "NdorfinServerDiscovery"
         }
     }

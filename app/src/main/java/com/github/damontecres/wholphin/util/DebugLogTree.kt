@@ -8,7 +8,7 @@ import timber.log.Timber
  * Enable debug logging via [Timber] if enabled in the app settings
  */
 class DebugLogTree private constructor() : Timber.Tree() {
-    // Only add logging for below INFO, production logger in WholphinApplication logs >=INFO
+    // Only add logging for below INFO, production logger in NdorfinApplication logs >=INFO
     override fun isLoggable(
         tag: String?,
         priority: Int,
@@ -20,7 +20,7 @@ class DebugLogTree private constructor() : Timber.Tree() {
         message: String,
         t: Throwable?,
     ) {
-        Log.println(priority, tag ?: "Wholphin", message)
+        Log.println(priority, tag ?: "Ndorfin", message)
     }
 
     var enabled: Boolean

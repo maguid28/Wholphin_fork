@@ -62,7 +62,7 @@ data class HomeRowPresets(
         }
 
     companion object {
-        val WholphinDefault by lazy {
+        val NdorfinDefault by lazy {
             HomeRowPresets(
                 continueWatching = HomeRowViewOptions(),
                 movieLibrary = HomeRowViewOptions(),
@@ -90,7 +90,7 @@ data class HomeRowPresets(
             )
         }
 
-        val WholphinCompact by lazy {
+        val NdorfinCompact by lazy {
             val height = 148
             val epHeight = 100
             HomeRowPresets(
@@ -239,8 +239,8 @@ fun HomeRowPresetsContent(
 ) {
     val presets =
         listOf(
-            stringResource(R.string.display_preset_default) to HomeRowPresets.WholphinDefault,
-            stringResource(R.string.display_preset_compact) to HomeRowPresets.WholphinCompact,
+            stringResource(R.string.display_preset_default) to HomeRowPresets.NdorfinDefault,
+            stringResource(R.string.display_preset_compact) to HomeRowPresets.NdorfinCompact,
             stringResource(R.string.display_preset_series_thumb) to HomeRowPresets.SeriesThumbs,
             stringResource(R.string.display_preset_episode_thumbnails) to HomeRowPresets.EpisodeThumbnails,
         )

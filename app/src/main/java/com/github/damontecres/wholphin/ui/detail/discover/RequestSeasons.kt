@@ -40,7 +40,7 @@ import com.github.damontecres.wholphin.ui.cards.AvailableIndicator
 import com.github.damontecres.wholphin.ui.cards.PartiallyAvailableIndicator
 import com.github.damontecres.wholphin.ui.cards.PendingIndicator
 import com.github.damontecres.wholphin.ui.components.BasicDialog
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 
 data class RequestSeason(
     val season: Season,
@@ -311,7 +311,7 @@ fun RequestSeasonsPreview() {
             )
         }
 
-    WholphinTheme {
+    NdorfinTheme {
         RequestSeasons(
             title = "Series title",
             seasons = seasons,

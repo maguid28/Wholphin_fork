@@ -33,7 +33,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.playback.audioStreamCount
 import com.github.damontecres.wholphin.ui.playback.embeddedSubtitleCount
 import com.github.damontecres.wholphin.ui.playback.externalSubtitlesCount
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.theme.withAppFontFamily
 import com.github.damontecres.wholphin.ui.util.StreamFormatting.concatWithSpace
 import com.github.damontecres.wholphin.ui.util.StreamFormatting.formatAudioCodec
@@ -213,7 +213,7 @@ fun StreamLabel(
 @PreviewTvSpec
 @Composable
 private fun StreamLabelPreview() {
-    WholphinTheme(appThemeColors = AppThemeColors.PURPLE) {
+    NdorfinTheme(appThemeColors = AppThemeColors.PURPLE) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier =

@@ -37,7 +37,7 @@ import com.github.damontecres.wholphin.ui.components.Genre
 import com.github.damontecres.wholphin.ui.components.Studio
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
 import com.github.damontecres.wholphin.ui.setup.rememberIdColor
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import java.util.UUID
 
 @Composable
@@ -130,7 +130,7 @@ fun StudioCard(
 @PreviewTvSpec
 @Composable
 private fun GenreCardPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         val studio =
             Studio(
                 UUID.randomUUID(),

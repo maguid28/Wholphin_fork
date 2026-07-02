@@ -26,7 +26,7 @@ import androidx.tv.material3.Icon
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.ui.components.ExpandableFaButton
 import com.github.damontecres.wholphin.ui.components.ExpandablePlayButton
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import kotlinx.coroutines.launch
@@ -192,7 +192,7 @@ fun ImageControlsOverlay(
 @Preview(widthDp = 800)
 @Composable
 private fun ImageControlsOverlayPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         ImageControlsOverlay(
             slideshowEnabled = true,
             slideshowControls =

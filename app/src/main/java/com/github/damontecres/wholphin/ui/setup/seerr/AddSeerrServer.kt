@@ -35,7 +35,7 @@ import com.github.damontecres.wholphin.ui.components.Button
 import com.github.damontecres.wholphin.ui.components.EditTextBox
 import com.github.damontecres.wholphin.ui.components.TextButton
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.util.LoadingState
 
@@ -329,7 +329,7 @@ fun AddSeerrServerUsername(
 @PreviewTvSpec
 @Composable
 private fun AddSeerrServerUsernamePreview() {
-    WholphinTheme {
+    NdorfinTheme {
         AddSeerrServerUsername(
             onSubmit = { string: String, string1: String, string2: String -> },
             username = "test",

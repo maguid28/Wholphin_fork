@@ -56,7 +56,7 @@ import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.playback.PlayExternalViewModel
 import com.github.damontecres.wholphin.ui.showToast
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.theme.customThemeColorChoices
 import com.github.damontecres.wholphin.ui.util.ProvideLocalClock
 import com.github.damontecres.wholphin.util.DebugLogTree
@@ -225,7 +225,7 @@ class MainActivity : AppCompatActivity() {
                     DebugLogTree.INSTANCE.enabled = appPreferences.debugLogging
                 }
                 CompositionLocalProvider(LocalImageUrlService provides imageUrlService) {
-                    WholphinTheme(
+                    NdorfinTheme(
                         true,
                         appThemeColors = appPreferences.interfacePreferences.appThemeColors,
                         customThemeColorChoices = appPreferences.interfacePreferences.customThemeColorChoices(),

@@ -45,8 +45,8 @@
         android:logo="@mipmap/ndorfin_banner"
         android:roundIcon="@mipmap/ndorfin_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Wholphin"
-        android:name=".WholphinApplication"
+        android:theme="@style/Theme.Ndorfin"
+        android:name=".NdorfinApplication"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
@@ -81,7 +81,7 @@
             tools:node="remove" />
 
         <service
-            android:name=".WholphinDreamService"
+            android:name=".NdorfinDreamService"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_DREAM_SERVICE">

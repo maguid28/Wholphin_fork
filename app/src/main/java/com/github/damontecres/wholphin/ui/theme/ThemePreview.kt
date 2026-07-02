@@ -65,7 +65,7 @@ private fun ThemePreview() {
 @Composable
 private fun ThemeExample(theme: AppThemeColors) {
     val source = remember { PreviewInteractionSource() }
-    WholphinTheme(appThemeColors = theme) {
+    NdorfinTheme(appThemeColors = theme) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.background(MaterialTheme.colorScheme.background)) {
                 Text(

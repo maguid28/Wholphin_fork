@@ -50,7 +50,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
 import com.github.damontecres.wholphin.ui.playOnClickSound
 import com.github.damontecres.wholphin.ui.playSoundOnFocus
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import java.util.Locale
 
@@ -306,7 +306,7 @@ fun StarRating(
 @PreviewTvSpec
 @Composable
 private fun SimpleStarRatingPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column {
             SimpleStarRating(7.5f, Modifier.height(32.dp))
             TomatoRating(75f)

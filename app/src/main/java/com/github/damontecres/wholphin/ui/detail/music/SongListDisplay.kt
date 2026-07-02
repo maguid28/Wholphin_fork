@@ -33,7 +33,7 @@ import com.github.damontecres.wholphin.ui.components.Button
 import com.github.damontecres.wholphin.ui.enableMarquee
 import com.github.damontecres.wholphin.ui.letNotEmpty
 import com.github.damontecres.wholphin.ui.roundSeconds
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import org.jellyfin.sdk.model.extensions.ticks
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -197,7 +197,7 @@ fun MusicQueueMarker(
 @PreviewTvSpec
 @Composable
 fun SongListItemPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column {
             SongListItem(
                 title = "Song title",

@@ -22,7 +22,7 @@ import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.components.Button
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -102,7 +102,7 @@ fun SubtitleDelayButton(
 @PreviewTvSpec
 @Composable
 private fun SubtitleDelayPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         SubtitleDelay(
             delay = 1.5.seconds,
             onChangeDelay = {},

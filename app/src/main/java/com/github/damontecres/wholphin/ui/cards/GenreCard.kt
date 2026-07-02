@@ -32,7 +32,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.components.Genre
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
 import com.github.damontecres.wholphin.ui.setup.rememberIdColor
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import java.util.UUID
 
 @Composable
@@ -125,7 +125,7 @@ fun GenreCard(
 @PreviewTvSpec
 @Composable
 private fun GenreCardPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         val genre =
             Genre(
                 UUID.randomUUID(),

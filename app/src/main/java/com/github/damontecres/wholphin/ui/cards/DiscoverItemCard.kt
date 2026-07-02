@@ -49,7 +49,7 @@ import com.github.damontecres.wholphin.ui.Cards
 import com.github.damontecres.wholphin.ui.FontAwesome
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.enableMarquee
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import kotlinx.coroutines.delay
 
 @Composable
@@ -373,7 +373,7 @@ fun DiscoverViewMoreCard(
 @PreviewTvSpec
 @Composable
 private fun Preview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column {
             PendingIndicator()
             AvailableIndicator()

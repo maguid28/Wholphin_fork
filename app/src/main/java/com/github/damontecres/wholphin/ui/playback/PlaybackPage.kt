@@ -959,7 +959,7 @@ fun PlaybackPageContent(
                     hasSubtitleDownloadPermission = hasSubtitleDownloadPermission,
                     dualSubtitlesEnabled = dualSubtitlesEnabled,
                     // TODO Passing through audio prevents changing playback speed
-                    // See https://github.com/damontecres/Wholphin/issues/164
+                    // See https://github.com/maguid28/Wholphin_fork/issues/164
                     playbackSpeedEnabled = playerBackend == PlayerBackend.MPV || currentPlayback?.audioDecoder != null,
                 ),
             onDismissRequest = {

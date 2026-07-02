@@ -67,12 +67,12 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.github.damontecres.wholphin"
+        applicationId = "com.ndorfin.app"
         minSdk = 23
         targetSdk = 36
         versionCode = gitTags.trim().lines().size
         versionName = gitDescribe.trim().removePrefix("v").ifBlank { "0.0.0" }
-        testInstrumentationRunner = "com.github.damontecres.wholphin.test.WholphinTestRunner"
+        testInstrumentationRunner = "com.github.damontecres.wholphin.test.NdorfinTestRunner"
 
         buildConfigField("long", "BUILD_TIME", System.currentTimeMillis().toString())
     }

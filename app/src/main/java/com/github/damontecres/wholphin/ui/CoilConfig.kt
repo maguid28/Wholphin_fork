@@ -95,7 +95,7 @@ fun CoilConfig(
                 add(SvgDecoder.Factory())
                 add(
                     OkHttpNetworkFetcherFactory(
-                        cacheStrategy = { WholphinCacheStrategy(CacheControlCacheStrategy()) },
+                        cacheStrategy = { NdorfinCacheStrategy(CacheControlCacheStrategy()) },
                         callFactory = { client },
                     ),
                 )
@@ -110,7 +110,7 @@ fun CoilConfig(
  * The expectation is that Trickplay images will be prefetched so the cache will always be warm
  */
 @OptIn(ExperimentalCoilApi::class)
-private class WholphinCacheStrategy(
+private class NdorfinCacheStrategy(
     private val delegate: CacheStrategy,
 ) : CacheStrategy {
     override suspend fun read(

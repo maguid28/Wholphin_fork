@@ -27,7 +27,7 @@ import com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient
 import com.github.damontecres.wholphin.ui.CoilConfig
 import com.github.damontecres.wholphin.ui.components.AppScreensaverContent
 import com.github.damontecres.wholphin.ui.launchDefault
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.theme.customThemeColorChoices
 import com.github.damontecres.wholphin.ui.util.ProvideLocalClock
 import dagger.hilt.android.AndroidEntryPoint
@@ -42,7 +42,7 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
 @AndroidEntryPoint
-class WholphinDreamService :
+class NdorfinDreamService :
     DreamService(),
     SavedStateRegistryOwner {
     @Inject
@@ -103,8 +103,8 @@ class WholphinDreamService :
         val itemFlow = screensaverService.createItemFlow(lifecycleScope)
         setContentView(
             ComposeView(this).apply {
-                setViewTreeLifecycleOwner(this@WholphinDreamService)
-                setViewTreeSavedStateRegistryOwner(this@WholphinDreamService)
+                setViewTreeLifecycleOwner(this@NdorfinDreamService)
+                setViewTreeSavedStateRegistryOwner(this@NdorfinDreamService)
                 setContent {
                     val user by serverRepository.currentUser.observeAsState()
                     if (user != null) {
@@ -119,7 +119,7 @@ class WholphinDreamService :
                                 debugLogging = false,
                                 enableCache = true,
                             )
-                            WholphinTheme(
+                            NdorfinTheme(
                                 appThemeColors = prefs.interfacePreferences.appThemeColors,
                                 customThemeColorChoices = prefs.interfacePreferences.customThemeColorChoices(),
                                 appFont = prefs.interfacePreferences.appFont,

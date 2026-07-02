@@ -1,6 +1,6 @@
-# Contributing to Wholphin
+# Contributing to Ndorfin
 
-We appreciate your interest in contributing to Wholphin!
+We appreciate your interest in contributing to Ndorfin!
 
 ## Code of Conduct
 

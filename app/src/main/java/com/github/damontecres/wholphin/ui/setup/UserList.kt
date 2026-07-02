@@ -57,7 +57,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.components.DialogItem
 import com.github.damontecres.wholphin.ui.components.DialogPopup
 import com.github.damontecres.wholphin.ui.isNotNullOrBlank
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import java.util.UUID
 
@@ -339,7 +339,7 @@ fun UserIconCardImage(
 @PreviewTvSpec
 @Composable
 fun UserIconCardImagePreview() {
-    WholphinTheme {
+    NdorfinTheme {
         UserIconCardImage(
             id = UUID.randomUUID(),
             name = "A smith",

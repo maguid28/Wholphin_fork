@@ -70,7 +70,7 @@ import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.nav.Destination
 import com.github.damontecres.wholphin.ui.rememberPosition
 import com.github.damontecres.wholphin.ui.setValueOnMain
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.util.ApiRequestPager
 import com.github.damontecres.wholphin.util.DataLoadingState
@@ -594,7 +594,7 @@ fun PersonHeader(
 @PreviewTvSpec
 @Composable
 private fun PersonPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         PersonHeader(
             name = "John Smith",
             overview = "John Smith is an actor",

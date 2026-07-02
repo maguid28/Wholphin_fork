@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import timber.log.Timber
 
@@ -311,7 +311,7 @@ fun TabIndicator(
 @PreviewTvSpec
 @Composable
 private fun TabRowPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
             TabRow(
                 selectedTabIndex = 1,

@@ -36,7 +36,7 @@ import com.github.damontecres.wholphin.ui.components.BasicDialog
 import com.github.damontecres.wholphin.ui.components.Button
 import com.github.damontecres.wholphin.ui.components.TextButton
 import com.github.damontecres.wholphin.ui.playback.isEnterKey
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 
 @Composable
 fun PinEntry(
@@ -218,7 +218,7 @@ fun PinEntryDialog(
 @PreviewTvSpec
 @Composable
 private fun PinEntryPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         PinEntry(
             onTextChange = {},
             onClickServerAuth = {},

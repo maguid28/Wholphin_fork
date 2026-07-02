@@ -422,8 +422,8 @@
     <string name="customize_home_summary">Välj rader och bilder på startsidan</string>
     <string name="delete_item">Är du säker på att du vill ta bort detta objekt?</string>
     <string name="discover">Upptäck</string>
-    <string name="display_preset_compact">Wholphin Kompakt</string>
-    <string name="display_preset_default">Wholphin Standard</string>
+    <string name="display_preset_compact">Ndorfin Kompakt</string>
+    <string name="display_preset_default">Ndorfin Standard</string>
     <string name="display_presets">Visningsförinställningar</string>
     <string name="display_presets_description">Inbyggda förinställningar för att snabbt styla alla rader</string>
     <string name="display_preset_episode_thumbnails">Avsnittsminiatyrer</string>

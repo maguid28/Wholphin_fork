@@ -47,7 +47,7 @@ import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.ui.AppColors
 import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -188,7 +188,7 @@ fun NextUpCard(
 @PreviewTvSpec
 @Composable
 private fun NextUpEpisodePreview() {
-    WholphinTheme(true) {
+    NdorfinTheme(true) {
         val previewHandler =
             AsyncImagePreviewHandler {
                 ColorImage(Color.Blue.toArgb())

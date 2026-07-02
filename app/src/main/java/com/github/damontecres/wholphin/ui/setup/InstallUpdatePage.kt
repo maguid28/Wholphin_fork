@@ -59,7 +59,7 @@ import com.github.damontecres.wholphin.ui.components.TextButton
 import com.github.damontecres.wholphin.ui.dimAndBlur
 import com.github.damontecres.wholphin.ui.formatBytes
 import com.github.damontecres.wholphin.ui.setValueOnMain
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.LoadingExceptionHandler
 import com.github.damontecres.wholphin.util.LoadingState
@@ -394,7 +394,7 @@ fun DownloadDialog(
 @PreviewTvSpec
 @Composable
 private fun InstallUpdatePageContentPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         InstallUpdatePageContent(
             currentVersion = Version.fromString("v0.4.0"),
             release =

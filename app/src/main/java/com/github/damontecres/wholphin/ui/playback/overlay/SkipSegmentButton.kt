@@ -26,7 +26,7 @@ import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.components.Button
 import com.github.damontecres.wholphin.ui.skipStringRes
 import com.github.damontecres.wholphin.ui.theme.PreviewInteractionSource
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import org.jellyfin.sdk.model.api.MediaSegmentType
 
 @Composable
@@ -80,7 +80,7 @@ fun SkipSegmentButton(
 @PreviewTvSpec
 @Composable
 fun SkipSegmentButtonPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         val source = remember { PreviewInteractionSource() }
         SkipSegmentButton(
             type = MediaSegmentType.INTRO,

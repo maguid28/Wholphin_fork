@@ -172,7 +172,7 @@ fun getThemeColors(
     }
 
 @Composable
-fun WholphinTheme(
+fun NdorfinTheme(
     darkTheme: Boolean = true,
     appThemeColors: AppThemeColors = AppThemeColors.ELECTRIC_INDIGO,
     customThemeColorChoices: CustomThemeColorChoices = DefaultCustomThemeColorChoices,

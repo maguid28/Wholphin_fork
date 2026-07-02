@@ -75,7 +75,7 @@ import com.github.damontecres.wholphin.ui.seekBack
 import com.github.damontecres.wholphin.ui.seekForward
 import com.github.damontecres.wholphin.ui.skipStringRes
 import com.github.damontecres.wholphin.ui.theme.LocalTheme
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import kotlinx.coroutines.delay
@@ -621,7 +621,7 @@ data class BottomDialogItem<T>(
 @PreviewTvSpec
 @Composable
 private fun ButtonPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Row(Modifier.background(Color.Red)) {
             PlaybackButton(
                 iconRes = R.drawable.baseline_play_arrow_24,

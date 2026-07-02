@@ -1,7 +1,7 @@
 package com.github.damontecres.wholphin.preferences
 
 import com.github.damontecres.wholphin.R
-import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.NdorfinApplication
 import org.jellyfin.sdk.model.api.BaseItemKind
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -139,15 +139,15 @@ object ScreensaverPreference {
                     }
 
                     maxAgeValues.lastIndex.toLong() -> {
-                        WholphinApplication.instance.getString(R.string.no_max)
+                        NdorfinApplication.instance.getString(R.string.no_max)
                     }
 
                     0L -> {
-                        WholphinApplication.instance.getString(R.string.for_all_ages)
+                        NdorfinApplication.instance.getString(R.string.for_all_ages)
                     }
 
                     else -> {
-                        WholphinApplication.instance.getString(
+                        NdorfinApplication.instance.getString(
                             R.string.up_to_age,
                             maxAgeValues[value.toInt()].toString(),
                         )

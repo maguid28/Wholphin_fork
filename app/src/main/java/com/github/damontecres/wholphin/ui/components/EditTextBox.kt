@@ -47,7 +47,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import com.github.damontecres.wholphin.R
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 
 /**
  * An input field for text customized for TV entry
@@ -359,7 +359,7 @@ fun SearchEditTextBox(
 @PreviewTvSpec
 @Composable
 private fun EditTextBoxPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             EditTextBox(
                 state = rememberTextFieldState("string"),

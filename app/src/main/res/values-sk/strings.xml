@@ -522,8 +522,8 @@
     <string name="content_scale_fill">Vyplniť</string>
     <string name="content_scale_fill_width">Vyplniť na šírku</string>
     <string name="content_scale_fill_height">Vyplniť na výšku</string>
-    <string name="display_preset_default">Wholphin predvolené</string>
-    <string name="display_preset_compact">Wholphin kompaktné</string>
+    <string name="display_preset_default">Ndorfin predvolené</string>
+    <string name="display_preset_compact">Ndorfin kompaktné</string>
     <string name="display_preset_series_thumb">Náhľadové obrázky seriálov</string>
     <string name="display_preset_episode_thumbnails">Náhľadové obrázky epizód</string>
     <string name="image_type_thumb">Náhľad</string>

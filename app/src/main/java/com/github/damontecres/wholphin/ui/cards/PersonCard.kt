@@ -44,7 +44,7 @@ import com.github.damontecres.wholphin.ui.AspectRatios
 import com.github.damontecres.wholphin.ui.FontAwesome
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.enableMarquee
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.UUID
 import org.jellyfin.sdk.model.api.PersonKind
@@ -218,7 +218,7 @@ fun PersonCard(
 @PreviewTvSpec
 @Composable
 private fun PersonCardPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         PersonCard(
             person =
                 Person(

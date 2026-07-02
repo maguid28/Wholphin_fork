@@ -40,7 +40,7 @@ object DatabaseModule {
             .databaseBuilder(
                 context,
                 AppDatabase::class.java,
-                "wholphin",
+                "ndorfin",
             ).addMigrations(Migrations.Migrate2to3)
 //            .setQueryCallback({ sqlQuery, args ->
 //                Timber.v("sqlQuery=$sqlQuery, args=$args")

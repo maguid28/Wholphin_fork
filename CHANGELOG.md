@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.0.0 (2026-07-01)
+
+- Rebranded the app from Wholphin to Ndorfin, including user-facing strings, crash reporting, Jellyfin display client name, and application ID `com.ndorfin.app`.
 - Added a Dual subtitles setting under Interface that enables choosing a secondary subtitle track during video playback from the captions menu.
 - Fixed secondary subtitles not appearing during ExoPlayer playback by correcting Jellyfin subtitle URL/format handling, keeping the overlay visible while a secondary track is active, and polling cue timing continuously.
 - Fixed secondary subtitles failing on TV episodes by fetching subtitle data through the Jellyfin API with format fallbacks, and showing a clear message when the selected track uses unsupported image subtitles (PGS).

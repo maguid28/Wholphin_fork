@@ -10,7 +10,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.damontecres.wholphin.R
-import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.NdorfinApplication
 import com.github.damontecres.wholphin.data.ServerRepository
 import com.github.damontecres.wholphin.data.model.BaseItem
 import com.github.damontecres.wholphin.preferences.AppPreferences
@@ -577,7 +577,7 @@ data class TvProgram(
             val differentDay = start.toLocalDate() != now.toLocalDate()
             val time =
                 DateUtils.formatDateRange(
-                    WholphinApplication.instance,
+                    NdorfinApplication.instance,
                     start
                         .atZone(ZoneId.systemDefault())
                         .toInstant()
@@ -614,7 +614,7 @@ data class TvProgram(
     }
 
     companion object {
-        private val NO_DATA = WholphinApplication.instance.getString(R.string.no_data)
+        private val NO_DATA = NdorfinApplication.instance.getString(R.string.no_data)
 
         fun fake(
             zeroHourStart: LocalDateTime,

@@ -20,7 +20,7 @@ import javax.inject.Inject
 
 @OptIn(ExperimentalComposeRuntimeApi::class)
 @HiltAndroidApp
-class WholphinApplication :
+class NdorfinApplication :
     Application(),
     Configuration.Provider {
     init {
@@ -42,7 +42,7 @@ class WholphinApplication :
                         message: String,
                         t: Throwable?,
                     ) {
-                        Log.println(priority, tag ?: "Wholphin", message)
+                        Log.println(priority, tag ?: "Ndorfin", message)
                     }
                 },
             )
@@ -95,9 +95,9 @@ class WholphinApplication :
                 )
             dialog {
                 text =
-                    "Wholphin has crashed! Would you like to attempt to " +
+                    "Ndorfin has crashed! Would you like to attempt to " +
                     "send a crash report to your Jellyfin server?"
-                title = "Wholphin Crash Report"
+                title = "Ndorfin Crash Report"
                 positiveButtonText = "Send"
                 negativeButtonText = "Do not send"
             }
@@ -118,7 +118,7 @@ class WholphinApplication :
                 .build()
 
     companion object {
-        lateinit var instance: WholphinApplication
+        lateinit var instance: NdorfinApplication
             private set
     }
 }

@@ -27,30 +27,30 @@ class TestUpdateChecker {
     @Test
     fun `Release chooses release`() {
         val url = getDownloadUrl(assetsJson, false, listOf())
-        Assert.assertEquals("https://github.com/damontecres/Wholphin/releases/download/develop/Wholphin-release.apk", url)
+        Assert.assertEquals("https://github.com/maguid28/Wholphin_fork/releases/download/develop/Ndorfin-release.apk", url)
     }
 
     @Test
     fun `Choose abi`() {
         val url = getDownloadUrl(assetsJson, false, listOf("arm64-v8a"))
-        Assert.assertEquals("https://github.com/damontecres/Wholphin/releases/download/develop/Wholphin-release-arm64-v8a.apk", url)
+        Assert.assertEquals("https://github.com/maguid28/Wholphin_fork/releases/download/develop/Ndorfin-release-arm64-v8a.apk", url)
     }
 
     @Test
     fun `Choose unknown abi`() {
         val url = getDownloadUrl(assetsJson, false, listOf("unknown"))
-        Assert.assertEquals("https://github.com/damontecres/Wholphin/releases/download/develop/Wholphin-release.apk", url)
+        Assert.assertEquals("https://github.com/maguid28/Wholphin_fork/releases/download/develop/Ndorfin-release.apk", url)
     }
 
     @Test
     fun `Debug chooses debug`() {
         val url = getDownloadUrl(assetsJson, true, listOf())
-        Assert.assertEquals("https://github.com/damontecres/Wholphin/releases/download/develop/Wholphin-debug.apk", url)
+        Assert.assertEquals("https://github.com/maguid28/Wholphin_fork/releases/download/develop/Ndorfin-debug.apk", url)
     }
 
     @Test
     fun `Choose debug abi`() {
         val url = getDownloadUrl(assetsJson, true, listOf("arm64-v8a"))
-        Assert.assertEquals("https://github.com/damontecres/Wholphin/releases/download/develop/Wholphin-debug-arm64-v8a.apk", url)
+        Assert.assertEquals("https://github.com/maguid28/Wholphin_fork/releases/download/develop/Ndorfin-debug-arm64-v8a.apk", url)
     }
 }

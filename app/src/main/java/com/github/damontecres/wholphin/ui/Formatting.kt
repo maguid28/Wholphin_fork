@@ -5,7 +5,7 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import com.github.damontecres.wholphin.R
-import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.NdorfinApplication
 import com.github.damontecres.wholphin.preferences.DisplayedRatingType
 import com.github.damontecres.wholphin.preferences.InterfacePreferences
 import com.github.damontecres.wholphin.preferences.showsRating
@@ -100,7 +100,7 @@ val BaseItemDto.seriesProductionYears: String?
                 append(productionYear.toString())
                 if (status == "Continuing") {
                     append(" - ")
-                    append(WholphinApplication.instance.getString(R.string.series_continueing))
+                    append(NdorfinApplication.instance.getString(R.string.series_continueing))
                 } else if (status == "Ended") {
                     endDate?.let {
                         if (it.year != productionYear) {

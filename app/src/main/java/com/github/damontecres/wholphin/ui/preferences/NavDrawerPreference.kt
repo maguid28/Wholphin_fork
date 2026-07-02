@@ -55,7 +55,7 @@ import com.github.damontecres.wholphin.ui.launchDefault
 import com.github.damontecres.wholphin.ui.launchIO
 import com.github.damontecres.wholphin.ui.main.settings.MoveDirection
 import com.github.damontecres.wholphin.ui.nav.NavDrawerItem
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.RememberTabManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -263,7 +263,7 @@ fun MoveButton(
 @PreviewTvSpec
 @Composable
 fun NavDrawerPreferenceListItemPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         NavDrawerPreferenceListItem(
             title = "Movies",
             pinned = true,

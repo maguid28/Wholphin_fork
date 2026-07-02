@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 
 // .align(Alignment.BottomEnd)
 @Composable
@@ -54,7 +54,7 @@ fun RecordingMarker(
 @PreviewTvSpec
 @Composable
 private fun RecordingMarkerPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column {
             RecordingMarker(true, false)
             RecordingMarker(true, true)

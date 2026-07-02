@@ -42,5 +42,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Wholphin"
+rootProject.name = "Ndorfin"
 include(":app")

@@ -479,8 +479,8 @@
     <string name="content_scale_fill">Vullen</string>
     <string name="content_scale_fill_width">Vulbreedte</string>
     <string name="content_scale_fill_height">Vulhoogte</string>
-    <string name="display_preset_default">Wholphin standaard</string>
-    <string name="display_preset_compact">Wholphin compact</string>
+    <string name="display_preset_default">Ndorfin standaard</string>
+    <string name="display_preset_compact">Ndorfin compact</string>
     <string name="volume_low">Laag</string>
     <string name="volume_medium">Middel</string>
     <string name="volume_high">Hoog</string>

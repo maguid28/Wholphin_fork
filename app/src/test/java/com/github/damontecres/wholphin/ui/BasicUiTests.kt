@@ -24,7 +24,7 @@ import com.github.damontecres.wholphin.services.SetupNavigationManager
 import com.github.damontecres.wholphin.test.TestActivity
 import com.github.damontecres.wholphin.ui.setup.SwitchServerContent
 import com.github.damontecres.wholphin.ui.setup.SwitchServerViewModel
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.util.LoadingState
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -164,7 +164,7 @@ class BasicUiTests {
         coEvery { quickConnectApi.getQuickConnectEnabled() } returns successResponse(true)
 
         composeTestRule.setContent {
-            WholphinTheme {
+            NdorfinTheme {
                 switchServerViewModel = hiltViewModel()
                 SwitchServerContent(
                     modifier = Modifier.fillMaxSize(),
@@ -229,7 +229,7 @@ class BasicUiTests {
         coEvery { quickConnectApi.getQuickConnectEnabled() } returns successResponse(true)
 
         composeTestRule.setContent {
-            WholphinTheme {
+            NdorfinTheme {
                 switchServerViewModel = hiltViewModel()
                 SwitchServerContent(
                     modifier = Modifier.fillMaxSize(),
@@ -305,7 +305,7 @@ class BasicUiTests {
             )
 
         composeTestRule.setContent {
-            WholphinTheme {
+            NdorfinTheme {
                 switchServerViewModel = hiltViewModel()
                 SwitchServerContent(
                     modifier = Modifier.fillMaxSize(),

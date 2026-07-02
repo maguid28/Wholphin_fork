@@ -16,7 +16,7 @@ import androidx.tv.material3.MaterialTheme
 import com.github.damontecres.wholphin.preferences.AppThemeColors
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
 import com.github.damontecres.wholphin.ui.theme.LocalTheme
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 
 @Composable
 fun WatchedIcon(modifier: Modifier = Modifier) {
@@ -140,7 +140,7 @@ fun WatchedIconColor(): Color =
 @PreviewTvSpec
 @Composable
 private fun WatchedIconPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         WatchedIcon(Modifier.size(64.dp))
     }
 }

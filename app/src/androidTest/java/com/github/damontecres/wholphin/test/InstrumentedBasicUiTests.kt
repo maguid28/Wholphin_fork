@@ -16,7 +16,7 @@ import com.github.damontecres.wholphin.services.ScreensaverService
 import com.github.damontecres.wholphin.services.ScreensaverState
 import com.github.damontecres.wholphin.services.SetupDestination
 import com.github.damontecres.wholphin.ui.nav.Destination
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
 import io.mockk.every
@@ -49,7 +49,7 @@ class InstrumentedBasicUiTests {
         navigationManager.backStack = NavBackStack(Destination.Home())
         // Start the app
         composeTestRule.setContent {
-            WholphinTheme {
+            NdorfinTheme {
                 MainContent(
                     backStack = mutableListOf(SetupDestination.ServerList),
                     navigationManager = navigationManager,

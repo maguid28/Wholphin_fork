@@ -101,7 +101,7 @@ class PlayerFactory
                         val dataSourceFactory = DefaultDataSource.Factory(context)
                         val extractorsFactory = createExtractorsFactory()
                         var renderersFactory: RenderersFactory =
-                            WholphinRenderersFactory(context, decodeAv1)
+                            NdorfinRenderersFactory(context, decodeAv1)
                                 .setEnableDecoderFallback(true)
                                 .setExtensionRendererMode(rendererMode)
                         val mediaSourceFactory =
@@ -162,7 +162,7 @@ class PlayerFactory
                 }
             val extractorsFactory = createExtractorsFactory()
             val renderersFactory: RenderersFactory =
-                WholphinRenderersFactory(context, false)
+                NdorfinRenderersFactory(context, false)
                     .setEnableDecoderFallback(true)
                     .setExtensionRendererMode(rendererMode)
             val mediaSourceFactory =
@@ -228,7 +228,7 @@ data class PlayerCreation(
 )
 
 // Code is adapted from https://github.com/androidx/media/blob/release/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/DefaultRenderersFactory.java#L436
-class WholphinRenderersFactory(
+class NdorfinRenderersFactory(
     context: Context,
     private val av1Enabled: Boolean,
 ) : DefaultRenderersFactory(context) {

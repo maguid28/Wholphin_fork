@@ -52,7 +52,7 @@ import com.github.damontecres.wholphin.data.filter.YearFilter
 import com.github.damontecres.wholphin.data.model.GetItemsFilter
 import com.github.damontecres.wholphin.ui.FontAwesome
 import com.github.damontecres.wholphin.ui.PreviewTvSpec
-import com.github.damontecres.wholphin.ui.theme.WholphinTheme
+import com.github.damontecres.wholphin.ui.theme.NdorfinTheme
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import java.util.UUID
 
@@ -425,7 +425,7 @@ fun ExpandableFilterButton(
 @PreviewTvSpec
 @Composable
 private fun ExpandableFilterButtonPreview() {
-    WholphinTheme {
+    NdorfinTheme {
         Column {
             ExpandableFilterButton(
                 filterCount = 2,

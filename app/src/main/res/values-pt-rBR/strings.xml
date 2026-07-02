@@ -502,8 +502,8 @@
     <string name="content_scale_fill">Preencher</string>
     <string name="content_scale_fill_width">Preencher largura</string>
     <string name="content_scale_fill_height">Preencher altura</string>
-    <string name="display_preset_default">Padrão do Wholphin</string>
-    <string name="display_preset_compact">Wholphin Compacto</string>
+    <string name="display_preset_default">Padrão do Ndorfin</string>
+    <string name="display_preset_compact">Ndorfin Compacto</string>
     <string name="display_preset_series_thumb">Prévia das imagens das séries</string>
     <string name="display_preset_episode_thumbnails">Prévias das imagens do episódio</string>
     <string name="volume_lowest">Mais baixo</string>

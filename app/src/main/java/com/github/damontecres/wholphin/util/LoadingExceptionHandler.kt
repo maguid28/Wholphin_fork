@@ -2,7 +2,7 @@ package com.github.damontecres.wholphin.util
 
 import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
-import com.github.damontecres.wholphin.WholphinApplication
+import com.github.damontecres.wholphin.NdorfinApplication
 import com.github.damontecres.wholphin.ui.showToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -42,7 +42,7 @@ class LoadingExceptionHandler(
             }
             if (autoToast) {
                 showToast(
-                    WholphinApplication.instance,
+                    NdorfinApplication.instance,
                     "Error: ${exception.message}",
                     Toast.LENGTH_LONG,
                 )
