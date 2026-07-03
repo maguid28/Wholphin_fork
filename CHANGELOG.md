@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-## 1.0.1 (2026-07-02)
+## 0.1.0 (2026-07-03)
 
+- Switched first GitHub release versioning to v0.1.0 and added manual release workflow dispatch.
 - Improved README intro to highlight Library TV channels and dual subtitles.
 - Improved README screenshot captions and removed Movies/TV Shows gallery images.
 - Updated the GitHub README screenshot gallery to use a uniform display width for all captures.

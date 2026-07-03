@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - v*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v0.1.0)
+        required: true
+        type: string
 
 defaults:
   run:
@@ -12,7 +18,7 @@ defaults:
 env:
   APK_SHORT_NAME: Ndorfin.apk
   GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx8g -XX:MaxMetaspaceSize=512m'"
-  TAG_NAME: ${{ github.ref_name }}
+  TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   publish:
@@ -24,6 +30,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Need the tags to build
+          ref: ${{ env.TAG_NAME }}
       - name: Setup
         uses: ./.github/actions/setup
       - name: Build app
