@@ -383,12 +383,18 @@ fun HomePageContent(
                 }
         }
     var bannerFocusedItem by remember { mutableStateOf<BaseItem?>(null) }
-    val headerItem = bannerFocusedItem ?: focusedItem
 
     val rowFocusRequesters = remember(homeRows.size) { List(homeRows.size) { FocusRequester() } }
     val bannerFocusRequester = remember { FocusRequester() }
     var showBannerHero by remember { mutableStateOf(false) }
     val bannerItemsAvailable = mediaBannerItems.isNotEmpty()
+    val bannerHeroActive = showBannerHero && bannerItemsAvailable
+    val headerItem =
+        if (bannerHeroActive) {
+            bannerFocusedItem ?: focusedItem
+        } else {
+            focusedItem
+        }
     val currentOnBannerShown by rememberUpdatedState(onBannerShown)
     val coroutineScope = rememberCoroutineScope()
     fun showHomeBanner() {
@@ -435,6 +441,7 @@ fun HomePageContent(
     var horizontalScrollSuppressed by remember { mutableStateOf(false) }
     var detailReturnFocusSignal by remember { mutableIntStateOf(0) }
     var suppressFocusPositionUpdates by remember { mutableStateOf(false) }
+    var pendingFocusPosition by remember { mutableStateOf<RowColumn?>(null) }
     val currentOnPendingDetailReturnHandled by rememberUpdatedState(onPendingDetailReturnHandled)
 
     fun savedFocusRowIndex(): Int? {
@@ -535,7 +542,12 @@ fun HomePageContent(
     val currentOnClickPlay by rememberUpdatedState(onClickPlay)
     fun scheduleFocusedPosition(rowColumn: RowColumn) {
         if (suppressFocusPositionUpdates) {
+            pendingFocusPosition = rowColumn
             return
+        }
+        pendingFocusPosition = null
+        if (rowColumn.row >= 0) {
+            bannerFocusedItem = null
         }
         currentOnFocusPosition(rowColumn)
         focusSessionEstablished = true
@@ -553,6 +565,7 @@ fun HomePageContent(
                 currentOnPendingDetailReturnHandled()
                 firstFocused = true
                 liveFocusedRow.intValue = position.row
+                bannerFocusedItem = null
                 val visibleRows = listState.layoutInfo.visibleItemsInfo
                 val targetRowVisible =
                     visibleRows.isNotEmpty() &&
@@ -565,6 +578,8 @@ fun HomePageContent(
                 suppressFocusPositionUpdates = true
                 detailReturnFocusSignal++
                 delay(250)
+                pendingFocusPosition?.let { currentOnFocusPosition(it) }
+                pendingFocusPosition = null
                 suppressFocusPositionUpdates = false
                 return@LaunchedEffect
             }
@@ -634,6 +649,8 @@ fun HomePageContent(
                         // dispatched to focus, so the first navigation isn't swallowed.
                         contentScrollSuppressed = false
                         horizontalScrollSuppressed = false
+                        suppressFocusPositionUpdates = false
+                        pendingFocusPosition = null
                         if (event.nativeKeyEvent.repeatCount == 0) {
                             restartIdleBannerTimer()
                         }

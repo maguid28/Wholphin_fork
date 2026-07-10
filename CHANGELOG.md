@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed Home and Movies/TV recommended headers staying on the item you opened after backing out of detail, by clearing banner header override when rows are focused, only using banner focus while the hero is visible, and syncing saved position on the first navigation key after detail return.
 ## 0.1.0 (2026-07-03)
 
 - Switched first GitHub release versioning to v0.1.0 and added manual release workflow dispatch.
