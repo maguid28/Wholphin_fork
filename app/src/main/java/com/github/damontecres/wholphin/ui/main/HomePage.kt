@@ -375,9 +375,10 @@ fun HomePageContent(
         }
     val focusedItem =
         remember(homeRows, position, firstFocusableRowIndex) {
-            (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)
-                ?.items
-                ?.getOrNull(position.column)
+            val rowItems =
+                (homeRows.getOrNull(position.row) as? HomeRowLoadingState.Success)?.items
+            rowItems?.getOrNull(position.column)
+                ?: rowItems?.lastOrNull()
                 ?: firstFocusableRowIndex?.let { rowIndex ->
                     (homeRows.getOrNull(rowIndex) as? HomeRowLoadingState.Success)?.items?.firstOrNull()
                 }

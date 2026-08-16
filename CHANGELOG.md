@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Made row More cards load the next page automatically when focused, so highlighting More is enough without pressing select.
+- Fixed the Home and library header jumping to the first row item when More is focused, by keeping the last real item in the header instead.
+- Fixed Combine Continue Watching & Next Up still showing only resume items, by rewriting existing Home Continue Watching/Next Up rows into one combined row and putting the full merged resume+next-up set on the first page.
+- Softened More pagination row movement to a single ease-in-out scroll instead of a springy overshoot when the newly loaded items come into view.
+- Fixed More at the end of Home, library, and detail rows pulling focus to the nav drawer, by keeping the More card until focus moves onto the newly loaded items and not cancelling that restore when the last page loads.
+- Fixed movie and show detail similar-items (and series seasons) More button losing focus to the nav drawer after loading the next page, by retrying focus restore on the More arrow, keeping focus in the row during restore, and preserving stable focus requesters as items append.
+- Fixed TV show theme songs not playing when opening a series, by stopping theme playback only when the detail page actually leaves and ignoring stale play requests after a stop.
 - Fixed Home and Movies/TV recommended headers staying on the item you opened after backing out of detail, by clearing banner header override when rows are focused, only using banner focus while the hero is visible, and syncing saved position on the first navigation key after detail return.
 ## 0.1.0 (2026-07-03)
 

@@ -454,9 +454,9 @@ fun CollectionDetailsContent(
                                     state.separateItems.keys
                                         .toList()
                                         .getOrNull(it.row)
-                                (state.separateItems[key] as? HomeRowLoadingState.Success)?.items?.getOrNull(
-                                    it.column,
-                                )
+                                val items =
+                                    (state.separateItems[key] as? HomeRowLoadingState.Success)?.items
+                                items?.getOrNull(it.column) ?: items?.lastOrNull()
                             }
                     },
                 )

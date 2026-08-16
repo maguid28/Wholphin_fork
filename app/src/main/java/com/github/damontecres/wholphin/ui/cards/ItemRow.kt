@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -54,6 +56,7 @@ import com.github.damontecres.wholphin.ui.rememberInt
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.ui.util.HorizontalRowBringIntoViewSpec
 import com.github.damontecres.wholphin.ui.util.scrollFocusedItemIntoRow
+import com.github.damontecres.wholphin.ui.util.smoothScrollItemToStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -85,8 +88,13 @@ fun <T> ItemRow(
     loadMoreAspectRatio: Float = AspectRatios.TALL,
 ) {
     val scope = rememberCoroutineScope()
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var restoringMoreFocus by remember { mutableStateOf(false) }
+    var pendingMoreFocus by remember { mutableStateOf(false) }
+    var loadMoreFromIndex by remember { mutableIntStateOf(-1) }
+    val keepMoreCard = showLoadMore || isLoadingMore || pendingMoreFocus || restoringMoreFocus
     val loadMoreIndex = items.size
-    val maxFocusIndex = if (showLoadMore) loadMoreIndex else items.lastIndex.coerceAtLeast(0)
+    val maxFocusIndex = if (keepMoreCard) loadMoreIndex else items.lastIndex.coerceAtLeast(0)
     val initialPosition =
         remember(items.size, showLoadMore, restoreFocusedIndex, savedFocusedColumn) {
             restoreFocusedIndex?.takeIf { it in 0..maxFocusIndex }
@@ -96,33 +104,35 @@ fun <T> ItemRow(
     val state = rememberLazyListState(initialFirstVisibleItemIndex = initialPosition.coerceAtMost(maxFocusIndex))
     var position by rememberInt(initialPosition.coerceAtMost(maxFocusIndex))
     val focusRequesterCount =
-        if (showLoadMore) {
+        if (keepMoreCard) {
             items.size + 1
         } else {
             items.size.coerceAtLeast(1)
         }
-    val itemFocusRequesters =
-        remember(focusRequesterCount) {
-            List(focusRequesterCount) { FocusRequester() }
+    val itemFocusRequesters = remember { mutableStateListOf<FocusRequester>() }
+    if (itemFocusRequesters.size < focusRequesterCount) {
+        repeat(focusRequesterCount - itemFocusRequesters.size) {
+            itemFocusRequesters.add(FocusRequester())
         }
+    }
     val unusedFocus = remember { FocusRequester() }
     val moreFocus =
-        if (showLoadMore && loadMoreIndex in itemFocusRequesters.indices) {
+        if (keepMoreCard && loadMoreIndex in itemFocusRequesters.indices) {
             itemFocusRequesters[loadMoreIndex]
         } else {
             unusedFocus
         }
-    var isLoadingMore by remember { mutableStateOf(false) }
-    val loadingMore by rememberUpdatedState(isLoadingMore)
+    val blockFocusExit by rememberUpdatedState(isLoadingMore || restoringMoreFocus || pendingMoreFocus)
 
     val currentOnClickItem by rememberUpdatedState(onClickItem)
     val currentOnLongClickItem by rememberUpdatedState(onLongClickItem)
     val currentOnLoadMoreFocus by rememberUpdatedState(onLoadMoreFocus)
     val currentOnClickLoadMore by rememberUpdatedState(onClickLoadMore)
+    val currentMoreFocus by rememberUpdatedState(moreFocus)
 
-    val onMore = position >= loadMoreIndex && showLoadMore
-    var pendingMoreFocus by remember { mutableStateOf(false) }
+    val onMore = position >= loadMoreIndex && keepMoreCard
     var suppressFocusScroll by remember { mutableStateOf(false) }
+    var loadedMoreForCurrentFocus by remember { mutableStateOf(false) }
 
     fun focusRequesterFor(index: Int): FocusRequester =
         itemFocusRequesters.getOrElse(index) { itemFocusRequesters.first() }
@@ -142,37 +152,81 @@ fun <T> ItemRow(
         }
     }
 
-    LaunchedEffect(showLoadMore, items.size) {
-        val maxIndex = if (showLoadMore) loadMoreIndex else items.lastIndex.coerceAtLeast(0)
+    fun startLoadMore() {
+        if (isLoadingMore || !showLoadMore || pendingMoreFocus || restoringMoreFocus) return
+        position = loadMoreIndex
+        loadMoreFromIndex = items.size
+        pendingMoreFocus = true
+        isLoadingMore = true
+        moreFocus.tryRequestFocus()
+        scope.launch {
+            try {
+                currentOnClickLoadMore()
+            } finally {
+                isLoadingMore = false
+            }
+        }
+    }
+
+    LaunchedEffect(keepMoreCard, items.size) {
+        val maxIndex = if (keepMoreCard) loadMoreIndex else items.lastIndex.coerceAtLeast(0)
         if (position > maxIndex) {
             position = maxIndex
         }
     }
 
-    LaunchedEffect(isLoadingMore, items.size, showLoadMore, pendingMoreFocus) {
-        if (pendingMoreFocus && !isLoadingMore) {
-            pendingMoreFocus = false
-            if (showLoadMore) {
-                position = loadMoreIndex
-                state.scrollFocusedItemIntoRow(loadMoreIndex)
-                moreFocus.tryRequestFocus()
-            } else if (items.isNotEmpty()) {
-                position = items.lastIndex
-                focusRequesterFor(items.lastIndex).tryRequestFocus()
-            }
-        }
-    }
-
     LaunchedEffect(isLoadingMore) {
-        if (isLoadingMore && onMore) {
-            moreFocus.tryRequestFocus()
+        if (isLoadingMore) {
+            if (onMore) {
+                currentMoreFocus.tryRequestFocus()
+            }
+            return@LaunchedEffect
         }
-    }
-
-    LaunchedEffect(showLoadMore) {
-        if (!showLoadMore && position >= loadMoreIndex && items.isNotEmpty()) {
-            position = items.lastIndex
-            focusRequesterFor(items.lastIndex).tryRequestFocus()
+        if (!pendingMoreFocus) return@LaunchedEffect
+        restoringMoreFocus = true
+        suppressFocusScroll = true
+        try {
+            suspend fun restoreTo(
+                index: Int,
+                requester: FocusRequester,
+                tag: String,
+            ): Boolean {
+                position = index
+                repeat(8) {
+                    withFrameNanos { }
+                }
+                state.smoothScrollItemToStart(index)
+                repeat(10) { attempt ->
+                    if (attempt > 0) {
+                        delay(50)
+                    }
+                    withFrameNanos { }
+                    if (requester.tryRequestFocus(tag)) {
+                        return true
+                    }
+                }
+                return false
+            }
+            val firstNewIndex = loadMoreFromIndex
+            when {
+                firstNewIndex in items.indices ->
+                    restoreTo(
+                        firstNewIndex,
+                        focusRequesterFor(firstNewIndex),
+                        "load_more_new",
+                    )
+                items.isNotEmpty() ->
+                    restoreTo(
+                        items.lastIndex,
+                        focusRequesterFor(items.lastIndex),
+                        "load_more_end",
+                    )
+            }
+        } finally {
+            delay(100)
+            suppressFocusScroll = false
+            restoringMoreFocus = false
+            pendingMoreFocus = false
         }
     }
 
@@ -183,7 +237,7 @@ fun <T> ItemRow(
             delay(50)
             state.scrollFocusedItemIntoRow(index)
             withFrameNanos { }
-            val focusTarget = if (index == loadMoreIndex && showLoadMore) moreFocus else focusRequesterFor(index)
+            val focusTarget = if (index == loadMoreIndex && keepMoreCard) moreFocus else focusRequesterFor(index)
             if (focusTarget.tryRequestFocus("item_row_restore")) {
                 return@LaunchedEffect
             }
@@ -202,7 +256,7 @@ fun <T> ItemRow(
                 }
                 withFrameNanos { }
                 val focusTarget =
-                    if (index == loadMoreIndex && showLoadMore) {
+                    if (index == loadMoreIndex && keepMoreCard) {
                         moreFocus
                     } else {
                         focusRequesterFor(index)
@@ -225,7 +279,7 @@ fun <T> ItemRow(
                     focusRequesterFor(position.coerceIn(0, itemFocusRequesters.lastIndex)).tryRequestFocus()
                 }
                 onExit = {
-                    if (loadingMore) {
+                    if (blockFocusExit) {
                         cancelFocusChange()
                     }
                 }
@@ -234,7 +288,12 @@ fun <T> ItemRow(
         ItemRowTitle(title)
 
         CompositionLocalProvider(
-            LocalBringIntoViewSpec provides HorizontalRowBringIntoViewSpec.Default,
+            LocalBringIntoViewSpec provides
+                if (restoringMoreFocus || suppressFocusScroll) {
+                    HorizontalRowBringIntoViewSpec.None
+                } else {
+                    HorizontalRowBringIntoViewSpec.Default
+                },
         ) {
             LazyRow(
                 state = state,
@@ -246,7 +305,7 @@ fun <T> ItemRow(
                         .focusGroup()
                         .focusProperties {
                             onExit = {
-                                if (loadingMore) {
+                                if (blockFocusExit) {
                                     cancelFocusChange()
                                 }
                             }
@@ -288,23 +347,10 @@ fun <T> ItemRow(
                         onLongClick,
                     )
                 }
-                if (showLoadMore) {
+                if (keepMoreCard) {
                     item(key = "load-more") {
                         ItemRowMoreCard(
-                            onClick = {
-                                if (isLoadingMore) return@ItemRowMoreCard
-                                position = loadMoreIndex
-                                pendingMoreFocus = true
-                                isLoadingMore = true
-                                moreFocus.tryRequestFocus()
-                                scope.launch {
-                                    try {
-                                        currentOnClickLoadMore()
-                                    } finally {
-                                        isLoadingMore = false
-                                    }
-                                }
-                            },
+                            onClick = { startLoadMore() },
                             onLongClick = {},
                             cardHeight = loadMoreCardHeight,
                             aspectRatio = loadMoreAspectRatio,
@@ -316,6 +362,12 @@ fun <T> ItemRow(
                                         if (it.isFocused) {
                                             onItemFocused(loadMoreIndex)
                                             currentOnLoadMoreFocus.invoke(loadMoreIndex)
+                                            if (!suppressFocusScroll && !loadedMoreForCurrentFocus) {
+                                                loadedMoreForCurrentFocus = true
+                                                startLoadMore()
+                                            }
+                                        } else if (!isLoadingMore && !pendingMoreFocus && !restoringMoreFocus) {
+                                            loadedMoreForCurrentFocus = false
                                         }
                                     },
                         )

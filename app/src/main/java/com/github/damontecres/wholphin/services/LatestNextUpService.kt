@@ -12,6 +12,7 @@ import com.github.damontecres.wholphin.util.supportItemKinds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -214,8 +215,10 @@ class LatestNextUpService
         }
 
         /**
-         * Build a capped Continue Watching row that merges resume and next up without
-         * over-fetching next up when resume already fills the row.
+         * Merge resume and next up into one row.
+         *
+         * The first page includes the full merged set from both sources (up to [limit] each)
+         * so Next Up is not buried under a full Continue Watching page.
          */
         suspend fun fetchCombinedContinueWatching(
             userId: UUID,
@@ -228,52 +231,55 @@ class LatestNextUpService
             useSeriesForPrimary: Boolean = true,
             parentId: UUID? = null,
         ): Pair<List<BaseItem>, Boolean> {
-            if (startIndex > 0) {
-                return getResumePage(
-                    userId = userId,
-                    limit = limit,
-                    startIndex = startIndex,
-                    includeEpisodes = includeEpisodes,
-                    useSeriesForPrimary = useSeriesForPrimary,
-                    parentId = parentId,
-                )
-            }
-
-            val resume =
-                getResume(
-                    userId = userId,
-                    limit = limit,
-                    includeEpisodes = includeEpisodes,
-                    useSeriesForPrimary = useSeriesForPrimary,
-                    parentId = parentId,
-                )
-            if (resume.size >= limit) {
-                return resume.take(limit) to true
-            }
-
-            val remaining = limit - resume.size
-            if (remaining <= 0) {
-                return resume to false
-            }
-
-            val nextUp =
-                getNextUp(
-                    userId = userId,
-                    limit = remaining,
-                    enableRewatching = enableRewatching,
-                    enableResumable = enableResumable,
-                    maxDays = maxDays,
-                    useSeriesForPrimary = useSeriesForPrimary,
-                    parentId = parentId,
-                )
-            val items =
-                if (nextUp.isEmpty()) {
+            val sourceLimit = if (startIndex == 0) limit else startIndex + limit
+            val (resumePage, nextUpPage) =
+                coroutineScope {
+                    val resumeDeferred =
+                        async {
+                            getResumePage(
+                                userId = userId,
+                                limit = sourceLimit,
+                                startIndex = 0,
+                                includeEpisodes = includeEpisodes,
+                                useSeriesForPrimary = useSeriesForPrimary,
+                                parentId = parentId,
+                            )
+                        }
+                    val nextUpDeferred =
+                        async {
+                            getNextUpPage(
+                                userId = userId,
+                                limit = sourceLimit,
+                                startIndex = 0,
+                                enableRewatching = enableRewatching,
+                                enableResumable = enableResumable,
+                                maxDays = maxDays,
+                                useSeriesForPrimary = useSeriesForPrimary,
+                                parentId = parentId,
+                            )
+                        }
+                    resumeDeferred.await() to nextUpDeferred.await()
+                }
+            val (resume, resumeHasMore) = resumePage
+            val (nextUp, nextUpHasMore) = nextUpPage
+            val uniqueNextUp = nextUpItemsNotInResume(resume, nextUp)
+            val combined =
+                if (uniqueNextUp.isEmpty()) {
                     resume
                 } else {
-                    buildCombined(resume, nextUp).take(limit)
+                    buildCombined(resume, uniqueNextUp)
                 }
-            // Paginate via resume only so load-more offsets stay aligned with Jellyfin.
-            return items to (resume.size >= limit)
+            val page =
+                if (startIndex == 0) {
+                    combined
+                } else {
+                    combined.drop(startIndex).take(limit)
+                }
+            val hasMore =
+                combined.size > startIndex + page.size ||
+                    resumeHasMore ||
+                    nextUpHasMore
+            return page to hasMore
         }
 
         /**
@@ -288,27 +294,30 @@ class LatestNextUpService
             withContext(Dispatchers.IO) {
                 val start = System.currentTimeMillis()
                 val semaphore = Semaphore(3)
-                val deferred =
+                val nextUpTimestamps =
                     nextUp
                         .filter { it.data.seriesId != null }
                         .map { item ->
                             async(Dispatchers.IO) {
-                                try {
-                                    semaphore.withPermit {
-                                        datePlayedService.getLastPlayed(item)
+                                item.id to
+                                    try {
+                                        semaphore.withPermit {
+                                            datePlayedService.getLastPlayed(item)
+                                        }
+                                    } catch (ex: Exception) {
+                                        Timber.e(ex, "Error fetching %s", item.id)
+                                        null
                                     }
-                                } catch (ex: Exception) {
-                                    Timber.e(ex, "Error fetching %s", item.id)
-                                    null
-                                }
                             }
-                        }
-
-                val nextUpLastPlayed = deferred.awaitAll()
+                        }.awaitAll()
+                        .toMap()
                 val timestamps = mutableMapOf<UUID, LocalDateTime?>()
-                nextUp.map { it.id }.zip(nextUpLastPlayed).toMap(timestamps)
+                timestamps.putAll(nextUpTimestamps)
                 resume.forEach { timestamps[it.id] = it.data.userData?.lastPlayedDate }
-                val result = (resume + nextUp).sortedByDescending { timestamps[it.id] }
+                val result =
+                    (resume + nextUp)
+                        .distinctBy { it.id }
+                        .sortedByDescending { timestamps[it.id] ?: it.data.userData?.lastPlayedDate }
                 val duration = (System.currentTimeMillis() - start).milliseconds
                 Timber.v("buildCombined took %s", duration)
                 return@withContext result
@@ -415,6 +424,18 @@ class LatestNextUpService
 
         companion object {
             const val REMOVED_KEY = "removeNextUp"
+
+            internal fun nextUpItemsNotInResume(
+                resume: List<BaseItem>,
+                nextUp: List<BaseItem>,
+            ): List<BaseItem> {
+                val resumeIds = resume.map { it.id }.toSet()
+                val resumeSeriesIds = resume.mapNotNull { it.data.seriesId }.toSet()
+                return nextUp.filter { item ->
+                    item.id !in resumeIds &&
+                        (item.data.seriesId == null || item.data.seriesId !in resumeSeriesIds)
+                }
+            }
         }
 
         private fun resumeItemTypes(

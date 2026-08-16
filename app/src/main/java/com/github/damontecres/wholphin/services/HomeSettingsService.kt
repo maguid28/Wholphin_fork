@@ -277,20 +277,40 @@ class HomeSettingsService
                 }
             val migratedSettings =
                 settings?.let { migrateCombinedMediaRows(userId, it) }
-            if (migratedSettings != null && migratedSettings != settings) {
-                Timber.i("Migrated home settings to combined recently added/released rows")
+            val prefs =
                 try {
-                    saveToLocal(userId, migratedSettings)
+                    userPreferencesService.getCurrent().appPreferences.homePagePreferences
+                } catch (ex: Exception) {
+                    Timber.w(ex, "Could not load home preferences for continue/next-up combine")
+                    null
+                }
+            val combinedSettings =
+                if (migratedSettings != null && prefs != null) {
+                    val combinedRows =
+                        applyCombineContinueNext(migratedSettings.rows, prefs.combineContinueNext)
+                    if (combinedRows != migratedSettings.rows) {
+                        migratedSettings.copy(rows = combinedRows)
+                    } else {
+                        migratedSettings
+                    }
+                } else {
+                    migratedSettings
+                }
+            if (combinedSettings != null && combinedSettings != settings) {
+                Timber.i("Migrated home settings for combined media and continue/next-up rows")
+                try {
+                    saveToLocal(userId, combinedSettings)
                 } catch (ex: Exception) {
                     Timber.w(ex, "Error saving migrated home settings")
                 }
+                clearHomePageCache()
             }
             val resolvedSettings =
-                if (migratedSettings != null) {
+                if (combinedSettings != null) {
                     Timber.v("Found settings")
                     // Resolve
                     val resolvedRows =
-                        migratedSettings.rows.mapIndexed { index, config ->
+                        combinedSettings.rows.mapIndexed { index, config ->
                             resolve(index, config)
                         }
                     HomePageResolvedSettings(resolvedRows)
@@ -299,6 +319,54 @@ class HomeSettingsService
                 }
 
             currentSettings.update { resolvedSettings }
+        }
+
+        /**
+         * When Combine Continue Watching & Next Up is enabled, replace those separate home rows
+         * with a single combined row. When it is disabled, split a combined row back apart.
+         */
+        fun applyCombineContinueNext(
+            rows: List<HomeRowConfig>,
+            combine: Boolean,
+        ): List<HomeRowConfig> {
+            if (combine) {
+                var inserted = false
+                return rows.mapNotNull { row ->
+                    when (row) {
+                        is HomeRowConfig.ContinueWatching,
+                        is HomeRowConfig.NextUp,
+                        is HomeRowConfig.ContinueWatchingCombined,
+                        -> {
+                            if (inserted) {
+                                null
+                            } else {
+                                inserted = true
+                                HomeRowConfig.ContinueWatchingCombined(row.viewOptions)
+                            }
+                        }
+
+                        else -> row
+                    }
+                }
+            }
+            var inserted = false
+            return rows.flatMap { row ->
+                when (row) {
+                    is HomeRowConfig.ContinueWatchingCombined -> {
+                        if (inserted) {
+                            emptyList()
+                        } else {
+                            inserted = true
+                            listOf(
+                                HomeRowConfig.ContinueWatching(row.viewOptions),
+                                HomeRowConfig.NextUp(row.viewOptions),
+                            )
+                        }
+                    }
+
+                    else -> listOf(row)
+                }
+            }
         }
 
         /**
@@ -981,43 +1049,74 @@ class HomeSettingsService
         ): HomeRowLoadingState =
             when (row) {
                 is HomeRowConfig.ContinueWatching -> {
-                    val (resume, hasMore) =
-                        latestNextUpService.getResumePage(
-                            userDto.id,
-                            limit,
-                            startIndex,
-                            true,
-                            row.viewOptions.useSeries,
+                    if (prefs.combineContinueNext) {
+                        val (items, hasMore) =
+                            latestNextUpService.fetchCombinedContinueWatching(
+                                userId = userDto.id,
+                                limit = limit,
+                                startIndex = startIndex,
+                                includeEpisodes = true,
+                                enableRewatching = prefs.enableRewatchingNextUp,
+                                enableResumable = false,
+                                maxDays = prefs.maxDaysNextUp,
+                                useSeriesForPrimary = row.viewOptions.useSeries,
+                            )
+                        Success(
+                            title = context.getString(R.string.continue_watching),
+                            items = items,
+                            viewOptions = row.viewOptions,
+                            rowType = HomeRowConfig.ContinueWatchingCombined(row.viewOptions),
+                            hasMore = hasMore,
                         )
+                    } else {
+                        val (resume, hasMore) =
+                            latestNextUpService.getResumePage(
+                                userDto.id,
+                                limit,
+                                startIndex,
+                                true,
+                                row.viewOptions.useSeries,
+                            )
 
-                    Success(
-                        title = context.getString(R.string.continue_watching),
-                        items = resume,
-                        viewOptions = row.viewOptions,
-                        rowType = row,
-                        hasMore = hasMore,
-                    )
+                        Success(
+                            title = context.getString(R.string.continue_watching),
+                            items = resume,
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                            hasMore = hasMore,
+                        )
+                    }
                 }
 
                 is HomeRowConfig.NextUp -> {
-                    val (nextUp, hasMore) =
-                        latestNextUpService.getNextUpPage(
-                            userDto.id,
-                            limit,
-                            startIndex,
-                            prefs.enableRewatchingNextUp,
-                            false,
-                            prefs.maxDaysNextUp,
-                            row.viewOptions.useSeries,
+                    if (prefs.combineContinueNext) {
+                        Success(
+                            title = context.getString(R.string.next_up),
+                            items = emptyList(),
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                            hasMore = false,
                         )
+                    } else {
+                        val (nextUp, hasMore) =
+                            latestNextUpService.getNextUpPage(
+                                userDto.id,
+                                limit,
+                                startIndex,
+                                prefs.enableRewatchingNextUp,
+                                false,
+                                prefs.maxDaysNextUp,
+                                row.viewOptions.useSeries,
+                            )
 
-                    Success(
-                        title = context.getString(R.string.next_up),
-                        items = nextUp,
-                        viewOptions = row.viewOptions,
-                        rowType = row,
-                        hasMore = hasMore,
-                    )
+                        Success(
+                            title = context.getString(R.string.next_up),
+                            items = nextUp,
+                            viewOptions = row.viewOptions,
+                            rowType = row,
+                            hasMore = hasMore,
+                        )
+                    }
                 }
 
                 is HomeRowConfig.ContinueWatchingCombined -> {

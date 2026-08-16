@@ -324,15 +324,15 @@ class SeriesViewModel
         }
 
         fun onResumePage() {
+            viewModelScope.launchIO {
+                val playThemeSongs =
+                    userPreferencesService
+                        .getCurrent()
+                        .appPreferences.interfacePreferences.playThemeSongs
+                themeSongPlayer.playThemeFor(seriesId, playThemeSongs)
+            }
             item.value?.let { item ->
                 viewModelScope.launchDefault { backdropService.submit(item) }
-                viewModelScope.launchIO {
-                    val playThemeSongs =
-                        userPreferencesService
-                            .getCurrent()
-                            .appPreferences.interfacePreferences.playThemeSongs
-                    themeSongPlayer.playThemeFor(seriesId, playThemeSongs)
-                }
                 focusedEpisodeRefreshJob?.cancel()
                 focusedEpisodeRefreshJob =
                     viewModelScope.launchIO(ExceptionHandler()) {

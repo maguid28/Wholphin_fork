@@ -22,5 +22,13 @@ class HorizontalRowBringIntoViewSpec(
 
     companion object {
         val Default = HorizontalRowBringIntoViewSpec()
+        val None =
+            object : BringIntoViewSpec {
+                override fun calculateScrollDistance(
+                    offset: Float,
+                    size: Float,
+                    containerSize: Float,
+                ): Float = 0f
+            }
     }
 }

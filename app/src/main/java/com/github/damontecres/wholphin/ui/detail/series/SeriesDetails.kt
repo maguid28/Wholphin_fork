@@ -187,9 +187,7 @@ fun SeriesDetails(
     LifecycleResumeEffect(destination.itemId) {
         viewModel.refresh()
 
-        onPauseOrDispose {
-            viewModel.release()
-        }
+        onPauseOrDispose {}
     }
 
     when (val state = loading) {
@@ -208,7 +206,9 @@ fun SeriesDetails(
                 LifecycleResumeEffect(destination.itemId) {
                     viewModel.onResumePage()
 
-                    onPauseOrDispose {}
+                    onPauseOrDispose {
+                        viewModel.release()
+                    }
                 }
 
                 val played = item.data.userData?.played ?: false
@@ -593,6 +593,7 @@ fun SeriesDetailsContent(
                         items = seasons,
                         showLoadMore = seasonsHasMore,
                         onClickLoadMore = onLoadMoreSeasons,
+                        onLoadMoreFocus = { position = SEASONS_ROW },
                         onClickItem = { index, item ->
                             position = SEASONS_ROW
                             onClickItem.invoke(index, item)
@@ -604,7 +605,12 @@ fun SeriesDetailsContent(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .focusRequester(focusRequesters[SEASONS_ROW]),
+                                .focusRequester(focusRequesters[SEASONS_ROW])
+                                .onFocusChanged {
+                                    if (it.hasFocus) {
+                                        position = SEASONS_ROW
+                                    }
+                                },
                         cardContent = @Composable { index, item, mod, onClick, onLongClick ->
                             SeasonCard(
                                 item = item,
@@ -670,6 +676,7 @@ fun SeriesDetailsContent(
                             items = similar,
                             showLoadMore = similarHasMore,
                             onClickLoadMore = onLoadMoreSimilar,
+                            onLoadMoreFocus = { position = SIMILAR_ROW },
                             onClickItem = { index, item ->
                                 position = SIMILAR_ROW
                                 onClickItem.invoke(index, item)
@@ -710,7 +717,12 @@ fun SeriesDetailsContent(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .focusRequester(focusRequesters[SIMILAR_ROW]),
+                                    .focusRequester(focusRequesters[SIMILAR_ROW])
+                                    .onFocusChanged {
+                                        if (it.hasFocus) {
+                                            position = SIMILAR_ROW
+                                        }
+                                    },
                         )
                     }
                 }

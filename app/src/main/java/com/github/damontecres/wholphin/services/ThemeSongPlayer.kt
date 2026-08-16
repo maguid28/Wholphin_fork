@@ -2,6 +2,8 @@ package com.github.damontecres.wholphin.services
 
 import android.content.Context
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -20,6 +22,7 @@ import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.universalAudioApi
 import timber.log.Timber
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,6 +38,8 @@ class ThemeSongPlayer
         @param:AuthOkHttpClient private val authOkHttpClient: OkHttpClient,
         private val api: ApiClient,
     ) {
+        private val playGeneration = AtomicInteger(0)
+
         private val player: Player by lazy {
             ExoPlayer
                 .Builder(context)
@@ -43,6 +48,15 @@ class ThemeSongPlayer
                         OkHttpDataSource.Factory(authOkHttpClient),
                     ),
                 ).build()
+                .also {
+                    it.setAudioAttributes(
+                        AudioAttributes
+                            .Builder()
+                            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                            .build(),
+                        false,
+                    )
+                }
         }
 
         suspend fun playThemeFor(
@@ -53,6 +67,7 @@ class ThemeSongPlayer
                 if (volume == ThemeSongVolume.DISABLED || volume == ThemeSongVolume.UNRECOGNIZED) {
                     return@withContext false
                 }
+                val generation = playGeneration.incrementAndGet()
                 val themeSongs by api.libraryApi.getThemeSongs(itemId)
                 return@withContext themeSongs.items.randomOrNull()?.let { theme ->
                     val url =
@@ -68,6 +83,9 @@ class ThemeSongPlayer
                         )
                     Timber.v("Found theme song for $itemId")
                     withContext(Dispatchers.Main) {
+                        if (generation != playGeneration.get()) {
+                            return@withContext false
+                        }
                         play(volume, url)
                     }
                     true
@@ -92,7 +110,7 @@ class ThemeSongPlayer
 
                     ThemeSongVolume.HIGH -> .5f
 
-                    ThemeSongVolume.HIGHEST -> 75f
+                    ThemeSongVolume.HIGHEST -> .75f
                 }
             player.apply {
                 stop()
@@ -104,9 +122,8 @@ class ThemeSongPlayer
         }
 
         fun stop() {
-            if (player.isPlaying) {
-                Timber.v("Stopping theme song")
-                player.stop()
-            }
+            playGeneration.incrementAndGet()
+            Timber.v("Stopping theme song")
+            player.stop()
         }
     }
