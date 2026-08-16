@@ -348,6 +348,7 @@ class PlaybackViewModel
          */
         private suspend fun init() {
             musicService.stop()
+            screensaverService.keepScreenOn(true)
             nextUp.setValueOnMain(null)
             this.preferences = userPreferencesService.getCurrent()
             if (preferences.appPreferences.playbackPreferences.refreshRateSwitching) {
@@ -2136,10 +2137,6 @@ class PlaybackViewModel
                 }
                 applySecondarySubtitle(it)
             }
-        }
-
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-            screensaverService.keepScreenOn(isPlaying)
         }
 
         override fun onBandwidthEstimate(

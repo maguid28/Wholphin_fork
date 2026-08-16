@@ -131,12 +131,15 @@ class MpvPlayer(
         val cacheMegs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) 64 else 32
         MPVLib.setOptionString("demuxer-max-bytes", "${cacheMegs * 1024 * 1024}")
         MPVLib.setOptionString("demuxer-max-back-bytes", "${cacheMegs * 1024 * 1024}")
+        MPVLib.setOptionString("audio-stream-silence", "yes")
 
         Timber.v("Initializing MPVLib")
         MPVLib.init()
 
         MPVLib.setOptionString("force-window", "no")
         MPVLib.setOptionString("idle", "yes")
+        MPVLib.setOptionString("audio-stream-silence", "yes")
+        MPVLib.setPropertyBoolean("audio-stream-silence", true)
 //        MPVLib.setOptionString("sub-fonts-dir", File(context.filesDir, "fonts").absolutePath)
 
         MPVLib.addObserver(this@MpvPlayer)

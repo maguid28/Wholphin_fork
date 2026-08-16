@@ -323,51 +323,13 @@ class HomeSettingsService
 
         /**
          * When Combine Continue Watching & Next Up is enabled, replace those separate home rows
-         * with a single combined row. When it is disabled, split a combined row back apart.
+         * with a single combined row. A Combined row the user added is left alone when the setting
+         * is off, so Home settings are not rewritten on every launch.
          */
         fun applyCombineContinueNext(
             rows: List<HomeRowConfig>,
             combine: Boolean,
-        ): List<HomeRowConfig> {
-            if (combine) {
-                var inserted = false
-                return rows.mapNotNull { row ->
-                    when (row) {
-                        is HomeRowConfig.ContinueWatching,
-                        is HomeRowConfig.NextUp,
-                        is HomeRowConfig.ContinueWatchingCombined,
-                        -> {
-                            if (inserted) {
-                                null
-                            } else {
-                                inserted = true
-                                HomeRowConfig.ContinueWatchingCombined(row.viewOptions)
-                            }
-                        }
-
-                        else -> row
-                    }
-                }
-            }
-            var inserted = false
-            return rows.flatMap { row ->
-                when (row) {
-                    is HomeRowConfig.ContinueWatchingCombined -> {
-                        if (inserted) {
-                            emptyList()
-                        } else {
-                            inserted = true
-                            listOf(
-                                HomeRowConfig.ContinueWatching(row.viewOptions),
-                                HomeRowConfig.NextUp(row.viewOptions),
-                            )
-                        }
-                    }
-
-                    else -> listOf(row)
-                }
-            }
-        }
+        ): List<HomeRowConfig> = applyCombineContinueNextRows(rows, combine)
 
         /**
          * Replaces split movie/TV recently added and recently released rows with combined rows.
@@ -1847,6 +1809,33 @@ class HomeSettingsService
             const val CUSTOM_PREF_ID = "home_settings"
             private const val HOME_PAGE_CACHE_TTL_MS = 10 * 60 * 1000L
             private val homeRowItemFields = SlimItemFields
+
+            fun applyCombineContinueNextRows(
+                rows: List<HomeRowConfig>,
+                combine: Boolean,
+            ): List<HomeRowConfig> {
+                if (!combine) {
+                    return rows
+                }
+                var inserted = false
+                return rows.mapNotNull { row ->
+                    when (row) {
+                        is HomeRowConfig.ContinueWatching,
+                        is HomeRowConfig.NextUp,
+                        is HomeRowConfig.ContinueWatchingCombined,
+                        -> {
+                            if (inserted) {
+                                null
+                            } else {
+                                inserted = true
+                                HomeRowConfig.ContinueWatchingCombined(row.viewOptions)
+                            }
+                        }
+
+                        else -> row
+                    }
+                }
+            }
         }
     }
 

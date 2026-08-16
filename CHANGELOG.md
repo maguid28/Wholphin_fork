@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed sound taking a few seconds to return after a long pause, by keeping ExoPlayer's HDMI audio track running with silence instead of pausing it, including Dolby Digital and DTS passthrough.
+- Fixed a Combined Continue Watching & Next Up Home row disappearing after restart, by keeping that row instead of splitting it back into Continue Watching and Next Up when the combine setting is off.
 - Made row More cards load the next page automatically when focused, so highlighting More is enough without pressing select.
 - Fixed the Home and library header jumping to the first row item when More is focused, by keeping the last real item in the header instead.
 - Fixed Combine Continue Watching & Next Up still showing only resume items, by rewriting existing Home Continue Watching/Next Up rows into one combined row and putting the full merged resume+next-up set on the first page.
