@@ -18,7 +18,6 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.RenderersFactory
-import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -30,7 +29,6 @@ import com.github.damontecres.wholphin.preferences.MediaExtensionStatus
 import com.github.damontecres.wholphin.preferences.PlaybackPreferences
 import com.github.damontecres.wholphin.preferences.PlayerBackend
 import com.github.damontecres.wholphin.services.hilt.AuthOkHttpClient
-import com.github.damontecres.wholphin.util.PauseSilenceAudioSink
 import com.github.damontecres.wholphin.util.mpv.MpvPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.peerless2012.ass.media.AssHandler
@@ -300,19 +298,4 @@ class NdorfinRenderersFactory(
             }
         }
     }
-
-    override fun buildAudioSink(
-        context: Context,
-        enableFloatOutput: Boolean,
-        enableAudioOutputPlaybackParams: Boolean,
-    ): AudioSink =
-        PauseSilenceAudioSink(
-            checkNotNull(
-                super.buildAudioSink(
-                    context,
-                    enableFloatOutput,
-                    enableAudioOutputPlaybackParams,
-                ),
-            ),
-        )
 }
